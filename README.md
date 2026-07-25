@@ -312,16 +312,15 @@ dotnet run -- --listen 127.0.0.1:5002 --seed 127.0.0.1:5000 --bootstrap-expect 3
 ## Building from Source
 
 ```bash
-# Clone the repository
-git clone https://github.com/ReubenBond/RapidCluster.git
+# Clone the repository and its Clockwork dependency
+git clone --recurse-submodules https://github.com/ReubenBond/RapidCluster.git
 cd RapidCluster
 
 # Build
 dotnet build RapidCluster.slnx
 
-# Run tests
-cd tests/RapidCluster.Tests
-dotnet run -- --timeout 60s
+# Run unit tests
+dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --timeout 60s
 ```
 
 ## Testing
@@ -381,7 +380,7 @@ public void Property_CompareTo_Is_Transitive()
 
 #### Deterministic Simulation Tests
 
-Located in `tests/RapidCluster.Tests/Simulation/`, these tests use the **Clockwork** framework (`src/Clockwork/`) to control all sources of non-determinism (time, randomness, network). This enables:
+Located in `tests/RapidCluster.Simulation.Tests/`, these tests use the standalone [Clockwork](https://github.com/ReubenBond/Clockwork) framework, included under `src/Clockwork/` as a Git submodule, to control all sources of non-determinism (time, randomness, network). This enables:
 
 - **Reproducible failures**: Same seed produces identical execution
 - **Fast execution**: No real delays; simulated time advances instantly

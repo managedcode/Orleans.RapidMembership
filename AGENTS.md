@@ -4,6 +4,7 @@
 
 ## Build & Test Commands
 ```bash
+git submodule update --init --recursive               # Initialize Clockwork after cloning
 dotnet build RapidCluster.slnx                    # Build
 
 # Run tests using dotnet run (xUnit v3 with Microsoft.Testing.Platform)
@@ -50,7 +51,7 @@ Code coverage is collected using `Microsoft.Testing.Extensions.CodeCoverage`. Us
 
 ## Project Structure
 - `src/RapidCluster.Core/` - Main library
-- `src/Clockwork/` - Deterministic simulation testing framework
+- `src/Clockwork/` - Git submodule for the standalone Clockwork simulation framework
 - `tests/RapidCluster.Unit.Tests/` - Unit tests (underscores allowed in test names)
 - `tests/RapidCluster.Integration.Tests/` - Integration tests with real networking
 - `tests/RapidCluster.Simulation.Tests/` - Deterministic simulation tests using Clockwork
@@ -133,7 +134,7 @@ public sealed class ClusterIntegrationTests(ITestOutputHelper outputHelper) : IA
 
 #### 3. Simulation Tests (`tests/RapidCluster.Simulation.Tests/`)
 
-Deterministic tests using the **Clockwork** framework (`src/Clockwork/`). These tests control all sources of non-determinism (time, randomness, network) for reproducible distributed system testing.
+Deterministic tests using the standalone **Clockwork** framework (`src/Clockwork/` Git submodule, sourced from `ReubenBond/Clockwork`). These tests control all sources of non-determinism (time, randomness, network) for reproducible distributed system testing.
 
 **Key Classes:**
 - `RapidSimulationCluster` - Main test harness extending `SimulationCluster<T>`
