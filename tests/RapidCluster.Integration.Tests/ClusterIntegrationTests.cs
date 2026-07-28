@@ -18,7 +18,7 @@ public sealed class ClusterIntegrationTests(ITestOutputHelper outputHelper) : IA
         // Cancel all subscriptions
         foreach (var cts in _subscriptionCts)
         {
-            cts.SafeCancel();
+            await cts.CancelAsync();
             cts.Dispose();
         }
 

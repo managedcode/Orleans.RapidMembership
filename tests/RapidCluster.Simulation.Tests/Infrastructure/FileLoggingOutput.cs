@@ -16,7 +16,6 @@ internal sealed class FileLoggingOutput : IDisposable
     private static readonly ConcurrentDictionary<FileLoggingOutput, object?> Instances = new();
     private readonly TimeSpan _flushInterval = Debugger.IsAttached ? TimeSpan.FromMilliseconds(10) : TimeSpan.FromSeconds(1);
     private readonly Lock _lock = new();
-    private readonly string _logFileName;
     private readonly TimeProvider _timeProvider;
     private DateTimeOffset _lastFlush;
 #pragma warning disable CA2213 // Disposable fields should be disposed - _logOutput is disposed in Dispose(bool)
@@ -38,7 +37,6 @@ internal sealed class FileLoggingOutput : IDisposable
 
     public FileLoggingOutput(string fileName, TimeProvider? timeProvider = null)
     {
-        _logFileName = fileName;
         _timeProvider = timeProvider ?? TimeProvider.System;
         _lastFlush = _timeProvider.GetUtcNow();
 
@@ -46,7 +44,7 @@ internal sealed class FileLoggingOutput : IDisposable
         var directory = Path.GetDirectoryName(fileName);
         if (!string.IsNullOrEmpty(directory))
         {
-            Directory.CreateDirectory(directory);
+            _ = Directory.CreateDirectory(directory);
         }
 
         // Use append mode and allow shared read/write access like Orleans
@@ -118,11 +116,11 @@ internal sealed class FileLoggingOutput : IDisposable
     {
         if (exception == null) return;
 
-        sb.Append(CultureInfo.InvariantCulture, $"{Environment.NewLine}Exc level {level}: {exception.GetType()}: {exception.Message}");
+        _ = sb.Append(CultureInfo.InvariantCulture, $"{Environment.NewLine}Exc level {level}: {exception.GetType()}: {exception.Message}");
 
         if (exception.StackTrace is { } stack)
         {
-            sb.Append(CultureInfo.InvariantCulture, $"{Environment.NewLine}{stack}");
+            _ = sb.Append(CultureInfo.InvariantCulture, $"{Environment.NewLine}{stack}");
         }
 
         if (exception is ReflectionTypeLoadException typeLoadException)
@@ -130,7 +128,7 @@ internal sealed class FileLoggingOutput : IDisposable
             var loaderExceptions = typeLoadException.LoaderExceptions;
             if (loaderExceptions == null || loaderExceptions.Length == 0)
             {
-                sb.Append("No LoaderExceptions found");
+                _ = sb.Append("No LoaderExceptions found");
             }
             else
             {
@@ -171,7 +169,7 @@ internal sealed class FileLoggingOutput : IDisposable
                 if (_logOutput is { } output)
                 {
                     _logOutput = null;
-                    Instances.TryRemove(this, out _);
+                    _ = Instances.TryRemove(this, out _);
 
                     // Dispose the output, which will flush all buffers.
                     output.Dispose();

@@ -29,7 +29,7 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
         // Cancel all async enumerable subscriptions
         foreach (var cts in _subscriptionCts)
         {
-            cts.SafeCancel();
+            await cts.CancelAsync();
             cts.Dispose();
         }
 

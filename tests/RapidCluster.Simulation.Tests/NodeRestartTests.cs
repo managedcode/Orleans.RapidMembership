@@ -381,6 +381,6 @@ public sealed class NodeRestartTests : IAsyncLifetime
 
         // The membership view should have exactly one member with this hostname:port
         var viewMembers = seedNode.CurrentView.Members;
-        Assert.Single(viewMembers, m => m.Hostname == newAddress.Hostname && m.Port == newAddress.Port);
+        _ = Assert.Single(viewMembers, m => m.Hostname == newAddress.Hostname && m.Port == newAddress.Port);
     }
 }

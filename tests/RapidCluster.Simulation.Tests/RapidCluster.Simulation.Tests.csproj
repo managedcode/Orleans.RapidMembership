@@ -1,11 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+	<Import Project="..\..\src\Clockwork\src\Clockwork.Instrumentation.Build\build\Clockwork.Instrumentation.Build.props" />
+
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
 		<IsPackable>false</IsPackable>
 		<!-- Suppress logging performance warnings for test projects -->
 		<NoWarn>$(NoWarn);CA1848;CA1873</NoWarn>
 		<TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+		<ClockworkInstrumentationEnabled>true</ClockworkInstrumentationEnabled>
+		<ClockworkInstrumentationMode>Controlled</ClockworkInstrumentationMode>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -26,9 +30,26 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\src\Clockwork\Clockwork.csproj" />
+		<ClockworkBuiltInRuleSet Include="clockwork.bcl.deterministic" />
+		<ClockworkBuiltInRuleSet Include="clockwork.tasks.controlled" />
+		<!-- The generated xUnit/MTP entry point runs before a simulation exists. Keep the
+		     runner uninstrumented while staging instrumented production assemblies beside it. -->
+		<ClockworkInclude Include="RapidCluster.Core.dll" />
+		<ClockworkInclude Include="RapidCluster.Grpc.dll" />
+		<ClockworkInclude Include="RapidCluster.Simulation.Fixtures.dll" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\Clockwork\src\Clockwork\Clockwork.csproj" />
+		<ProjectReference Include="..\..\src\Clockwork\src\Clockwork.Testing\Clockwork.Testing.csproj" />
+		<ProjectReference Include="..\..\src\Clockwork\src\Clockwork.Instrumentation.Build\Clockwork.Instrumentation.Build.csproj"
+						  ReferenceOutputAssembly="false"
+						  PrivateAssets="all" />
 		<ProjectReference Include="..\..\src\RapidCluster.Core\RapidCluster.Core.csproj" />
 		<ProjectReference Include="..\..\src\RapidCluster.Grpc\RapidCluster.Grpc.csproj" />
+		<ProjectReference Include="..\RapidCluster.Simulation.Fixtures\RapidCluster.Simulation.Fixtures.csproj" />
 	</ItemGroup>
+
+	<Import Project="Clockwork.Instrumentation.ProjectReference.targets" />
 
 </Project>

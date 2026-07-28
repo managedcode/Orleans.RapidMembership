@@ -75,7 +75,7 @@ public sealed class ClusterLifecycleTests : IAsyncLifetime
         // Create several seed nodes (each is independent)
         for (var i = 0; i < 5; i++)
         {
-            _harness.CreateSeedNode(i);
+            _ = _harness.CreateSeedNode(i);
         }
 
         Assert.Equal(5, _harness.Nodes.Count);

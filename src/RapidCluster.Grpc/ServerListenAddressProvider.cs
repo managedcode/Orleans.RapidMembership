@@ -22,7 +22,6 @@ public sealed class ServerListenAddressProvider : IListenAddressProvider
 {
     private readonly IServer _server;
     private readonly bool _preferHttps;
-    private EndPoint? _cachedAddress;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ServerListenAddressProvider"/> class.
@@ -37,7 +36,7 @@ public sealed class ServerListenAddressProvider : IListenAddressProvider
     }
 
     /// <inheritdoc />
-    public EndPoint ListenAddress => _cachedAddress ??= ResolveAddress();
+    public EndPoint ListenAddress => field ??= ResolveAddress();
 
     private EndPoint ResolveAddress()
     {

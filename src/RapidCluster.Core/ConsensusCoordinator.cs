@@ -68,11 +68,11 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
 
     private readonly OneShotTimer _timer = new();
     private readonly OneShotTimer _classicRestartTimer = new();
-    private readonly Dictionary<MembershipProposal, int> _votesPerProposal = new(MembershipProposalComparer.Instance);
-    private readonly HashSet<Endpoint> _votesReceived = new(EndpointAddressComparer.Instance);
-    private readonly HashSet<Endpoint> _deliveryFailureEndpoints = new(EndpointAddressComparer.Instance);
+    private readonly Dictionary<MembershipProposal, int> _votesPerProposal = [with(MembershipProposalComparer.Instance)];
+    private readonly HashSet<Endpoint> _votesReceived = [with(EndpointAddressComparer.Instance)];
+    private readonly HashSet<Endpoint> _deliveryFailureEndpoints = [with(EndpointAddressComparer.Instance)];
     private readonly List<Phase1bMessage> _phase1bResponses = [];
-    private readonly HashSet<Endpoint> _negativeVoters = new(EndpointAddressComparer.Instance);
+    private readonly HashSet<Endpoint> _negativeVoters = [with(EndpointAddressComparer.Instance)];
 
     private Rank _currentRank = new() { Round = 1, NodeIndex = 0 };
     private int _highestRoundSeen;
@@ -83,6 +83,8 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
     private int _fallbackSignaled;
     private MembershipProposal? _candidateValue;
     private Task? _consensusLoopTask;
+    private int _cancelled;
+    private int _cancellationResourcesCleaned;
     private int _disposed;
 
     public Task<MembershipProposal> Decided => _onDecidedTcs.Task;
@@ -194,7 +196,7 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
                         return;
                     }
 
-                    _events.Writer.TryWrite(new ConsensusEvent.Timeout(1, timeout));
+                    _ = _events.Writer.TryWrite(new ConsensusEvent.Timeout(1, timeout));
                 });
 
             StartFastRound(proposal, cancellationToken);
@@ -256,7 +258,7 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
 
         // Ensure we process our own vote immediately, even if the broadcaster
         // does not loop back to the local node.
-        _events.Writer.TryWrite(new ConsensusEvent.Inbound(proposalMessage, cancellationToken));
+        _ = _events.Writer.TryWrite(new ConsensusEvent.Inbound(proposalMessage, cancellationToken));
     }
 
     private void HandleDeliveryFailure(
@@ -311,7 +313,7 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
             _highestRoundSeen = roundSeen;
         }
 
-        _negativeVoters.Add(endpoint);
+        _ = _negativeVoters.Add(endpoint);
 
         var majorityThreshold = _membershipSize / 2 + 1;
         var maxPossiblePositiveVotes = _membershipSize - _negativeVoters.Count;
@@ -325,7 +327,7 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
 
     private void ScheduleClassicRoundRestart()
     {
-        if (_currentRank.Round < 2 && _currentRank.Round != 1)
+        if (_currentRank.Round is < 2 and not 1)
         {
             throw new UnreachableException(string.Create(CultureInfo.InvariantCulture, $"Unexpected round: {_currentRank.Round}"));
         }
@@ -445,27 +447,31 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
     {
         _log.HandleMessages(request.ContentCase);
 
-        switch (request.ContentCase)
+        if (request.ContentCase == RapidClusterRequest.ContentOneofCase.Phase2BMessage)
         {
-            case RapidClusterRequest.ContentOneofCase.Phase2BMessage:
-                HandlePhase2bMessage(request.Phase2BMessage, consensusStopwatch, cancellationToken);
-                return;
-
-            case RapidClusterRequest.ContentOneofCase.Phase1AMessage:
-                _paxosAcceptor.HandlePhase1aMessage(request.Phase1AMessage, cancellationToken);
-                return;
-
-            case RapidClusterRequest.ContentOneofCase.Phase1BMessage:
-                HandlePhase1bMessage(request.Phase1BMessage, cancellationToken);
-                return;
-
-            case RapidClusterRequest.ContentOneofCase.Phase2AMessage:
-                _paxosAcceptor.HandlePhase2aMessage(request.Phase2AMessage, cancellationToken);
-                return;
-
-            default:
-                throw new ArgumentException($"Unexpected message case: {request.ContentCase}", nameof(request));
+            HandlePhase2bMessage(request.Phase2BMessage, consensusStopwatch, cancellationToken);
+            return;
         }
+
+        if (request.ContentCase == RapidClusterRequest.ContentOneofCase.Phase1AMessage)
+        {
+            _paxosAcceptor.HandlePhase1aMessage(request.Phase1AMessage, cancellationToken);
+            return;
+        }
+
+        if (request.ContentCase == RapidClusterRequest.ContentOneofCase.Phase1BMessage)
+        {
+            HandlePhase1bMessage(request.Phase1BMessage, cancellationToken);
+            return;
+        }
+
+        if (request.ContentCase == RapidClusterRequest.ContentOneofCase.Phase2AMessage)
+        {
+            _paxosAcceptor.HandlePhase2aMessage(request.Phase2AMessage, cancellationToken);
+            return;
+        }
+
+        throw new ArgumentException($"Unexpected message case: {request.ContentCase}", nameof(request));
     }
 
     private bool UpdateFastRoundOutcome(bool deliveryFailure, Endpoint? failedEndpoint)
@@ -619,7 +625,7 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
                     return;
                 }
 
-                _events.Writer.TryWrite(new ConsensusEvent.Timeout(timedOutRound, delay));
+                _ = _events.Writer.TryWrite(new ConsensusEvent.Timeout(timedOutRound, delay));
             });
     }
 
@@ -803,7 +809,7 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
         var localPhase2b = _paxosAcceptor.HandlePhase2aMessageLocal(phase2a);
         if (localPhase2b != null)
         {
-            _events.Writer.TryWrite(new ConsensusEvent.Inbound(localPhase2b.ToRapidClusterRequest(), cancellationToken));
+            _ = _events.Writer.TryWrite(new ConsensusEvent.Inbound(localPhase2b.ToRapidClusterRequest(), cancellationToken));
         }
     }
 
@@ -875,9 +881,9 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
     {
         _log.ConsensusDecided(_configurationId, decidedValue);
         protocolMetrics.RecordLatency(_metrics, MetricNames.Results.Success, consensusStopwatch);
-        _onDecidedTcs.TrySetResult(decidedValue);
+        _ = _onDecidedTcs.TrySetResult(decidedValue);
 
-        _events.Writer.TryComplete();
+        _ = _events.Writer.TryComplete();
     }
 
     private void CompleteCancelled(
@@ -892,8 +898,8 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
             protocolMetrics.RecordRoundCompleted(_metrics, MetricNames.Results.Aborted);
         }
 
-        _onDecidedTcs.TrySetCanceled(cancellationToken);
-        _events.Writer.TryComplete();
+        _ = _onDecidedTcs.TrySetCanceled(cancellationToken);
+        _ = _events.Writer.TryComplete();
     }
 
     private void CompleteCancelled(
@@ -915,8 +921,8 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
             protocolMetrics.RecordLatency(_metrics, MetricNames.Results.Aborted, consensusStopwatch);
         }
 
-        _onDecidedTcs.TrySetCanceled(cancellationToken);
-        _events.Writer.TryComplete();
+        _ = _onDecidedTcs.TrySetCanceled(cancellationToken);
+        _ = _events.Writer.TryComplete();
     }
 
     public RapidClusterResponse HandleMessages(RapidClusterRequest request, CancellationToken cancellationToken = default)
@@ -930,7 +936,7 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
         {
             if (_disposed == 0 && _consensusLoopTask != null && !_onDecidedTcs.Task.IsCompleted)
             {
-                _events.Writer.TryWrite(new ConsensusEvent.Inbound(request, cancellationToken));
+                _ = _events.Writer.TryWrite(new ConsensusEvent.Inbound(request, cancellationToken));
             }
         }
 
@@ -939,7 +945,9 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
 
     private TimeSpan GetRandomDelay()
     {
-        var jitter = (long)(-1000 * Math.Log(1 - _sharedResources.NextRandomDouble()) / _jitterRate);
+#pragma warning disable CA5394 // Protocol jitter is not used for security.
+        var jitter = (long)(-1000 * Math.Log(1 - Random.Shared.NextDouble()) / _jitterRate);
+#pragma warning restore CA5394
         return TimeSpan.FromMilliseconds(jitter + (long)_options.ConsensusFallbackTimeoutBaseDelay.TotalMilliseconds);
     }
 
@@ -947,7 +955,9 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
     {
         var baseMs = _options.ConsensusFallbackTimeoutBaseDelay.TotalMilliseconds;
         var multiplier = Math.Min(Math.Pow(1.5, roundNumber - 2), 8);
-        var jitter = (long)(-1000 * Math.Log(1 - _sharedResources.NextRandomDouble()) / _jitterRate);
+#pragma warning disable CA5394 // Protocol jitter is not used for security.
+        var jitter = (long)(-1000 * Math.Log(1 - Random.Shared.NextDouble()) / _jitterRate);
+#pragma warning restore CA5394
 
         var ringPositionDelay = GetRingPositionDelay();
 
@@ -978,15 +988,21 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
     /// </summary>
     public void Cancel()
     {
+        if (Interlocked.Exchange(ref _cancelled, 1) != 0)
+        {
+            return;
+        }
+
         _log.Cancelling();
 
-        _disposeCts.SafeCancel(_log.Logger);
-        _events.Writer.TryComplete();
-        _paxosLearner.Cancel();
-
-        // Dispose timers immediately to stop any scheduled callbacks
-        _timer.Dispose();
-        _classicRestartTimer.Dispose();
+        try
+        {
+            _disposeCts.Cancel();
+        }
+        finally
+        {
+            CleanupCancellationResources();
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -998,22 +1014,53 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
 
         _log.Dispose();
 
-        // Cancel if not already cancelled
-        _disposeCts.SafeCancel(_log.Logger);
-        _events.Writer.TryComplete();
-
-        _paxosLearner.Cancel();
-
-        if (_consensusLoopTask is { } task)
+        try
         {
-            await task.ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+            if (Interlocked.Exchange(ref _cancelled, 1) == 0)
+            {
+                await _disposeCts.CancelAsync();
+            }
+        }
+        finally
+        {
+            try
+            {
+                CleanupCancellationResources();
+            }
+            finally
+            {
+                try
+                {
+                    if (_consensusLoopTask is { } task)
+                    {
+                        await task.ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+                    }
+                }
+                finally
+                {
+                    _ = _onDecidedTcs.TrySetCanceled(_disposeCts.Token);
+                    _disposeCts.Dispose();
+                }
+            }
+        }
+    }
+
+    private void CleanupCancellationResources()
+    {
+        if (Interlocked.Exchange(ref _cancellationResourcesCleaned, 1) != 0)
+        {
+            return;
         }
 
-        _timer.Dispose();
-        _classicRestartTimer.Dispose();
-
-        _onDecidedTcs.TrySetCanceled(_disposeCts.Token);
-
-        _disposeCts.Dispose();
+        _ = _events.Writer.TryComplete();
+        try
+        {
+            _paxosLearner.Cancel();
+        }
+        finally
+        {
+            _timer.Dispose();
+            _classicRestartTimer.Dispose();
+        }
     }
 }

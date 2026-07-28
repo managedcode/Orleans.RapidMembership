@@ -221,6 +221,42 @@ public sealed class PingPongFailureDetectorTests
     }
 
     [Fact]
+    public async Task Dispose_ThrowingCancellationCallback_PropagatesAfterCleanup()
+    {
+        var timeProvider = new FakeTimeProvider();
+        var sharedResources = new SharedResources(timeProvider: timeProvider);
+        var observer = Utils.HostFromParts("127.0.0.1", 1000);
+        var subject = Utils.HostFromParts("127.0.0.2", 2000);
+        using var client = new TestMessagingClient();
+        var callbackRegistered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pendingResponse = new TaskCompletionSource<RapidClusterResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        CancellationTokenRegistration registration = default;
+        client.AsyncResponseGenerator = (_, cancellationToken) =>
+        {
+            registration = cancellationToken.Register(static () => throw new InvalidOperationException("Cancellation callback failure."));
+            callbackRegistered.SetResult();
+            return pendingResponse.Task;
+        };
+
+        var detector = new PingPongFailureDetector(
+            subject,
+            observer,
+            client,
+            sharedResources,
+            () => { },
+            options: new PingPongFailureDetectorOptions { Interval = TimeSpan.FromSeconds(1) },
+            metrics: CreateMetrics(),
+            logger: NullLogger<PingPongFailureDetector>.Instance);
+        detector.Start();
+        timeProvider.Advance(TimeSpan.FromSeconds(1));
+        await callbackRegistered.Task.WaitAsync(TestContext.Current.CancellationToken);
+
+        _ = Assert.Throws<AggregateException>(detector.Dispose);
+        detector.Dispose();
+        await registration.DisposeAsync();
+    }
+
+    [Fact]
     public void Start_AfterDispose_Throws()
     {
         var timeProvider = new FakeTimeProvider();
@@ -393,12 +429,15 @@ public sealed class PingPongFailureDetectorTests
     {
         public Func<RapidClusterRequest, RapidClusterResponse>? ResponseGenerator { get; set; }
 
+        public Func<RapidClusterRequest, CancellationToken, Task<RapidClusterResponse>>? AsyncResponseGenerator { get; set; }
+
         public void SendOneWayMessage(Endpoint remote, RapidClusterRequest request, Rank? rank, DeliveryFailureCallback? onDeliveryFailure, CancellationToken cancellationToken)
         {
         }
 
         public Task<RapidClusterResponse> SendMessageAsync(Endpoint remote, RapidClusterRequest request, CancellationToken cancellationToken)
-            => Task.FromResult(ResponseGenerator?.Invoke(request) ?? new ProbeResponse { ConfigurationId = new ConfigurationId(new ClusterId(888), 10).ToProtobuf() }.ToRapidClusterResponse());
+            => AsyncResponseGenerator?.Invoke(request, cancellationToken)
+                ?? Task.FromResult(ResponseGenerator?.Invoke(request) ?? new ProbeResponse { ConfigurationId = new ConfigurationId(new ClusterId(888), 10).ToProtobuf() }.ToRapidClusterResponse());
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 

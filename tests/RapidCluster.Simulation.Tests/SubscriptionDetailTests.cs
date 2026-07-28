@@ -15,7 +15,7 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
 {
     private RapidSimulationCluster _harness = null!;
     private const int TestSeed = 45678;
-    private readonly List<ObservableCollector<MembershipView>> _collectors = [];
+    private readonly List<(RapidSimulationNode Node, ObservableCollector<MembershipView> Collector)> _collectors = [];
 
     public ValueTask InitializeAsync()
     {
@@ -25,9 +25,9 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
 
     public async ValueTask DisposeAsync()
     {
-        foreach (var collector in _collectors)
+        foreach (var (node, collector) in _collectors)
         {
-            collector.Dispose();
+            _harness.ExecuteInSimulation(node, collector.Dispose);
         }
 
         _collectors.Clear();
@@ -40,8 +40,10 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
     /// </summary>
     private ObservableCollector<MembershipView> CreateViewCollector(RapidSimulationNode node)
     {
-        var collector = new ObservableCollector<MembershipView>(node.ViewAccessor.Updates);
-        _collectors.Add(collector);
+        var collector = _harness.InvokeInSimulation(
+            node,
+            () => new ObservableCollector<MembershipView>(node.ViewAccessor.Updates));
+        _collectors.Add((node, collector));
         return collector;
     }
 
@@ -72,7 +74,7 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
         // Collector is started after node is created, so initial event may be missed
         var collector = CreateViewCollector(seedNode);
 
-        _harness.RunUntilIdle();
+        _ = _harness.RunUntilIdle();
 
         // Join a node - this should trigger a callback that the collector CAN see
         var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
@@ -131,7 +133,7 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
         var collector1 = CreateViewCollector(seedNode);
         var collector2 = CreateViewCollector(seedNode);
 
-        _harness.RunUntilIdle();
+        _ = _harness.RunUntilIdle();
         _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
         _harness.WaitForConvergence();
 
@@ -159,7 +161,7 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
         var seedNode = _harness.CreateSeedNode();
         var seedCollector = CreateViewCollector(seedNode);
 
-        _harness.RunUntilIdle();
+        _ = _harness.RunUntilIdle();
         CollectViews(seedCollector, seedCallbackLog);
         var seedInitialCount = seedCallbackLog.Count;
 
@@ -204,7 +206,7 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
         var callbackLog = new ConcurrentBag<MembershipView>();
         var collector = CreateViewCollector(seedNode);
 
-        _harness.RunUntilIdle();
+        _ = _harness.RunUntilIdle();
 
         var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
         _harness.WaitForConvergence();
@@ -234,7 +236,7 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
         var callbackLog = new ConcurrentBag<MembershipView>();
         var collector = CreateViewCollector(seedNode);
 
-        _harness.RunUntilIdle();
+        _ = _harness.RunUntilIdle();
 
         var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
         _harness.WaitForConvergence();
@@ -330,7 +332,7 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
         var callbackLog = new ConcurrentBag<MembershipView>();
         var collector = CreateViewCollector(seedNode);
 
-        _harness.RunUntilIdle();
+        _ = _harness.RunUntilIdle();
 
         // First joiner - triggers first callback
         var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
@@ -385,8 +387,8 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
         joiner1ConfigId = joiner1CallbackLog.FirstOrDefault(v => v.Size == 3)?.ConfigurationId.Version;
 
         // Both should have seen configuration ID for 3-node cluster
-        Assert.NotNull(seedConfigId);
-        Assert.NotNull(joiner1ConfigId);
+        _ = Assert.NotNull(seedConfigId);
+        _ = Assert.NotNull(joiner1ConfigId);
         Assert.Equal(seedConfigId, joiner1ConfigId);
     }
 
@@ -456,7 +458,7 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
         var seedNode = _harness.CreateSeedNode();
         var collector = CreateViewCollector(seedNode);
 
-        _harness.RunUntilIdle();
+        _ = _harness.RunUntilIdle();
 
         // Trigger a membership change to get a callback
         _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);

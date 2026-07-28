@@ -47,7 +47,7 @@ public sealed class ChaosTests : IAsyncLifetime
         _chaos.MinimumAliveNodes = 3;
 
         // Run chaos - should leave at least 3 nodes alive
-        _chaos.RunChaos(steps: 100);
+        _ = _chaos.RunChaos(steps: 100);
 
         Assert.True(_harness.Nodes.Count >= 3);
     }
@@ -60,13 +60,13 @@ public sealed class ChaosTests : IAsyncLifetime
         _chaos.ScheduleNodeCrash(node, TimeSpan.FromSeconds(5));
 
         // Before scheduled time - node should still exist
-        _harness.RunForDuration(TimeSpan.FromSeconds(4));
-        _chaos.MaybeInjectFault(); // Process scheduled faults
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(4));
+        _ = _chaos.MaybeInjectFault(); // Process scheduled faults
         Assert.Contains(node, _harness.Nodes);
 
         // After scheduled time - node should be crashed
-        _harness.RunForDuration(TimeSpan.FromSeconds(2));
-        _chaos.MaybeInjectFault(); // Process scheduled faults
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(2));
+        _ = _chaos.MaybeInjectFault(); // Process scheduled faults
         Assert.DoesNotContain(node, _harness.Nodes);
     }
 
@@ -88,13 +88,13 @@ public sealed class ChaosTests : IAsyncLifetime
         Assert.True(_harness.Network.CanDeliver(node1Addr, node2Addr));
 
         // After isolation
-        _harness.RunForDuration(TimeSpan.FromSeconds(3));
-        _chaos.MaybeInjectFault();
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(3));
+        _ = _chaos.MaybeInjectFault();
         Assert.False(_harness.Network.CanDeliver(node1Addr, node2Addr));
 
         // After reconnection
-        _harness.RunForDuration(TimeSpan.FromSeconds(3));
-        _chaos.MaybeInjectFault();
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(3));
+        _ = _chaos.MaybeInjectFault();
         Assert.True(_harness.Network.CanDeliver(node1Addr, node2Addr));
     }
 
@@ -104,7 +104,7 @@ public sealed class ChaosTests : IAsyncLifetime
         // Create some nodes
         for (var i = 0; i < 5; i++)
         {
-            _harness.CreateSeedNode(i);
+            _ = _harness.CreateSeedNode(i);
         }
 
         _chaos.NodeCrashRate = 0.01; // Low crash rate
@@ -132,7 +132,7 @@ public sealed class ChaosTests : IAsyncLifetime
 
         // Run chaos (reduced from 100 steps to 20 for faster test execution while
         // still validating invariants hold under light partition churn)
-        _chaos.RunChaos(steps: 20);
+        _ = _chaos.RunChaos(steps: 20);
 
         // Check invariants
         var result = _checker.CheckAll();
@@ -168,8 +168,8 @@ public sealed class ChaosTests : IAsyncLifetime
         _chaos.ClearScheduledFaults();
 
         // Advance past scheduled time
-        _harness.RunForDuration(TimeSpan.FromSeconds(2));
-        _chaos.MaybeInjectFault();
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(2));
+        _ = _chaos.MaybeInjectFault();
 
         // Node should still exist
         Assert.Contains(node, _harness.Nodes);
@@ -187,13 +187,13 @@ public sealed class ChaosTests : IAsyncLifetime
         var addr2 = RapidClusterUtils.Loggable(node2.Address);
 
         // Before scheduled time
-        _harness.RunForDuration(TimeSpan.FromSeconds(2));
-        _chaos.MaybeInjectFault();
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(2));
+        _ = _chaos.MaybeInjectFault();
         Assert.True(_harness.Network.CanDeliver(addr1, addr2));
 
         // After scheduled time
-        _harness.RunForDuration(TimeSpan.FromSeconds(2));
-        _chaos.MaybeInjectFault();
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(2));
+        _ = _chaos.MaybeInjectFault();
         Assert.False(_harness.Network.CanDeliver(addr1, addr2));
     }
 
@@ -217,13 +217,13 @@ public sealed class ChaosTests : IAsyncLifetime
         _chaos.SchedulePartitionHeal(node1, node2, TimeSpan.FromSeconds(3));
 
         // Before heal
-        _harness.RunForDuration(TimeSpan.FromSeconds(2));
-        _chaos.MaybeInjectFault();
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(2));
+        _ = _chaos.MaybeInjectFault();
         Assert.False(_harness.Network.CanDeliver(addr1, addr2));
 
         // After heal
-        _harness.RunForDuration(TimeSpan.FromSeconds(2));
-        _chaos.MaybeInjectFault();
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(2));
+        _ = _chaos.MaybeInjectFault();
         Assert.True(_harness.Network.CanDeliver(addr1, addr2));
     }
 
@@ -241,20 +241,20 @@ public sealed class ChaosTests : IAsyncLifetime
         _chaos.ScheduleIsolation(node1, TimeSpan.FromSeconds(6));
 
         // Check state at each time point
-        _harness.RunForDuration(TimeSpan.FromSeconds(1));
-        _chaos.MaybeInjectFault();
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(1));
+        _ = _chaos.MaybeInjectFault();
         Assert.True(_harness.Network.CanDeliver(node1Addr, node2Addr)); // Before first isolation
 
-        _harness.RunForDuration(TimeSpan.FromSeconds(2));
-        _chaos.MaybeInjectFault();
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(2));
+        _ = _chaos.MaybeInjectFault();
         Assert.False(_harness.Network.CanDeliver(node1Addr, node2Addr)); // After first isolation
 
-        _harness.RunForDuration(TimeSpan.FromSeconds(2));
-        _chaos.MaybeInjectFault();
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(2));
+        _ = _chaos.MaybeInjectFault();
         Assert.True(_harness.Network.CanDeliver(node1Addr, node2Addr)); // After reconnect
 
-        _harness.RunForDuration(TimeSpan.FromSeconds(2));
-        _chaos.MaybeInjectFault();
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(2));
+        _ = _chaos.MaybeInjectFault();
         Assert.False(_harness.Network.CanDeliver(node1Addr, node2Addr)); // After second isolation
     }
 
@@ -269,8 +269,8 @@ public sealed class ChaosTests : IAsyncLifetime
         _harness.CrashNode(node);
 
         // Advance past scheduled time and process - should not throw
-        _harness.RunForDuration(TimeSpan.FromSeconds(10));
-        _chaos.MaybeInjectFault(); // Should not throw even though node is already crashed
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(10));
+        _ = _chaos.MaybeInjectFault(); // Should not throw even though node is already crashed
     }
 
     /// <summary>
@@ -284,14 +284,14 @@ public sealed class ChaosTests : IAsyncLifetime
         // Create a 4-node cluster
         for (var i = 0; i < 4; i++)
         {
-            _harness.CreateSeedNode(i);
+            _ = _harness.CreateSeedNode(i);
         }
 
         _chaos.PartitionRate = 0.1;
         _chaos.PartitionHealRate = 0.15;
 
         // Run chaos with partition creation and healing
-        _chaos.RunChaos(steps: 200, stepInterval: TimeSpan.FromMilliseconds(5));
+        _ = _chaos.RunChaos(steps: 200, stepInterval: TimeSpan.FromMilliseconds(5));
 
         // Cluster should still have nodes
         Assert.NotEmpty(_harness.Nodes);
@@ -312,13 +312,13 @@ public sealed class ChaosTests : IAsyncLifetime
 
         // Schedule events at different times
         _chaos.ScheduleIsolation(node1, TimeSpan.FromSeconds(1));
-        _harness.RunForDuration(TimeSpan.FromSeconds(1.5));
-        _chaos.MaybeInjectFault();
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(1.5));
+        _ = _chaos.MaybeInjectFault();
         events.Add("isolated");
 
         _chaos.ScheduleReconnect(node1, TimeSpan.FromSeconds(0.5)); // 2 seconds from start
-        _harness.RunForDuration(TimeSpan.FromSeconds(1));
-        _chaos.MaybeInjectFault();
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(1));
+        _ = _chaos.MaybeInjectFault();
         events.Add("reconnected");
 
         // Verify events occurred
@@ -371,7 +371,7 @@ public sealed class ChaosTests : IAsyncLifetime
     {
         for (var i = 0; i < 6; i++)
         {
-            _harness.CreateSeedNode(i);
+            _ = _harness.CreateSeedNode(i);
         }
 
         _chaos.NodeCrashRate = 0.05;
@@ -380,7 +380,7 @@ public sealed class ChaosTests : IAsyncLifetime
         _chaos.MinimumAliveNodes = 2;
 
         // Run many steps with frequent fault injection
-        _chaos.RunChaos(steps: 1000, stepInterval: TimeSpan.FromMilliseconds(1));
+        _ = _chaos.RunChaos(steps: 1000, stepInterval: TimeSpan.FromMilliseconds(1));
 
         // System should survive
         Assert.True(_harness.Nodes.Count >= 2);

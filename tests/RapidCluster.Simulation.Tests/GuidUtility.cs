@@ -37,17 +37,4 @@ internal static class GuidUtility
     }
 
     private static void SwapBytes(byte[] guid, int left, int right) => (guid[left], guid[right]) = (guid[right], guid[left]);
-
-    /// <summary>
-    /// Returns a deterministic hash code for a string that is stable across process invocations.
-    /// Uses XxHash32 which is fast and has excellent distribution.
-    /// Unlike string.GetHashCode(), this produces the same value every time for the same input.
-    /// </summary>
-    public static int GetDeterministicHashCode(string str)
-    {
-        ArgumentNullException.ThrowIfNull(str);
-
-        var bytes = System.Text.Encoding.UTF8.GetBytes(str);
-        return unchecked((int)System.IO.Hashing.XxHash32.HashToUInt32(bytes));
-    }
 }

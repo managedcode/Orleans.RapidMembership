@@ -100,6 +100,41 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Cancel_ThrowingCancellationCallback_PropagatesAfterCleanup()
+    {
+        var coordinator = CreateCoordinator(
+            Utils.HostFromParts("127.0.0.1", 1000),
+            new ConfigurationId(new ClusterId(888), 1),
+            membershipSize: 5,
+            new ThrowingCancellationBroadcaster(),
+            trackForCleanup: false);
+        coordinator.Propose(CreateProposal(Utils.HostFromParts("10.0.0.1", 5001)));
+
+        _ = Assert.Throws<AggregateException>(coordinator.Cancel);
+        coordinator.Cancel();
+        await coordinator.DisposeAsync();
+
+        Assert.True(coordinator.Decided.IsCanceled);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_ThrowingCancellationCallback_PropagatesAfterCleanup()
+    {
+        var coordinator = CreateCoordinator(
+            Utils.HostFromParts("127.0.0.1", 1000),
+            new ConfigurationId(new ClusterId(888), 1),
+            membershipSize: 5,
+            new ThrowingCancellationBroadcaster(),
+            trackForCleanup: false);
+        coordinator.Propose(CreateProposal(Utils.HostFromParts("10.0.0.1", 5001)));
+
+        _ = await Assert.ThrowsAsync<AggregateException>(() => coordinator.DisposeAsync().AsTask());
+        await coordinator.DisposeAsync();
+
+        Assert.True(coordinator.Decided.IsCanceled);
+    }
+
+    [Fact]
     public void HandleMessages_FastRoundPhase2B_DoesNotThrow()
     {
         var myAddr = Utils.HostFromParts("127.0.0.1", 1000);
@@ -964,7 +999,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
         {
             ConsensusFallbackTimeoutBaseDelay = TimeSpan.FromMilliseconds(100),
         });
-        var sharedResources = new SharedResources(_timeProvider, random: new Random(42));
+        var sharedResources = new SharedResources(_timeProvider);
         var metrics = CreateMetrics();
 
         var coordinator = new ConsensusCoordinator(
@@ -1009,6 +1044,20 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
         public void Broadcast(RapidClusterRequest request, Rank? rank, BroadcastFailureCallback? onDeliveryFailure, CancellationToken cancellationToken) { }
 
         public void SetMembership(IReadOnlyList<Endpoint> membership) { }
+    }
+
+    private sealed class ThrowingCancellationBroadcaster : IBroadcaster
+    {
+        public void Broadcast(RapidClusterRequest request, CancellationToken cancellationToken) =>
+            RegisterThrowingCallback(cancellationToken);
+
+        public void Broadcast(RapidClusterRequest request, Rank? rank, BroadcastFailureCallback? onDeliveryFailure, CancellationToken cancellationToken) =>
+            RegisterThrowingCallback(cancellationToken);
+
+        public void SetMembership(IReadOnlyList<Endpoint> membership) { }
+
+        private static void RegisterThrowingCallback(CancellationToken cancellationToken) =>
+            _ = cancellationToken.Register(static () => throw new InvalidOperationException("Cancellation callback failure."));
     }
 
     /// <summary>

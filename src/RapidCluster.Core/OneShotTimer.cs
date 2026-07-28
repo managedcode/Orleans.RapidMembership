@@ -7,7 +7,7 @@ internal sealed class OneShotTimer : IDisposable
 
     public void Dispose()
     {
-        System.Threading.Interlocked.Increment(ref _token);
+        _ = System.Threading.Interlocked.Increment(ref _token);
         _timer?.Dispose();
         _timer = null;
     }

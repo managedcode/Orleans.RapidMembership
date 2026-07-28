@@ -272,9 +272,14 @@ public sealed partial class PingPongFailureDetector : IEdgeFailureDetector
         }
 
         // Cancel the token before disposing to stop the probe loop gracefully
-        _cts.SafeCancel(_logger);
-
-        _probeTask?.Ignore();
-        _cts.Dispose();
+        try
+        {
+            _cts.Cancel();
+        }
+        finally
+        {
+            _probeTask?.Ignore();
+            _cts.Dispose();
+        }
     }
 }

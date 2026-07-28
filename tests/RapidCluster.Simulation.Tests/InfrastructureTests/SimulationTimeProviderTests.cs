@@ -217,7 +217,7 @@ public class SimulationTimeProviderTests
     {
         var p = new TestTimeProvider();
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => p.Advance(TimeSpan.FromTicks(-1)));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(() => p.Advance(TimeSpan.FromTicks(-1)));
     }
 
     [Fact]
@@ -264,7 +264,7 @@ public class SimulationTimeProviderTests
     {
         var p = new TestTimeProvider();
 
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
+        _ = Assert.Throws<ArgumentOutOfRangeException>(() =>
             p.SetUtcNow(p.GetUtcNow() - TimeSpan.FromTicks(1)));
     }
 
@@ -403,7 +403,7 @@ public class SimulationTimeProviderTests
         using var timer = p.CreateTimer(_ => callCount++, state: null, TimeSpan.FromSeconds(10), TimeSpan.Zero);
 
         // Change to fire sooner
-        timer.Change(TimeSpan.FromMilliseconds(100), TimeSpan.Zero);
+        _ = timer.Change(TimeSpan.FromMilliseconds(100), TimeSpan.Zero);
 
         p.Advance(TimeSpan.FromMilliseconds(100));
         p.RunUntilIdle();
@@ -419,7 +419,7 @@ public class SimulationTimeProviderTests
         using var timer = p.CreateTimer(_ => callCount++, state: null, TimeSpan.FromSeconds(1), TimeSpan.Zero);
 
         // Change to infinite (disabled)
-        timer.Change(Timeout.InfiniteTimeSpan, TimeSpan.Zero);
+        _ = timer.Change(Timeout.InfiniteTimeSpan, TimeSpan.Zero);
 
         p.Advance(TimeSpan.FromSeconds(100));
         p.RunUntilIdle();
@@ -534,15 +534,15 @@ state: null, TimeSpan.FromSeconds(1), TimeSpan.Zero);
         using var timer2 = p.CreateTimer(_ => firedTimers.Add(2), state: null, TimeSpan.FromSeconds(2), TimeSpan.Zero);
         using var timer3 = p.CreateTimer(_ => firedTimers.Add(3), state: null, TimeSpan.FromSeconds(3), TimeSpan.Zero);
 
-        p.AdvanceToNextTimer();
+        _ = p.AdvanceToNextTimer();
         p.RunUntilIdle();
         Assert.Equal([1], firedTimers);
 
-        p.AdvanceToNextTimer();
+        _ = p.AdvanceToNextTimer();
         p.RunUntilIdle();
         Assert.Equal([1, 2], firedTimers);
 
-        p.AdvanceToNextTimer();
+        _ = p.AdvanceToNextTimer();
         p.RunUntilIdle();
         Assert.Equal([1, 2, 3], firedTimers);
     }
@@ -669,9 +669,9 @@ state: null, TimeSpan.FromSeconds(1), TimeSpan.Zero);
         var delay = Task.Delay(InfiniteTimeout, p.TimeProvider, cts.Token);
         Assert.False(delay.IsCompleted);
 
-        cts.SafeCancel();
+        await cts.CancelAsync();
 
-        await Assert.ThrowsAsync<TaskCanceledException>(async () => await delay);
+        _ = await Assert.ThrowsAsync<TaskCanceledException>(async () => await delay);
     }
 
     [Fact]
@@ -695,9 +695,6 @@ state: null, TimeSpan.FromSeconds(1), TimeSpan.Zero);
     {
         var p = new TestTimeProvider();
         var ct = TestContext.Current.CancellationToken;
-
-        // Install sync context so continuations are captured by the simulation
-        using var _ = p.TaskQueue.SynchronizationContext.Install();
 
         // Create delays - they immediately register timers with the provider
         var delay1 = Task.Delay(TimeSpan.FromSeconds(3), p.TimeProvider, ct);
@@ -737,9 +734,6 @@ state: null, TimeSpan.FromSeconds(1), TimeSpan.Zero);
         var scheduler = new SimulationTaskScheduler(p.TaskQueue);
         var completionOrder = new List<int>();
         var ct = TestContext.Current.CancellationToken;
-
-        // Install sync context so continuations are captured by the simulation
-        using var _ = p.TaskQueue.SynchronizationContext.Install();
 
         // Create delays with continuations that record completion order
         var delay1 = Task.Delay(TimeSpan.FromSeconds(3), p.TimeProvider, ct).ContinueWith(_ => completionOrder.Add(1), ct, TaskContinuationOptions.None, scheduler);
@@ -948,8 +942,8 @@ state: null, TimeSpan.FromSeconds(1), TimeSpan.Zero);
 
         thread1.Start();
         thread2.Start();
-        thread1.Join(TimeSpan.FromSeconds(5));
-        thread2.Join(TimeSpan.FromSeconds(5));
+        _ = thread1.Join(TimeSpan.FromSeconds(5));
+        _ = thread2.Join(TimeSpan.FromSeconds(5));
 
         Assert.NotNull(caughtException);
         Assert.Contains("single-threaded", caughtException.Message, StringComparison.OrdinalIgnoreCase);

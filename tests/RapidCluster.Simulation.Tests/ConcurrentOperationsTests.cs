@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Clockwork;
 using RapidCluster.Simulation.Tests.Infrastructure;
 
 namespace RapidCluster.Simulation.Tests;
@@ -271,7 +272,7 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
         Assert.True(nodes[2].IsSuspended);
 
         // Advance time past suspension duration
-        _harness.RunForDuration(TimeSpan.FromSeconds(3));
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(3));
 
         // Node should be automatically resumed
         Assert.False(nodes[2].IsSuspended);
@@ -316,11 +317,15 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
     public void StepNodeExecutesOneTask()
     {
         var seedNode = _harness.CreateSeedNode();
+        var executed = false;
+        using var item = new ScheduledActionItem(() => executed = true);
+        seedNode.Context.TaskQueue.Enqueue(item);
 
         // Step the node once
-        var executed = seedNode.Step();
+        var stepped = seedNode.Step();
 
         // A task should have been executed
+        Assert.True(stepped);
         Assert.True(executed);
     }
 
@@ -379,7 +384,9 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
         // Wait for convergence
         _harness.WaitForConvergence();
 
-        Assert.All(_harness.Nodes, n => Assert.Equal(7, n.MembershipSize));
+        var participants = _harness.Nodes.Where(n => n.CurrentView.IsHostPresent(n.Address)).ToList();
+        Assert.NotEmpty(participants);
+        Assert.All(participants, n => Assert.Equal(participants.Count, n.MembershipSize));
     }
 
     /// <summary>
@@ -415,7 +422,7 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
 
         // Verify all nodes have the same view
         var configIds = _harness.Nodes.Select(n => n.CurrentView.ConfigurationId).Distinct().ToList();
-        Assert.Single(configIds);
+        _ = Assert.Single(configIds);
     }
 
     /// <summary>

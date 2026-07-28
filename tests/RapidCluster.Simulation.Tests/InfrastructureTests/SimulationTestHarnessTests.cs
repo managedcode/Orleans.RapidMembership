@@ -114,6 +114,24 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task NodeRandomStreamDependsOnStableAddressNotConstructionOrder()
+    {
+        await using var firstHarness = new RapidSimulationCluster(seed: 24680);
+        await using var reorderedHarness = new RapidSimulationCluster(seed: 24680);
+
+        var firstNode = firstHarness.CreateUninitializedNode(nodeId: 7);
+        _ = reorderedHarness.CreateUninitializedNode(nodeId: 99);
+        var reorderedNode = reorderedHarness.CreateUninitializedNode(nodeId: 7);
+
+#pragma warning disable CA5394 // Do not use insecure randomness
+        var firstSequence = Enumerable.Range(0, 10).Select(_ => firstNode.Context.Random.Next()).ToList();
+        var reorderedSequence = Enumerable.Range(0, 10).Select(_ => reorderedNode.Context.Random.Next()).ToList();
+#pragma warning restore CA5394 // Do not use insecure randomness
+
+        Assert.Equal(firstSequence, reorderedSequence);
+    }
+
+    [Fact]
     public void SimulationNetworkCanSetMessageDropRate()
     {
         _harness.Network.MessageDropRate = 0.5;
@@ -134,32 +152,34 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
     public void SeedIsAccessible() => Assert.Equal(12345, _harness.Seed);
 
     [Fact]
-    public async Task SubscribeToViewChangesReceivesNotifications()
+    public void SubscribeToViewChangesReceivesNotifications()
     {
         var viewChanges = new List<MembershipView>();
         var seedNode = _harness.CreateSeedNode();
 
-        // Start listening for view changes on the seed node
-        var startTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var listenTask = Task.Run(async () =>
+        var subscription = _harness.InvokeInSimulation(
+            seedNode,
+            () => seedNode.ViewAccessor.Updates.Subscribe(new ViewObserver(viewChanges.Add)));
+
+        try
         {
-            await foreach (var view in seedNode.ViewAccessor.Updates.WithCancellation(TestContext.Current.CancellationToken))
-            {
-                startTcs.TrySetResult();
-                viewChanges.Add(view);
-                if (viewChanges.Count >= 2)
-                {
-                    break;
-                }
-            }
-        }, TestContext.Current.CancellationToken);
+            _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+            Assert.Contains(viewChanges, view => view.Size == 2);
+        }
+        finally
+        {
+            _harness.ExecuteInSimulation(seedNode, subscription.Dispose);
+        }
+    }
 
-        // Join a new node
-        await startTcs.Task.WaitAsync(TestContext.Current.CancellationToken);
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        await listenTask.WaitAsync(TestContext.Current.CancellationToken);
+    private sealed class ViewObserver(Action<MembershipView> onNext) : IObserver<MembershipView>
+    {
+        public void OnCompleted()
+        {
+        }
 
-        // Should have received at least one view change (the join)
-        Assert.NotEmpty(viewChanges);
+        public void OnError(Exception error) => throw error;
+
+        public void OnNext(MembershipView value) => onNext(value);
     }
 }

@@ -22,6 +22,15 @@ public sealed class RapidClusterGrpcOptions
     public bool UseHttps { get; set; }
 
     /// <summary>
+    /// Gets or sets an optional callback for validating remote HTTPS certificates.
+    /// </summary>
+    /// <remarks>
+    /// The default is <see langword="null"/>, which uses the platform's standard certificate validation.
+    /// Only override this for explicitly controlled environments such as end-to-end tests.
+    /// </remarks>
+    public System.Net.Security.RemoteCertificateValidationCallback? RemoteCertificateValidationCallback { get; set; }
+
+    /// <summary>
     /// Gets or sets the timeout for gRPC requests. Default: 10 seconds.
     /// </summary>
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(10);

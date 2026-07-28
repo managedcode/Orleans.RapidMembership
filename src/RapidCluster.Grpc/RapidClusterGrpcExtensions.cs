@@ -20,10 +20,7 @@ public static class RapidClusterGrpcExtensions
     /// </summary>
     /// <param name="builder">The RapidCluster builder.</param>
     /// <returns>The builder for chaining.</returns>
-    public static IRapidClusterBuilder UseGrpcTransport(this IRapidClusterBuilder builder)
-    {
-        return builder.UseGrpcTransport(_ => { });
-    }
+    public static IRapidClusterBuilder UseGrpcTransport(this IRapidClusterBuilder builder) => builder.UseGrpcTransport(_ => { });
 
     /// <summary>
     /// Adds RapidCluster gRPC transport services using ASP.NET Core hosting.
@@ -40,15 +37,15 @@ public static class RapidClusterGrpcExtensions
         var services = builder.Services;
 
         // Configure gRPC-specific options
-        services.Configure(configure);
+        _ = services.Configure(configure);
 
         // Add gRPC infrastructure
-        services.AddGrpc();
+        _ = services.AddGrpc();
 
         // Register the server-based listen address provider
         // This reads the listen address from IServer.Features after the server starts
-        services.RemoveAll<IListenAddressProvider>();
-        services.AddSingleton<IListenAddressProvider>(sp =>
+        _ = services.RemoveAll<IListenAddressProvider>();
+        _ = services.AddSingleton<IListenAddressProvider>(sp =>
         {
             var server = sp.GetRequiredService<IServer>();
             var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<RapidClusterGrpcOptions>>().Value;
@@ -60,7 +57,7 @@ public static class RapidClusterGrpcExtensions
         // (hosted services are stopped in reverse registration order)
         services.TryAddSingleton<GrpcClient>();
         services.TryAddSingleton<IMessagingClient>(sp => sp.GetRequiredService<GrpcClient>());
-        services.AddHostedService(sp => sp.GetRequiredService<GrpcClient>());
+        _ = services.AddHostedService(sp => sp.GetRequiredService<GrpcClient>());
 
         // Register the gRPC service implementation
         services.TryAddSingleton<MembershipServiceImpl>();
@@ -81,7 +78,7 @@ public static class RapidClusterGrpcExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.WebHost.ConfigureKestrel(options => options.ListenAnyIP(port, listenOptions => listenOptions.Protocols = HttpProtocols.Http2));
+        _ = builder.WebHost.ConfigureKestrel(options => options.ListenAnyIP(port, listenOptions => listenOptions.Protocols = HttpProtocols.Http2));
 
         return builder;
     }

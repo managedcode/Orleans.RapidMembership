@@ -16,13 +16,18 @@
     <File Path=".editorconfig" />
   </Folder>
   <Folder Name="/src/">
-    <Project Path="src/Clockwork/Clockwork.csproj" />
+    <Project Path="src/Clockwork/src/Clockwork/Clockwork.csproj" />
+    <Project Path="src/Clockwork/src/Clockwork.Runtime/Clockwork.Runtime.csproj" />
+    <Project Path="src/Clockwork/src/Clockwork.Instrumentation/Clockwork.Instrumentation.csproj" />
+    <Project Path="src/Clockwork/src/Clockwork.Instrumentation.Build/Clockwork.Instrumentation.Build.csproj" />
+    <Project Path="src/Clockwork/src/Clockwork.Testing/Clockwork.Testing.csproj" />
     <Project Path="src/RapidCluster.Core/RapidCluster.Core.csproj" />
     <Project Path="src/RapidCluster.Grpc/RapidCluster.Grpc.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj" />
     <Project Path="tests/RapidCluster.Integration.Tests/RapidCluster.Integration.Tests.csproj" />
+    <Project Path="tests/RapidCluster.Simulation.Fixtures/RapidCluster.Simulation.Fixtures.csproj" />
     <Project Path="tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj" />
   </Folder>
   <Folder Name="/tests/RapidCluster.EndToEnd/">

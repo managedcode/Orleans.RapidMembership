@@ -15,13 +15,11 @@ namespace RapidCluster.Simulation.Tests;
 [SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Test naming convention")]
 public sealed class GracefulLeaveTests : IAsyncLifetime
 {
+    private readonly List<(RapidSimulationNode Node, ObservableCollector<MembershipView> Collector)> _collectors = [];
+    private readonly Guid _instanceId = Guid.NewGuid();
     private RapidSimulationCluster _harness = null!;
-    private SynchronizationContextScope _syncContextScope;
-    private const int BaseSeed = 67890;
-    private readonly List<ObservableCollector<MembershipView>> _collectors = [];
 
     // Track instance reuse - each test should get a fresh instance
-    private readonly Guid _instanceId = Guid.NewGuid();
     private int _initializeCount;
     private string? _firstTestName;
 
@@ -40,35 +38,23 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
 
         _firstTestName = currentTestName;
 
-        // Derive a unique seed from the test name to ensure test isolation
-        // This makes tests deterministic (same seed for same test) but independent of execution order
-        // Use GuidUtility.GetDeterministicHashCode instead of string.GetHashCode() because
-        // .NET's string hash is randomized per-process for security
-        var testSeed = BaseSeed ^ GuidUtility.GetDeterministicHashCode(currentTestName);
+        var testSeed = SimulationSeed.FromStrings(nameof(GracefulLeaveTests), currentTestName);
 
         _harness = new RapidSimulationCluster(seed: testSeed);
-
-        // Install the simulation's synchronization context to capture async continuations
-        // This ensures all async operations are routed through the simulation task queue
-        _syncContextScope = _harness.SynchronizationContext.Install();
 
         return ValueTask.CompletedTask;
     }
 
     public async ValueTask DisposeAsync()
     {
-        foreach (var collector in _collectors)
+        foreach (var (node, collector) in _collectors)
         {
-            collector.Dispose();
+            _harness.ExecuteInSimulation(node, collector.Dispose);
         }
 
         _collectors.Clear();
 
         await _harness.DisposeAsync();
-
-        // Restore the previous synchronization context AFTER harness disposal
-        // to ensure any async cleanup operations are captured by the simulation
-        _syncContextScope.Dispose();
     }
 
     /// <summary>
@@ -76,8 +62,10 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
     /// </summary>
     private ObservableCollector<MembershipView> CreateViewCollector(RapidSimulationNode node)
     {
-        var collector = new ObservableCollector<MembershipView>(node.ViewAccessor.Updates);
-        _collectors.Add(collector);
+        var collector = _harness.InvokeInSimulation(
+            node,
+            () => new ObservableCollector<MembershipView>(node.ViewAccessor.Updates));
+        _collectors.Add((node, collector));
         return collector;
     }
 
@@ -268,7 +256,7 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
         _harness.RemoveNodeGracefully(nodes[1]);
 
         // Assert: One node remains (it's still "in the cluster" from its own perspective)
-        Assert.Single(_harness.Nodes);
+        _ = Assert.Single(_harness.Nodes);
         Assert.Contains(keepNode, _harness.Nodes);
         _harness.AssertNoWarningsOrErrors();
     }
@@ -477,7 +465,7 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
         _harness.HealPartition(nodes[4], nodes[1]);
 
         // Wait for convergence
-        _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(2));
+        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(2));
 
         // Assert: Cluster should eventually converge (leaving node removed)
         Assert.DoesNotContain(leavingNode, _harness.Nodes);
@@ -687,7 +675,7 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
 
         // Assert: All remaining nodes have same configuration ID
         var configIds = _harness.Nodes.Select(n => n.CurrentView.ConfigurationId).Distinct().ToList();
-        Assert.Single(configIds);
+        _ = Assert.Single(configIds);
         _harness.AssertNoWarningsOrErrors();
     }
 
@@ -724,8 +712,8 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
         _harness.WaitForConvergence();
 
         // Advance time to trigger failure detection cycles
-        _harness.RunForDuration(TimeSpan.FromSeconds(10));
-        _harness.RunUntilIdle();
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(10));
+        _ = _harness.RunUntilIdle();
 
         // Assert: Remaining nodes are still monitored (cluster stable)
         Assert.Equal(4, _harness.Nodes.Count);

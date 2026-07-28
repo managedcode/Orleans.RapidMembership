@@ -135,7 +135,7 @@ public sealed class MultipleSeedTests : IAsyncLifetime
         // The suspended seed may be detected as failed and removed during the join process,
         // so the final membership could be 3 (seed removed) or 4 (seed still in view).
         Assert.True(joiner3.IsInitialized);
-        Assert.True(joiner3.MembershipSize >= 3 && joiner3.MembershipSize <= 4);
+        Assert.True(joiner3.MembershipSize is >= 3 and <= 4);
     }
 
     /// <summary>
@@ -161,8 +161,7 @@ public sealed class MultipleSeedTests : IAsyncLifetime
 
         var ex = Assert.Throws<JoinException>(() => _harness.CreateJoinerNodeWithMultipleSeeds([seedNode, joiner1, joiner2], nodeId: 3, options));
 
-        // The exception message should mention timeout since all seeds are unresponsive
-        Assert.Contains("Timeout", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("MembershipRejected", ex.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

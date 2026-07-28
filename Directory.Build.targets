@@ -1,3 +1,9 @@
 <Project>
 
+	<PropertyGroup>
+		<_RapidClusterClockworkRoot>$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)src/Clockwork'))</_RapidClusterClockworkRoot>
+		<!-- Clockwork b066079d has one Debug-only CA2000 false positive; keep the suppression inside the external source boundary. -->
+		<NoWarn Condition="$([System.String]::Copy('$(MSBuildProjectDirectory)').StartsWith('$(_RapidClusterClockworkRoot)'))">$(NoWarn);CA2000</NoWarn>
+	</PropertyGroup>
+
 </Project>

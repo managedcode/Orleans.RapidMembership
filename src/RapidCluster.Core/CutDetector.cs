@@ -47,9 +47,9 @@ internal sealed partial class CutDetector
     private readonly int _configuredLowWatermark;
     private readonly ILogger<CutDetector> _logger;
     private readonly Lock _lock = new();
-    private readonly Dictionary<Endpoint, Dictionary<int, Endpoint>> _reportsPerHost = new(EndpointAddressComparer.Instance);
-    private readonly SortedSet<Endpoint> _proposal = new(ProtobufEndpointComparer.Instance);
-    private readonly SortedSet<Endpoint> _preProposal = new(ProtobufEndpointComparer.Instance);
+    private readonly Dictionary<Endpoint, Dictionary<int, Endpoint>> _reportsPerHost = [with(EndpointAddressComparer.Instance)];
+    private readonly SortedSet<Endpoint> _proposal = [with(ProtobufEndpointComparer.Instance)];
+    private readonly SortedSet<Endpoint> _preProposal = [with(ProtobufEndpointComparer.Instance)];
     private MembershipView _membershipView = MembershipView.Empty;
     private int _highWaterMark;
     private int _lowWaterMark;
@@ -192,7 +192,7 @@ internal sealed partial class CutDetector
 
             if (!_reportsPerHost.TryGetValue(linkDst, out var reportsForHost))
             {
-                reportsForHost = new Dictionary<int, Endpoint>(ObserversPerSubject);
+                reportsForHost = [with(ObserversPerSubject)];
                 _reportsPerHost[linkDst] = reportsForHost;
             }
 
@@ -222,12 +222,12 @@ internal sealed partial class CutDetector
         // Track in preProposal for edge invalidation (when K > 1)
         if (numReportsForHost == 1 && _highWaterMark > 1)
         {
-            _preProposal.Add(linkDst);
+            _ = _preProposal.Add(linkDst);
         }
 
         if (numReportsForHost >= _highWaterMark)
         {
-            _preProposal.Remove(linkDst);
+            _ = _preProposal.Remove(linkDst);
             _proposalCount++;
             LogProposal(1);
             return [linkDst];
@@ -244,14 +244,14 @@ internal sealed partial class CutDetector
         if (numReportsForHost == _lowWaterMark)
         {
             _updatesInProgress++;
-            _preProposal.Add(linkDst);
+            _ = _preProposal.Add(linkDst);
             LogReachedLowWatermark(new LoggableEndpoint(linkDst), _updatesInProgress);
         }
 
         if (numReportsForHost == _highWaterMark)
         {
-            _preProposal.Remove(linkDst);
-            _proposal.Add(linkDst);
+            _ = _preProposal.Remove(linkDst);
+            _ = _proposal.Add(linkDst);
             _updatesInProgress--;
             LogReachedHighWatermark(new LoggableEndpoint(linkDst), _updatesInProgress);
 
@@ -372,7 +372,7 @@ internal sealed partial class CutDetector
         // Move all nodes from preProposal to proposal
         foreach (var node in _preProposal)
         {
-            _proposal.Add(node);
+            _ = _proposal.Add(node);
         }
 
         _preProposal.Clear();
@@ -428,9 +428,9 @@ internal sealed partial class CutDetector
 
             foreach (var node in nodesToRemove)
             {
-                _reportsPerHost.Remove(node);
-                _preProposal.Remove(node);
-                _proposal.Remove(node);
+                _ = _reportsPerHost.Remove(node);
+                _ = _preProposal.Remove(node);
+                _ = _proposal.Remove(node);
             }
 
             // Update view and compute effective thresholds
@@ -464,19 +464,19 @@ internal sealed partial class CutDetector
                 {
                     if (count > 0 && count < _highWaterMark)
                     {
-                        _preProposal.Add(node);
+                        _ = _preProposal.Add(node);
                     }
                 }
                 else
                 {
                     if (count >= _lowWaterMark && count < _highWaterMark)
                     {
-                        _preProposal.Add(node);
+                        _ = _preProposal.Add(node);
                         _updatesInProgress++;
                     }
                     else if (count >= _highWaterMark)
                     {
-                        _proposal.Add(node);
+                        _ = _proposal.Add(node);
                     }
                 }
             }
