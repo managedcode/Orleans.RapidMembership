@@ -396,8 +396,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         ArgumentNullException.ThrowIfNull(node);
         _log.NodeLeaving();
 
-        var remainingNodes = Nodes.Where(n => n != node).ToList();
-        var targetSize = remainingNodes.Count;
+        var remainingNodes = Nodes.Where(candidate => candidate != node).ToList();
 
         // Drive the stop operation to completion (sends LeaveMessages to observers)
         // Node can still receive messages after this
@@ -405,8 +404,8 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         node.CompleteStop();
 
         // The leaving node must remain active to participate in consensus.
-        // Run the simulation until all remaining nodes converge to the new size.
-        WaitForMembershipSize(targetSize, remainingNodes);
+        // Run the simulation until active remaining nodes agree that this node left.
+        WaitForStableMembership(remainingNodes, [node.Address]);
 
         // Dispose the node's resources while it's still registered.
         // This ensures the simulation can drive the node's task queue during disposal.
@@ -442,8 +441,6 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         // Get the starting configuration version to measure changes
         var remainingNodes = Nodes.Where(n => !nodesToRemove.Contains(n)).ToList();
         var startingConfigVersion = remainingNodes[0].CurrentView.ConfigurationId.Version;
-        var targetSize = remainingNodes.Count;
-
         _log.NodesLeavingParallel(nodesToRemove.Count);
 
         foreach (var node in nodesToRemove)
@@ -461,7 +458,9 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
             node.CompleteStop();
         }
 
-        WaitForMembershipSize(targetSize, remainingNodes);
+        WaitForStableMembership(
+            remainingNodes,
+            nodesToRemove.Select(static node => node.Address).ToList());
 
         // Dispose all leaving nodes' resources while they're still registered.
         // This ensures the simulation can drive each node's task queue during disposal.
@@ -546,10 +545,13 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         SimulationAdaptiveBudget? budget = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(expectedSize);
-        var participants = nodes?.ToList() ??
-            ActiveNodes.Where(static node => node.CurrentView.IsHostPresent(node.Address)).ToList();
+        var candidates = nodes?.ToList() ?? Nodes.ToList();
+        var participants = candidates
+            .Where(static node => !node.IsSuspended && node.CurrentView.IsHostPresent(node.Address))
+            .ToList();
         var outcome = RunUntilConverged(
-            () => participants.TrueForAll(node => node.MembershipSize == expectedSize),
+            () => participants.Count > 0 &&
+                participants.TrueForAll(node => node.MembershipSize == expectedSize),
             budget);
         if (!outcome.ConditionMet)
         {
@@ -638,6 +640,35 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
                 $"Active node count: {ActiveNodes.Count}, " +
                 $"Active node sizes: [{string.Join(", ", ActiveNodes.Select(n => n.MembershipSize))}], " +
                 $"Suspended nodes: {suspendedNodes.Count}.{Environment.NewLine}" +
+                outcome.ToDetailedString());
+        }
+    }
+
+    private void WaitForStableMembership(
+        IEnumerable<RapidSimulationNode> nodes,
+        IReadOnlyList<Endpoint> departedNodes)
+    {
+        var candidates = nodes.ToList();
+        var outcome = RunUntilConverged(() =>
+        {
+            var participants = candidates
+                .Where(static node => !node.IsSuspended && node.CurrentView.IsHostPresent(node.Address))
+                .ToList();
+            if (participants.Count == 0)
+            {
+                return false;
+            }
+
+            var membershipSize = participants[0].MembershipSize;
+            return participants.TrueForAll(node =>
+                node.MembershipSize == membershipSize &&
+                departedNodes.All(departed => !node.CurrentView.IsHostPresent(departed)));
+        });
+
+        if (!outcome.ConditionMet)
+        {
+            throw new TimeoutException(
+                $"Active remaining nodes did not reach a stable membership after departure.{Environment.NewLine}" +
                 outcome.ToDetailedString());
         }
     }
