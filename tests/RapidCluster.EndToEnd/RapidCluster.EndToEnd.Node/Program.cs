@@ -1,3 +1,5 @@
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 using RapidCluster;
 using RapidCluster.Discovery;
 using RapidCluster.EndToEnd.Node;
@@ -34,7 +36,11 @@ builder.Services.AddSingleton<ISeedProvider>(sp => sp.GetRequiredService<FileBas
 // Disable BootstrapExpect since we're using file-based coordination instead
 builder.Services
     .AddRapidCluster(options => options.BootstrapExpect = 0)
-    .UseGrpcTransport(options => options.UseHttps = true);
+    .UseGrpcTransport(options =>
+    {
+        options.UseHttps = true;
+        options.RemoteCertificateValidationCallback = ValidateDevelopmentCertificate;
+    });
 
 // Add cluster membership health check
 builder.Services.AddHealthChecks()
@@ -54,3 +60,33 @@ app.MapDefaultEndpoints();
 app.MapRapidClusterMembershipService();
 
 app.Run();
+
+static bool ValidateDevelopmentCertificate(
+    object sender,
+    X509Certificate? certificate,
+    X509Chain? chain,
+    SslPolicyErrors sslPolicyErrors)
+{
+    _ = sender;
+    var now = DateTime.UtcNow;
+    if (sslPolicyErrors == SslPolicyErrors.None)
+    {
+        return true;
+    }
+
+    if (sslPolicyErrors != SslPolicyErrors.RemoteCertificateChainErrors ||
+        certificate is not X509Certificate2 certificate2 ||
+        chain is null ||
+        !string.Equals(
+            certificate2.GetNameInfo(X509NameType.DnsName, forIssuer: false),
+            "localhost",
+            StringComparison.OrdinalIgnoreCase) ||
+        now < certificate2.NotBefore ||
+        now > certificate2.NotAfter)
+    {
+        return false;
+    }
+
+    return chain.ChainStatus.All(static status =>
+        status.Status is X509ChainStatusFlags.NoError or X509ChainStatusFlags.UntrustedRoot);
+}

@@ -11,9 +11,8 @@ var bootstrapFilePath = Path.Combine(Path.GetTempPath(), $"rapidcluster-e2e-{Gui
 // Create individual cluster node resources instead of replicas
 // This allows each node to have references to all other nodes for peer discovery
 //
-// We use HTTPS endpoints which enables TLS. With TLS, Kestrel can use ALPN negotiation
-// to support both HTTP/1.1 (for health checks) and HTTP/2 (for gRPC) on the same port.
-// This is the recommended approach for gRPC services in ASP.NET Core.
+// Cluster traffic uses HTTPS/HTTP2. Health probes use the separate HTTP endpoint so
+// CI does not need to trust each runner's ephemeral development certificate.
 var nodes = new IResourceBuilder<ProjectResource>[clusterSize];
 for (var i = 0; i < clusterSize; i++)
 {
@@ -21,7 +20,7 @@ for (var i = 0; i < clusterSize; i++)
         .WithEnvironment("CLUSTER_SIZE", clusterSize.ToString(CultureInfo.InvariantCulture))
         .WithEnvironment("CLUSTER_NODE_INDEX", i.ToString(CultureInfo.InvariantCulture))
         .WithEnvironment("CLUSTER_BOOTSTRAP_FILE", bootstrapFilePath)
-        .WithHttpHealthCheck("/health", endpointName: "https");
+        .WithHttpHealthCheck("/health", endpointName: "http");
 }
 
 // Wire up each node to reference all nodes (including itself) for service discovery
