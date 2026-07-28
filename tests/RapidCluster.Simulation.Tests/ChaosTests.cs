@@ -40,7 +40,7 @@ public sealed class ChaosTests : IAsyncLifetime
         var nodes = new List<RapidSimulationNode>();
         for (var i = 0; i < 5; i++)
         {
-            nodes.Add(_harness.CreateSeedNode(i));
+            nodes.Add(_harness.StartCluster(i));
         }
 
         _chaos.NodeCrashRate = 1.0; // 100% crash rate
@@ -55,7 +55,7 @@ public sealed class ChaosTests : IAsyncLifetime
     [Fact]
     public void ScheduledCrashExecutesAtCorrectTime()
     {
-        var node = _harness.CreateSeedNode();
+        var node = _harness.StartCluster();
 
         _chaos.ScheduleNodeCrash(node, TimeSpan.FromSeconds(5));
 
@@ -73,8 +73,8 @@ public sealed class ChaosTests : IAsyncLifetime
     [Fact]
     public void ScheduledIsolationAndReconnection()
     {
-        var node1 = _harness.CreateSeedNode(0);
-        var node2 = _harness.CreateSeedNode(1);
+        var node1 = _harness.StartCluster(0);
+        var node2 = _harness.StartCluster(1);
         var node1Addr = RapidClusterUtils.Loggable(node1.Address);
         var node2Addr = RapidClusterUtils.Loggable(node2.Address);
 
@@ -104,7 +104,7 @@ public sealed class ChaosTests : IAsyncLifetime
         // Create some nodes
         for (var i = 0; i < 5; i++)
         {
-            _ = _harness.CreateSeedNode(i);
+            _ = _harness.StartCluster(i);
         }
 
         _chaos.NodeCrashRate = 0.01; // Low crash rate
@@ -162,7 +162,7 @@ public sealed class ChaosTests : IAsyncLifetime
     [Fact]
     public void ClearScheduledFaultsWorks()
     {
-        var node = _harness.CreateSeedNode();
+        var node = _harness.StartCluster();
 
         _chaos.ScheduleNodeCrash(node, TimeSpan.FromSeconds(1));
         _chaos.ClearScheduledFaults();
@@ -178,8 +178,8 @@ public sealed class ChaosTests : IAsyncLifetime
     [Fact]
     public void ScheduledPartitionExecutesOnTime()
     {
-        var node1 = _harness.CreateSeedNode(0);
-        var node2 = _harness.CreateSeedNode(1);
+        var node1 = _harness.StartCluster(0);
+        var node2 = _harness.StartCluster(1);
 
         _chaos.SchedulePartition(node1, node2, TimeSpan.FromSeconds(3));
 
@@ -200,8 +200,8 @@ public sealed class ChaosTests : IAsyncLifetime
     [Fact]
     public void ScheduledPartitionHealExecutesOnTime()
     {
-        var node1 = _harness.CreateSeedNode(0);
-        var node2 = _harness.CreateSeedNode(1);
+        var node1 = _harness.StartCluster(0);
+        var node2 = _harness.StartCluster(1);
 
         var addr1 = RapidClusterUtils.Loggable(node1.Address);
         var addr2 = RapidClusterUtils.Loggable(node2.Address);
@@ -230,8 +230,8 @@ public sealed class ChaosTests : IAsyncLifetime
     [Fact]
     public void MultipleScheduledFaultsExecuteInOrder()
     {
-        var node1 = _harness.CreateSeedNode(0);
-        var node2 = _harness.CreateSeedNode(1);
+        var node1 = _harness.StartCluster(0);
+        var node2 = _harness.StartCluster(1);
         var node1Addr = RapidClusterUtils.Loggable(node1.Address);
         var node2Addr = RapidClusterUtils.Loggable(node2.Address);
 
@@ -261,7 +261,7 @@ public sealed class ChaosTests : IAsyncLifetime
     [Fact]
     public void ScheduledCrashOnNonexistentNodeHandled()
     {
-        var node = _harness.CreateSeedNode();
+        var node = _harness.StartCluster();
 
         _chaos.ScheduleNodeCrash(node, TimeSpan.FromSeconds(5));
 
@@ -284,7 +284,7 @@ public sealed class ChaosTests : IAsyncLifetime
         // Create a 4-node cluster
         for (var i = 0; i < 4; i++)
         {
-            _ = _harness.CreateSeedNode(i);
+            _ = _harness.StartCluster(i);
         }
 
         _chaos.PartitionRate = 0.1;
@@ -305,8 +305,8 @@ public sealed class ChaosTests : IAsyncLifetime
     [Fact]
     public void ScheduledFaultsExecuteInChronologicalOrder()
     {
-        var node1 = _harness.CreateSeedNode(0);
-        _ = _harness.CreateSeedNode(1);
+        var node1 = _harness.StartCluster(0);
+        _ = _harness.StartCluster(1);
 
         var events = new List<string>();
 
@@ -340,7 +340,7 @@ public sealed class ChaosTests : IAsyncLifetime
         var nodes = new List<RapidSimulationNode>();
         for (var i = 0; i < 5; i++)
         {
-            nodes.Add(_harness.CreateSeedNode(i));
+            nodes.Add(_harness.StartCluster(i));
         }
 
         // Enable multiple types of faults simultaneously
@@ -371,7 +371,7 @@ public sealed class ChaosTests : IAsyncLifetime
     {
         for (var i = 0; i < 6; i++)
         {
-            _ = _harness.CreateSeedNode(i);
+            _ = _harness.StartCluster(i);
         }
 
         _chaos.NodeCrashRate = 0.05;

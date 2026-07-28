@@ -27,7 +27,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void MembershipViewNeverEmptyForInitializedNode()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         Assert.NotNull(seedNode.CurrentView);
         Assert.True(seedNode.CurrentView.Size > 0);
@@ -36,7 +36,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void SelfAlwaysInMembershipView()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         var view = seedNode.CurrentView;
         var selfAddress = string.Create(CultureInfo.InvariantCulture, $"{seedNode.Address.Hostname.ToStringUtf8()}:{seedNode.Address.Port}");
@@ -48,8 +48,8 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void AllNodesInViewAreKnownNodes()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _ = _harness.RunUntilConverged(expectedSize: 2);
 
@@ -68,7 +68,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void NoSplitBrainWithSingleNode()
     {
-        _ = _harness.CreateSeedNode();
+        _ = _harness.StartCluster();
 
         var result = _checker.CheckNoSplitBrain();
 
@@ -79,8 +79,8 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void NoSplitBrainWithTwoNodes()
     {
-        var seedNode = _harness.CreateSeedNode();
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _ = _harness.RunUntilConverged(expectedSize: 2);
 
@@ -93,7 +93,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void ConfigurationIdMonotonicityWithSingleNode()
     {
-        _ = _harness.CreateSeedNode();
+        _ = _harness.StartCluster();
 
         var result = _checker.CheckConfigurationIdMonotonicity();
 
@@ -103,9 +103,9 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void ConfigurationIdMonotonicityAfterJoin()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var initialConfigId = seedNode.CurrentView.ConfigurationId;
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _ = _harness.RunUntilConverged(expectedSize: 2);
 
@@ -126,7 +126,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void MembershipConsistencyWithSingleNode()
     {
-        _ = _harness.CreateSeedNode();
+        _ = _harness.StartCluster();
 
         var result = _checker.CheckMembershipConsistency();
         Assert.True(result);
@@ -135,8 +135,8 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void MembershipConsistencyWithConvergedCluster()
     {
-        var seedNode = _harness.CreateSeedNode();
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _ = _harness.RunUntilConverged(expectedSize: 2);
 
@@ -155,7 +155,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void CheckAllWithSingleNode()
     {
-        _ = _harness.CreateSeedNode();
+        _ = _harness.StartCluster();
 
         var result = _checker.CheckAll();
         Assert.True(result);
@@ -165,8 +165,8 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void CheckAllWithTwoNodes()
     {
-        var seedNode = _harness.CreateSeedNode();
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _ = _harness.RunUntilConverged(expectedSize: 2);
 
@@ -218,10 +218,10 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void JoinEventuallyCompletes()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Start a join operation and drive to completion
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         Assert.True(joiner.IsInitialized);
     }
@@ -235,9 +235,9 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void FailureDetectionEventuallyOccurs()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _ = _harness.RunUntilConverged(expectedSize: 3);
 
@@ -260,8 +260,8 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void PartitionHealEventuallyConverges()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _ = _harness.RunUntilConverged(expectedSize: 2);
 

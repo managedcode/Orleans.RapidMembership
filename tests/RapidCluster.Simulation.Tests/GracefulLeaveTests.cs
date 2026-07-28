@@ -482,7 +482,7 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
         _harness.RemoveNodeGracefully(nodes[3]);
         _harness.WaitForConvergence();
 
-        var newNode = _harness.CreateJoinerNode(nodes[0], nodeId: 10);
+        var newNode = _harness.JoinNode(nodeId: 10, seed: nodes[0]);
         _harness.WaitForConvergence();
 
         // Assert: New configuration is correct
@@ -500,7 +500,7 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
         _harness.WaitForConvergence();
 
         // Act: Join then leave
-        var newNode = _harness.CreateJoinerNode(nodes[0], nodeId: 10);
+        var newNode = _harness.JoinNode(nodeId: 10, seed: nodes[0]);
         _harness.WaitForConvergence();
 
         _harness.RemoveNodeGracefully(nodes[2]);
@@ -524,13 +524,13 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
         _harness.RemoveNodeGracefully(nodes[4]);
         _harness.WaitForConvergence();
 
-        var newNode1 = _harness.CreateJoinerNode(nodes[0], nodeId: 10);
+        var newNode1 = _harness.JoinNode(nodeId: 10, seed: nodes[0]);
         _harness.WaitForConvergence();
 
         _harness.RemoveNodeGracefully(nodes[3]);
         _harness.WaitForConvergence();
 
-        var newNode2 = _harness.CreateJoinerNode(nodes[1], nodeId: 11);
+        var newNode2 = _harness.JoinNode(nodeId: 11, seed: nodes[1]);
         _harness.WaitForConvergence();
 
         // Assert: Final state correct

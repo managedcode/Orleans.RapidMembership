@@ -29,12 +29,12 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
     [Fact]
     public void RapidConcurrentJoins()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Add multiple nodes rapidly
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
-        var joiner3 = _harness.CreateJoinerNode(seedNode, nodeId: 3);
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -48,9 +48,9 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
     [Fact]
     public void JoinsWithSuspendedNodes()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -58,7 +58,7 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
         joiner1.Suspend();
 
         // Join while node is suspended
-        var joiner3 = _harness.CreateJoinerNode(seedNode, nodeId: 3);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: seedNode);
 
         // Resume suspended node
         joiner1.Resume();
@@ -83,7 +83,7 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
         nodes[4].Suspend();
 
         // Join new node - should succeed with 3 active nodes (quorum)
-        var newNode = _harness.CreateJoinerNode(nodes[0], nodeId: 5);
+        var newNode = _harness.JoinNode(nodeId: 5, seed: nodes[0]);
 
         // Resume suspended nodes
         nodes[3].Resume();
@@ -101,10 +101,10 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
     [Fact]
     public void JoinDuringNodeFailure()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
-        var joiner3 = _harness.CreateJoinerNode(seedNode, nodeId: 3);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -112,7 +112,7 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
         _harness.CrashNode(joiner3);
 
         // Join new node while failure detection is in progress
-        var joiner4 = _harness.CreateJoinerNode(seedNode, nodeId: 4);
+        var joiner4 = _harness.JoinNode(nodeId: 4, seed: seedNode);
 
         // Wait for convergence (should have 4 nodes: original 4 - 1 crash + 1 join)
         _harness.WaitForConvergence();
@@ -134,13 +134,13 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
         _harness.CrashNode(nodes[4]);
 
         // Join a new node
-        _ = _harness.CreateJoinerNode(nodes[0], nodeId: 5);
+        _ = _harness.JoinNode(nodeId: 5, seed: nodes[0]);
 
         // Crash another node
         _harness.CrashNode(nodes[3]);
 
         // Join another node
-        _ = _harness.CreateJoinerNode(nodes[0], nodeId: 6);
+        _ = _harness.JoinNode(nodeId: 6, seed: nodes[0]);
 
         // Wait for convergence
         _harness.WaitForConvergence();
@@ -180,16 +180,16 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
     [Fact]
     public void ConcurrentLeaveAndJoin()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
         // Leave and join close together
         _harness.RemoveNodeGracefully(joiner2);
 
-        var joiner3 = _harness.CreateJoinerNode(seedNode, nodeId: 3);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -209,10 +209,10 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
 
         // Leave one, join one, leave another, join another
         _harness.RemoveNodeGracefully(nodes[4]);
-        var newNode1 = _harness.CreateJoinerNode(nodes[0], nodeId: nodeIdCounter++);
+        var newNode1 = _harness.JoinNode(nodeId: nodeIdCounter++, seed: nodes[0]);
 
         _harness.RemoveNodeGracefully(nodes[3]);
-        var newNode2 = _harness.CreateJoinerNode(nodes[0], nodeId: nodeIdCounter++);
+        var newNode2 = _harness.JoinNode(nodeId: nodeIdCounter++, seed: nodes[0]);
 
         _harness.WaitForConvergence();
 
@@ -233,7 +233,7 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
         Assert.True(nodes[3].IsSuspended);
 
         // Join a new node - should succeed with 3 active nodes
-        var newNode = _harness.CreateJoinerNode(nodes[0], nodeId: 4);
+        var newNode = _harness.JoinNode(nodeId: 4, seed: nodes[0]);
 
         // Drive propagation to the non-suspended nodes.
         // Wait for the active nodes to see membership of 5 (4 original + 1 new)
@@ -299,7 +299,7 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
         nodes[2].Resume();
 
         // Now operations should work
-        var newNode = _harness.CreateJoinerNode(nodes[0], nodeId: 5);
+        var newNode = _harness.JoinNode(nodeId: 5, seed: nodes[0]);
 
         // Resume remaining
         nodes[3].Resume();
@@ -316,7 +316,7 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
     [Fact]
     public void StepNodeExecutesOneTask()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var executed = false;
         using var item = new ScheduledActionItem(() => executed = true);
         seedNode.Context.TaskQueue.Enqueue(item);
@@ -335,7 +335,7 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
     [Fact]
     public void StepNodeReturnsFalseWhenSuspended()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Suspend the node
         seedNode.Suspend();
@@ -373,10 +373,10 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
         nodes[4].Resume();
 
         // Join a new node - should succeed with 4 active nodes (quorum for n=6)
-        var newNode1 = _harness.CreateJoinerNode(nodes[0], nodeId: nodeIdCounter++);
+        var newNode1 = _harness.JoinNode(nodeId: nodeIdCounter++, seed: nodes[0]);
 
         // Join another node
-        var newNode2 = _harness.CreateJoinerNode(nodes[0], nodeId: nodeIdCounter++);
+        var newNode2 = _harness.JoinNode(nodeId: nodeIdCounter++, seed: nodes[0]);
 
         // Resume the last suspended node
         nodes[5].Resume();
@@ -395,9 +395,9 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
     [Fact]
     public void MaintainsConsistencyThroughHeavyChurn()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -411,7 +411,7 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
             _harness.RemoveNodeGracefully(nodeToRemove);
 
             // Add new node
-            var newNode = _harness.CreateJoinerNode(seedNode, nodeId: nodeIdCounter++);
+            var newNode = _harness.JoinNode(nodeId: nodeIdCounter++, seed: seedNode);
 
             _harness.WaitForConvergence();
         }
@@ -450,7 +450,7 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
         Assert.Equal(3, nodes[2].MembershipSize);
 
         // Operations should succeed with the remaining 3 nodes
-        _ = _harness.CreateJoinerNode(nodes[0], nodeId: 5);
+        _ = _harness.JoinNode(nodeId: 5, seed: nodes[0]);
 
         // Active nodes should see the new member (now 4 nodes)
         _harness.WaitForConvergence();

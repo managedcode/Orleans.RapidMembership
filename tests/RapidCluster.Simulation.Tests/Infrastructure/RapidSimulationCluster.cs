@@ -138,25 +138,25 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     public new RapidSimulationNode? GetNode(string address) => base.GetNode(address);
 
     /// <summary>
-    /// Creates a node without initializing it (for testing edge cases).
+    /// Adds a node without starting it (for testing edge cases).
     /// The node is registered but not started or joined to any cluster.
     /// </summary>
     /// <param name="nodeId">The node ID.</param>
-    /// <param name="seedNode">Optional seed node for joining. If null, the node will start its own cluster when initialized.</param>
+    /// <param name="seed">Optional seed node for joining. If null, the node will start its own cluster when initialized.</param>
     /// <param name="options">Optional protocol options.</param>
-    public RapidSimulationNode CreateUninitializedNode(int nodeId, RapidSimulationNode? seedNode = null, RapidClusterProtocolOptions? options = null)
+    public RapidSimulationNode AddUnstartedNode(int nodeId, RapidSimulationNode? seed = null, RapidClusterProtocolOptions? options = null)
     {
         var address = RapidClusterUtils.HostFromParts("node", nodeId);
-        var node = new RapidSimulationNode(this, address, seedNode?.Address, metadata: null, options, failureDetectorOptions: null, LoggerFactory);
+        var node = new RapidSimulationNode(this, address, seed?.Address, metadata: null, options, failureDetectorOptions: null, LoggerFactory);
         RegisterNode(node);
         _log.UninitializedNodeCreated(nodeId);
         return node;
     }
 
     /// <summary>
-    /// Creates and starts a new seed node.
+    /// Starts a new cluster with a seed node.
     /// </summary>
-    public RapidSimulationNode CreateSeedNode(int nodeId = 0, RapidClusterProtocolOptions? options = null, PingPongFailureDetectorOptions? failureDetectorOptions = null)
+    public RapidSimulationNode StartCluster(int nodeId = 0, RapidClusterProtocolOptions? options = null, PingPongFailureDetectorOptions? failureDetectorOptions = null)
     {
         var address = RapidClusterUtils.HostFromParts("node", nodeId);
         var node = new RapidSimulationNode(this, address, seedAddress: null, metadata: null, options, failureDetectorOptions, LoggerFactory);
@@ -173,14 +173,14 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// Creates and joins a new node to the cluster through the specified seed.
     /// Drives the simulation to complete the join.
     /// </summary>
-    public RapidSimulationNode CreateJoinerNode(
-        RapidSimulationNode seedNode,
+    public RapidSimulationNode JoinNode(
         int nodeId,
+        RapidSimulationNode seed,
         RapidClusterProtocolOptions? options = null,
         PingPongFailureDetectorOptions? failureDetectorOptions = null)
     {
-        ArgumentNullException.ThrowIfNull(seedNode);
-        return CreateJoinerNodeWithMultipleSeeds([seedNode], nodeId, options, failureDetectorOptions);
+        ArgumentNullException.ThrowIfNull(seed);
+        return JoinNode(nodeId, [seed], options, failureDetectorOptions);
     }
 
     /// <summary>
@@ -188,36 +188,45 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// The node will try seeds in round-robin order until join succeeds.
     /// Drives the simulation to complete the join.
     /// </summary>
-    public RapidSimulationNode CreateJoinerNodeWithMultipleSeeds(
-        IReadOnlyList<RapidSimulationNode> seedNodes,
+    public RapidSimulationNode JoinNode(
         int nodeId,
+        IReadOnlyList<RapidSimulationNode> seeds,
         RapidClusterProtocolOptions? options = null,
         PingPongFailureDetectorOptions? failureDetectorOptions = null)
     {
-        ArgumentNullException.ThrowIfNull(seedNodes);
-        if (seedNodes.Count == 0)
+        ArgumentNullException.ThrowIfNull(seeds);
+        if (seeds.Count == 0)
         {
-            throw new ArgumentException("At least one seed node is required", nameof(seedNodes));
+            throw new ArgumentException("At least one seed node is required.", nameof(seeds));
         }
 
-        var seedAddresses = seedNodes.Select(n => n.Address).ToList();
-        return CreateJoinerNodeWithSeedAddresses(seedAddresses, nodeId, options, failureDetectorOptions);
+        if (seeds.Select(static seed => RapidClusterUtils.Loggable(seed.Address)).Distinct(StringComparer.Ordinal).Count() != seeds.Count)
+        {
+            throw new ArgumentException("Seed nodes must be unique.", nameof(seeds));
+        }
+
+        return JoinNode(nodeId, seeds.Select(static seed => seed.Address).ToList(), options, failureDetectorOptions);
     }
 
     /// <summary>
     /// Creates and joins a new node to the cluster with raw seed addresses.
     /// Useful for testing duplicate seed handling and other edge cases.
     /// </summary>
-    public RapidSimulationNode CreateJoinerNodeWithSeedAddresses(
-        IList<Endpoint> seedAddresses,
+    public RapidSimulationNode JoinNode(
         int nodeId,
+        IReadOnlyList<Endpoint> seedAddresses,
         RapidClusterProtocolOptions? options = null,
         PingPongFailureDetectorOptions? failureDetectorOptions = null)
     {
         ArgumentNullException.ThrowIfNull(seedAddresses);
         if (seedAddresses.Count == 0)
         {
-            throw new ArgumentException("At least one seed address is required", nameof(seedAddresses));
+            throw new ArgumentException("At least one seed address is required.", nameof(seedAddresses));
+        }
+
+        if (seedAddresses.Select(static seed => RapidClusterUtils.Loggable(seed)).Distinct(StringComparer.Ordinal).Count() != seedAddresses.Count)
+        {
+            throw new ArgumentException("Seed addresses must be unique.", nameof(seedAddresses));
         }
 
         var address = RapidClusterUtils.HostFromParts("node", nodeId);
@@ -252,13 +261,13 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         var result = new List<RapidSimulationNode>(size);
 
         // Create seed node
-        var seedNode = CreateSeedNode(0, options, failureDetectorOptions);
+        var seedNode = StartCluster(0, options, failureDetectorOptions);
         result.Add(seedNode);
 
         // Create joiner nodes
         for (var i = 1; i < size; i++)
         {
-            var joiner = CreateJoinerNode(seedNode, i, options, failureDetectorOptions);
+            var joiner = JoinNode(i, seedNode, options, failureDetectorOptions);
             result.Add(joiner);
 
             // Ensure the cluster catches up between sequential joins.
@@ -306,7 +315,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         var result = new List<RapidSimulationNode>(size);
 
         // Create seed node first
-        var seedNode = CreateSeedNode(0, options);
+        var seedNode = StartCluster(0, options);
         result.Add(seedNode);
 
         if (size == 1)

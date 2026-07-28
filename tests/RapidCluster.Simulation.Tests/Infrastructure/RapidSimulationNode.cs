@@ -106,7 +106,7 @@ internal sealed class RapidSimulationNode : SimulationNode
     internal RapidSimulationNode(
         RapidSimulationCluster harness,
         Endpoint address,
-        IList<Endpoint>? seedAddresses,
+        IReadOnlyList<Endpoint>? seedAddresses,
         Metadata? metadata,
         RapidClusterProtocolOptions? protocolOptions,
         PingPongFailureDetectorOptions? failureDetectorOptions,

@@ -24,8 +24,8 @@ public sealed class NetworkPartitionTests : IAsyncLifetime
     [Fact]
     public void BidirectionalPartitionBlocksMessages()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -43,8 +43,8 @@ public sealed class NetworkPartitionTests : IAsyncLifetime
     [Fact]
     public void UnidirectionalPartitionAllowsOneWay()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         var seedAddr = RapidClusterUtils.Loggable(seedNode.Address);
         var joinerAddr = RapidClusterUtils.Loggable(joiner.Address);
@@ -59,9 +59,9 @@ public sealed class NetworkPartitionTests : IAsyncLifetime
     [Fact]
     public void PartitionedNodeEventuallyDetected()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -81,8 +81,8 @@ public sealed class NetworkPartitionTests : IAsyncLifetime
     [Fact]
     public void PartitionHealRestoresConnectivity()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         // Create partition
         _harness.PartitionNodes(seedNode, joiner);
@@ -102,9 +102,9 @@ public sealed class NetworkPartitionTests : IAsyncLifetime
     [Fact]
     public void IsolatedNodeCannotCommunicate()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -125,8 +125,8 @@ public sealed class NetworkPartitionTests : IAsyncLifetime
     [Fact]
     public void ReconnectedNodeRestoresConnectivity()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         // Isolate
         _harness.IsolateNode(joiner);
@@ -145,10 +145,10 @@ public sealed class NetworkPartitionTests : IAsyncLifetime
     [Fact]
     public void MultipleNodesIsolatedSimultaneously()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
-        var joiner3 = _harness.CreateJoinerNode(seedNode, nodeId: 3);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -176,7 +176,7 @@ public sealed class NetworkPartitionTests : IAsyncLifetime
         await using var simulationHarness = new RapidSimulationCluster(seed: TestSeed);
         var checker = new InvariantChecker(simulationHarness);
 
-        var seedNode = simulationHarness.CreateSeedNode();
+        var seedNode = simulationHarness.StartCluster();
 
         // Check that single node doesn't trigger split-brain detection
         var result = checker.CheckNoSplitBrain();
@@ -187,8 +187,8 @@ public sealed class NetworkPartitionTests : IAsyncLifetime
     [Fact]
     public void PartitionThenHealBeforeDetection()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -206,8 +206,8 @@ public sealed class NetworkPartitionTests : IAsyncLifetime
     [Fact]
     public void RepeatedPartitionHealCycles()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -226,7 +226,7 @@ public sealed class NetworkPartitionTests : IAsyncLifetime
     [Fact]
     public void HealAllPartitionsWorks()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         var seedAddr = RapidClusterUtils.Loggable(seedNode.Address);
 

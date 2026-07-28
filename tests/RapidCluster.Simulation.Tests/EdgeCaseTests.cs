@@ -25,7 +25,7 @@ public sealed class EdgeCaseTests : IAsyncLifetime
     public void ZeroBatchingWindowWorks()
     {
         var options = new RapidClusterProtocolOptions { BatchingWindow = TimeSpan.Zero };
-        var seedNode = _harness.CreateSeedNode(options: options);
+        var seedNode = _harness.StartCluster(options: options);
 
         Assert.True(seedNode.IsInitialized);
         Assert.Equal(1, seedNode.MembershipSize);
@@ -38,7 +38,7 @@ public sealed class EdgeCaseTests : IAsyncLifetime
         {
             Interval = TimeSpan.FromMilliseconds(100),
         };
-        var seedNode = _harness.CreateSeedNode(failureDetectorOptions: failureDetectorOptions);
+        var seedNode = _harness.StartCluster(failureDetectorOptions: failureDetectorOptions);
 
         Assert.True(seedNode.IsInitialized);
     }
@@ -53,7 +53,7 @@ public sealed class EdgeCaseTests : IAsyncLifetime
             HighWatermark = 4,
             LowWatermark = 2,
         };
-        var seedNode = _harness.CreateSeedNode(options: options);
+        var seedNode = _harness.StartCluster(options: options);
 
         Assert.True(seedNode.IsInitialized);
     }
@@ -67,7 +67,7 @@ public sealed class EdgeCaseTests : IAsyncLifetime
             HighWatermark = 8,
             LowWatermark = 3,
         };
-        var seedNode = _harness.CreateSeedNode(options: options);
+        var seedNode = _harness.StartCluster(options: options);
 
         Assert.True(seedNode.IsInitialized);
     }
@@ -75,11 +75,11 @@ public sealed class EdgeCaseTests : IAsyncLifetime
     [Fact]
     public void BackToBackJoinsSucceed()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Join two nodes in quick succession
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         Assert.True(joiner1.IsInitialized);
         Assert.True(joiner2.IsInitialized);
@@ -88,8 +88,8 @@ public sealed class EdgeCaseTests : IAsyncLifetime
     [Fact]
     public void LeaveImmediatelyAfterJoin()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         // Leave immediately after join - should not throw
         _harness.RemoveNodeGracefully(joiner);
@@ -98,8 +98,8 @@ public sealed class EdgeCaseTests : IAsyncLifetime
     [Fact]
     public void CrashImmediatelyAfterJoin()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         // Crash immediately after join - should not throw
         _harness.CrashNode(joiner);
@@ -110,7 +110,7 @@ public sealed class EdgeCaseTests : IAsyncLifetime
     [Fact]
     public void DoubleCrashIsSafe()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // First crash
         _harness.CrashNode(seedNode);
@@ -122,7 +122,7 @@ public sealed class EdgeCaseTests : IAsyncLifetime
     [Fact]
     public void CrashNodeTwiceIsSafe()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Remove from harness first
         _harness.CrashNode(seedNode);
@@ -132,18 +132,18 @@ public sealed class EdgeCaseTests : IAsyncLifetime
     }
 
     [Fact]
-    public void CreateJoinerNodeRejectsNullSeed()
+    public void JoinNodeRejectsNullSeed()
     {
-        _ = _harness.CreateSeedNode();
+        _ = _harness.StartCluster();
 
-        // CreateJoinerNode requires a valid seed node
-        _ = Assert.Throws<ArgumentNullException>(() => _harness.CreateJoinerNode(null!, nodeId: 1));
+        // JoinNode requires a valid seed node
+        _ = Assert.Throws<ArgumentNullException>(() => _harness.JoinNode(nodeId: 1, seed: null!));
     }
 
     [Fact]
     public void UninitializedNodeThrowsOnHandleRequest()
     {
-        var node = _harness.CreateUninitializedNode(nodeId: 99);
+        var node = _harness.AddUnstartedNode(nodeId: 99);
 
         // Node not initialized - should not be in a valid state
         Assert.False(node.IsInitialized);
@@ -156,11 +156,11 @@ public sealed class EdgeCaseTests : IAsyncLifetime
     public void JoinToUninitializedNodeFails()
     {
         // Create an uninitialized node (not a proper seed)
-        var uninitializedNode = _harness.CreateUninitializedNode(nodeId: 1);
+        var uninitializedNode = _harness.AddUnstartedNode(nodeId: 1);
 
         // Attempting to join using an uninitialized node as seed should fail
         // because the uninitialized node doesn't have proper membership set up
-        _ = Assert.ThrowsAny<Exception>(() => _harness.CreateJoinerNode(uninitializedNode, nodeId: 2));
+        _ = Assert.ThrowsAny<Exception>(() => _harness.JoinNode(nodeId: 2, seed: uninitializedNode));
 
         // Cleanup
         _harness.CrashNode(uninitializedNode);
@@ -173,8 +173,8 @@ public sealed class EdgeCaseTests : IAsyncLifetime
         var options1 = new RapidClusterProtocolOptions { ObserversPerSubject = 3, HighWatermark = 2, LowWatermark = 1 };
         var options2 = new RapidClusterProtocolOptions { ObserversPerSubject = 3, HighWatermark = 2, LowWatermark = 1 };
 
-        var seedNode = _harness.CreateSeedNode(options: options1);
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1, options: options2);
+        var seedNode = _harness.StartCluster(options: options1);
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode, options: options2);
 
         // Both should be operational with same observers per subject
         Assert.True(seedNode.IsInitialized);

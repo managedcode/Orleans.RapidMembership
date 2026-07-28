@@ -24,7 +24,7 @@ public sealed class ClusterIdRejectionTests : IAsyncLifetime
     [Fact]
     public void SeedNode_Has_NonEmpty_ClusterId()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         var clusterId = seedNode.CurrentView.ConfigurationId.ClusterId;
 
@@ -35,8 +35,8 @@ public sealed class ClusterIdRejectionTests : IAsyncLifetime
     public void Different_SeedAddresses_Produce_Different_ClusterIds()
     {
         // Create two seed nodes with different nodeIds (which creates different addresses)
-        var seed1 = _harness.CreateSeedNode(nodeId: 0);  // node:0
-        var seed2 = _harness.CreateSeedNode(nodeId: 100); // node:100
+        var seed1 = _harness.StartCluster(nodeId: 0);  // node:0
+        var seed2 = _harness.StartCluster(nodeId: 100); // node:100
 
         var clusterId1 = seed1.CurrentView.ConfigurationId.ClusterId;
         var clusterId2 = seed2.CurrentView.ConfigurationId.ClusterId;
@@ -52,8 +52,8 @@ public sealed class ClusterIdRejectionTests : IAsyncLifetime
     [Fact]
     public void Joiner_Inherits_ClusterId_From_Seed()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -68,13 +68,13 @@ public sealed class ClusterIdRejectionTests : IAsyncLifetime
     [Fact]
     public void ClusterId_Remains_Stable_After_Multiple_Joins()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var initialClusterId = seedNode.CurrentView.ConfigurationId.ClusterId;
 
         // Add multiple nodes
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
-        var joiner3 = _harness.CreateJoinerNode(seedNode, nodeId: 3);
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -89,9 +89,9 @@ public sealed class ClusterIdRejectionTests : IAsyncLifetime
     public void ClusterId_Remains_Stable_After_Node_Leaves()
     {
         // Use 3-node cluster so remaining 2 nodes can reach quorum
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -110,9 +110,9 @@ public sealed class ClusterIdRejectionTests : IAsyncLifetime
     public void ClusterId_Remains_Stable_After_Node_Crash()
     {
         // Use 3-node cluster so remaining 2 nodes can reach quorum
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -143,10 +143,10 @@ public sealed class ClusterIdRejectionTests : IAsyncLifetime
     [Fact]
     public void ConfigurationId_Version_Increases_With_Membership_Changes()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var initialVersion = seedNode.CurrentView.ConfigurationId.Version;
 
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
         _harness.WaitForConvergence();
 
         // Version should have increased
@@ -185,9 +185,9 @@ public sealed class ClusterIdRejectionTests : IAsyncLifetime
     public void Two_Independent_Clusters_Have_Different_ClusterIds()
     {
         // Create first cluster (nodes 0-2)
-        var seed1 = _harness.CreateSeedNode(nodeId: 0);
-        var joiner1a = _harness.CreateJoinerNode(seed1, nodeId: 1);
-        var joiner1b = _harness.CreateJoinerNode(seed1, nodeId: 2);
+        var seed1 = _harness.StartCluster(nodeId: 0);
+        var joiner1a = _harness.JoinNode(nodeId: 1, seed: seed1);
+        var joiner1b = _harness.JoinNode(nodeId: 2, seed: seed1);
 
         // Wait for the first cluster to converge to 3 nodes
         _harness.WaitForNodeSize(seed1, expectedSize: 3);
@@ -195,9 +195,9 @@ public sealed class ClusterIdRejectionTests : IAsyncLifetime
         _harness.WaitForNodeSize(joiner1b, expectedSize: 3);
 
         // Create second cluster (nodes 100-102) - independent cluster
-        var seed2 = _harness.CreateSeedNode(nodeId: 100);
-        var joiner2a = _harness.CreateJoinerNode(seed2, nodeId: 101);
-        var joiner2b = _harness.CreateJoinerNode(seed2, nodeId: 102);
+        var seed2 = _harness.StartCluster(nodeId: 100);
+        var joiner2a = _harness.JoinNode(nodeId: 101, seed: seed2);
+        var joiner2b = _harness.JoinNode(nodeId: 102, seed: seed2);
 
         // Wait for the second cluster to converge to 3 nodes
         _harness.WaitForNodeSize(seed2, expectedSize: 3);
@@ -225,7 +225,7 @@ public sealed class ClusterIdRejectionTests : IAsyncLifetime
     public void ClusterId_Is_Deterministic_Across_Identical_Configurations()
     {
         // Create a cluster
-        var seed = _harness.CreateSeedNode(nodeId: 0);
+        var seed = _harness.StartCluster(nodeId: 0);
         var clusterId = seed.CurrentView.ConfigurationId.ClusterId;
 
         // Create another seed node with the same nodeId (same address "node:0")

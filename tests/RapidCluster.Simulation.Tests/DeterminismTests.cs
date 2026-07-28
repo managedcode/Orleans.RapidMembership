@@ -111,7 +111,7 @@ public sealed class DeterminismTests : IAsyncLifetime
     [Fact]
     public void RunUntilConvergedWorks()
     {
-        _ = _harness.CreateSeedNode();
+        _ = _harness.StartCluster();
 
         // The condition should already be met since the single node is converged.
         var result = _harness.RunUntilConverged(expectedSize: 1);

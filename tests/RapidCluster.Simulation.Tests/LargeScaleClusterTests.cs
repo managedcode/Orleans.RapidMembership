@@ -197,7 +197,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
     public void ParallelJoins_WithDetailedViewTracking(int clusterSize)
     {
         // Create seed node first
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var viewHistory = new List<MembershipView> { seedNode.CurrentView };
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
 
@@ -215,7 +215,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
             var nodes = new List<RapidSimulationNode>();
             for (var i = 1; i < clusterSize; i++)
             {
-                nodes.Add(_harness.CreateUninitializedNode(i, seedNode));
+                nodes.Add(_harness.AddUnstartedNode(i, seedNode));
             }
 
             _ = _harness.RunToCompletion(() =>
@@ -317,11 +317,11 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
     [Fact]
     public void TenNodesJoinSequentially()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         for (var i = 1; i <= 9; i++)
         {
-            var joiner = _harness.CreateJoinerNode(seedNode, nodeId: i);
+            var joiner = _harness.JoinNode(nodeId: i, seed: seedNode);
 
             // Ensure the join view is applied cluster-wide before the next join.
             // This uses the no-arg overload which computes the expected size from active nodes.
@@ -342,12 +342,12 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
     [Fact]
     public void SequentialJoinsConvergeToSameView()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var joiners = new List<RapidSimulationNode> { seedNode };
 
         for (var i = 1; i <= 7; i++)
         {
-            var joiner = _harness.CreateJoinerNode(seedNode, nodeId: i);
+            var joiner = _harness.JoinNode(nodeId: i, seed: seedNode);
             joiners.Add(joiner);
         }
 
@@ -364,20 +364,20 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
     [Fact]
     public void JoinsUsingDifferentSeeds()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
         // Join using different existing members as "seeds"
-        var joiner3 = _harness.CreateJoinerNode(joiner1, nodeId: 3);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: joiner1);
         _harness.WaitForConvergence();
 
-        var joiner4 = _harness.CreateJoinerNode(joiner2, nodeId: 4);
+        var joiner4 = _harness.JoinNode(nodeId: 4, seed: joiner2);
         _harness.WaitForConvergence();
 
-        var joiner5 = _harness.CreateJoinerNode(joiner3, nodeId: 5);
+        var joiner5 = _harness.JoinNode(nodeId: 5, seed: joiner3);
         _harness.WaitForConvergence();
 
         Assert.All(_harness.Nodes, n => Assert.Equal(6, n.MembershipSize));
@@ -396,7 +396,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
         // Join 5 more nodes
         for (var i = 5; i < 10; i++)
         {
-            var joiner = _harness.CreateJoinerNode(initialNodes[0], nodeId: i);
+            var joiner = _harness.JoinNode(nodeId: i, seed: initialNodes[0]);
             Assert.True(joiner.IsInitialized);
         }
 
@@ -420,7 +420,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
         for (var i = 3; i < 9; i++)
         {
             var entryPoint = initialNodes[i % 3];
-            var joiner = _harness.CreateJoinerNode(entryPoint, nodeId: i);
+            var joiner = _harness.JoinNode(nodeId: i, seed: entryPoint);
             Assert.True(joiner.IsInitialized);
         }
 
@@ -485,9 +485,9 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
         _harness.WaitForConvergence();
 
         // Add 3 new nodes to recover
-        var newNode1 = _harness.CreateJoinerNode(nodes[0], nodeId: 10);
-        var newNode2 = _harness.CreateJoinerNode(nodes[0], nodeId: 11);
-        var newNode3 = _harness.CreateJoinerNode(nodes[0], nodeId: 12);
+        var newNode1 = _harness.JoinNode(nodeId: 10, seed: nodes[0]);
+        var newNode2 = _harness.JoinNode(nodeId: 11, seed: nodes[0]);
+        var newNode3 = _harness.JoinNode(nodeId: 12, seed: nodes[0]);
 
         _harness.WaitForConvergence();
 
@@ -583,10 +583,10 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
         _harness.RemoveNodeGracefully(nodes[7]);
         _harness.WaitForConvergence();
 
-        var newNode1 = _harness.CreateJoinerNode(nodes[0], nodeId: 8);
+        var newNode1 = _harness.JoinNode(nodeId: 8, seed: nodes[0]);
         _harness.WaitForConvergence();
 
-        var newNode2 = _harness.CreateJoinerNode(nodes[0], nodeId: 9);
+        var newNode2 = _harness.JoinNode(nodeId: 9, seed: nodes[0]);
         _harness.WaitForConvergence();
 
         Assert.All(_harness.Nodes, n => Assert.Equal(9, n.MembershipSize));
@@ -598,13 +598,13 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
     [Fact]
     public void ConfigurationChangesTrackedThroughGrowthAndShrinkage()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var configIds = new HashSet<ConfigurationId> { seedNode.CurrentView.ConfigurationId };
 
         // Grow the cluster
         for (var i = 1; i <= 5; i++)
         {
-            _ = _harness.CreateJoinerNode(seedNode, nodeId: i);
+            _ = _harness.JoinNode(nodeId: i, seed: seedNode);
             _harness.WaitForConvergence();
             _ = configIds.Add(seedNode.CurrentView.ConfigurationId);
         }
@@ -757,7 +757,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
             _harness.WaitForConvergence();
 
             // Add one node
-            var newNode = _harness.CreateJoinerNode(_harness.Nodes[0], nodeId: nodeIdCounter++);
+            var newNode = _harness.JoinNode(nodeId: nodeIdCounter++, seed: _harness.Nodes[0]);
             _harness.WaitForConvergence();
         }
 
@@ -772,12 +772,12 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
     [Fact]
     public void RapidSequentialJoins()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Rapidly add 10 nodes
         for (var i = 1; i <= 10; i++)
         {
-            var joiner = _harness.CreateJoinerNode(seedNode, nodeId: i);
+            var joiner = _harness.JoinNode(nodeId: i, seed: seedNode);
             Assert.True(joiner.IsInitialized);
         }
 

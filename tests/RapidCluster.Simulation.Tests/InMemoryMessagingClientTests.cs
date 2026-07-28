@@ -12,7 +12,7 @@ public sealed class InMemoryMessagingClientTests
     public async Task SendOneWayMessage_UnavailableTarget_ReportsDeliveryFailure()
     {
         await using var harness = new RapidSimulationCluster(seed: 7341);
-        var source = harness.CreateSeedNode(
+        var source = harness.StartCluster(
             failureDetectorOptions: new PingPongFailureDetectorOptions { ProbeTimeout = TimeSpan.FromSeconds(1) });
         var unavailable = RapidClusterUtils.HostFromParts("node", 999);
         var failureReported = false;
@@ -35,7 +35,7 @@ public sealed class InMemoryMessagingClientTests
     public async Task SendOneWayMessage_CanceledSend_DoesNotReportDeliveryFailure()
     {
         await using var harness = new RapidSimulationCluster(seed: 7342);
-        var source = harness.CreateSeedNode(
+        var source = harness.StartCluster(
             failureDetectorOptions: new PingPongFailureDetectorOptions { ProbeTimeout = TimeSpan.FromSeconds(1) });
         var unavailable = RapidClusterUtils.HostFromParts("node", 999);
         var failureReported = false;

@@ -30,14 +30,14 @@ public sealed class MultipleSeedTests : IAsyncLifetime
     public void JoinWithMultipleSeedsSucceeds_FirstSeedAvailable()
     {
         // Create a 3-node cluster
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
         // Join a new node with multiple seeds configured (all available)
-        var joiner3 = _harness.CreateJoinerNodeWithMultipleSeeds([seedNode, joiner1, joiner2], nodeId: 3);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seeds: [seedNode, joiner1, joiner2]);
 
         _harness.WaitForConvergence();
 
@@ -53,10 +53,10 @@ public sealed class MultipleSeedTests : IAsyncLifetime
     public void JoinWithMultipleSeeds_FirstSeedDown_FailsOverToSecond()
     {
         // Create a 4-node cluster (need 4 so we have quorum after crashing one)
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 3);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
+        _ = _harness.JoinNode(nodeId: 3, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -69,7 +69,7 @@ public sealed class MultipleSeedTests : IAsyncLifetime
         // Join a new node with multiple seeds configured
         // First seed (seedNode) is crashed, so it should fail over to joiner1
         // Note: We pass seedNode first but it's crashed, so the join will try joiner1
-        var joiner4 = _harness.CreateJoinerNodeWithMultipleSeeds([joiner1, joiner2], nodeId: 4);
+        var joiner4 = _harness.JoinNode(nodeId: 4, seeds: [joiner1, joiner2]);
 
         _harness.WaitForConvergence();
 
@@ -84,11 +84,11 @@ public sealed class MultipleSeedTests : IAsyncLifetime
     public void JoinWithMultipleSeeds_FirstTwoSeedsDown_FailsOverToThird()
     {
         // Create a 5-node cluster (need enough for quorum after crashes)
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
-        var joiner3 = _harness.CreateJoinerNode(seedNode, nodeId: 3);
-        var joiner4 = _harness.CreateJoinerNode(seedNode, nodeId: 4);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: seedNode);
+        var joiner4 = _harness.JoinNode(nodeId: 4, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -100,7 +100,7 @@ public sealed class MultipleSeedTests : IAsyncLifetime
         _harness.WaitForConvergence();
 
         // Join with multiple seeds - first two are crashed, third (joiner2) is available
-        var joiner5 = _harness.CreateJoinerNodeWithMultipleSeeds([joiner2, joiner3, joiner4], nodeId: 5);
+        var joiner5 = _harness.JoinNode(nodeId: 5, seeds: [joiner2, joiner3, joiner4]);
 
         _harness.WaitForConvergence();
 
@@ -117,9 +117,9 @@ public sealed class MultipleSeedTests : IAsyncLifetime
     public void JoinWithMultipleSeeds_FirstSeedSuspended_FailsOverToSecond()
     {
         // Create a 3-node cluster
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -129,7 +129,7 @@ public sealed class MultipleSeedTests : IAsyncLifetime
         // Join with multiple seeds - first (seedNode) is suspended, should fail over to joiner1
         // Use limited retries to speed up the test
         var options = new RapidClusterProtocolOptions { MaxJoinRetries = 6 };
-        var joiner3 = _harness.CreateJoinerNodeWithMultipleSeeds([seedNode, joiner1, joiner2], nodeId: 3, options);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seeds: [seedNode, joiner1, joiner2], options);
 
         // The join succeeds through an alternative seed.
         // The suspended seed may be detected as failed and removed during the join process,
@@ -145,9 +145,9 @@ public sealed class MultipleSeedTests : IAsyncLifetime
     public void JoinWithMultipleSeeds_AllSeedsDown_ThrowsJoinException()
     {
         // Create a 3-node cluster
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -159,34 +159,28 @@ public sealed class MultipleSeedTests : IAsyncLifetime
         // Attempt to join with limited retries - should fail since all seeds are suspended
         var options = new RapidClusterProtocolOptions { MaxJoinRetries = 3 };
 
-        var ex = Assert.Throws<JoinException>(() => _harness.CreateJoinerNodeWithMultipleSeeds([seedNode, joiner1, joiner2], nodeId: 3, options));
+        var ex = Assert.Throws<JoinException>(() => _harness.JoinNode(nodeId: 3, seeds: [seedNode, joiner1, joiner2], options));
 
         Assert.Contains("MembershipRejected", ex.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// Tests that duplicate seeds in the configuration are handled correctly.
-    /// The join should succeed even if the same seed is listed multiple times.
+    /// Tests that duplicate seed addresses are rejected at the harness boundary.
     /// </summary>
     [Fact]
-    public void JoinWithDuplicateSeeds_Succeeds()
+    public void JoinWithDuplicateSeedAddresses_Throws()
     {
         // Create a 3-node cluster
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        _ = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
-        // Create a node with duplicate seeds in the list
-        // MembershipService should deduplicate these
         var duplicateSeeds = new List<Endpoint> { seedNode.Address, seedNode.Address, joiner1.Address, seedNode.Address };
-        var joiner3 = _harness.CreateJoinerNodeWithSeedAddresses(duplicateSeeds, nodeId: 3);
 
-        _harness.WaitForConvergence();
-
-        Assert.True(joiner3.IsInitialized);
-        Assert.Equal(4, joiner3.MembershipSize);
+        _ = Assert.Throws<ArgumentException>(
+            () => _harness.JoinNode(nodeId: 3, seedAddresses: duplicateSeeds));
     }
 
     /// <summary>
@@ -197,14 +191,14 @@ public sealed class MultipleSeedTests : IAsyncLifetime
     public void JoinWithMultipleSeeds_TriesSeedsInOrder()
     {
         // Create a 3-node cluster
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
         // Join with seedNode first in the list - it should be tried first and succeed
-        var joiner3 = _harness.CreateJoinerNodeWithMultipleSeeds([seedNode, joiner1, joiner2], nodeId: 3);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seeds: [seedNode, joiner1, joiner2]);
 
         _harness.WaitForConvergence();
 

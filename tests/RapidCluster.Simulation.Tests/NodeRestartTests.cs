@@ -37,9 +37,9 @@ public sealed class NodeRestartTests : IAsyncLifetime
     public void RestartedNode_GetsNewNodeId()
     {
         // Create a 3-node cluster
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -54,7 +54,7 @@ public sealed class NodeRestartTests : IAsyncLifetime
         _harness.WaitForConvergence();
 
         // Restart with the SAME nodeId (same address)
-        var restartedNode = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var restartedNode = _harness.JoinNode(nodeId: 1, seed: seedNode);
         _harness.WaitForConvergence();
 
         // Verify the restarted node got a NEW (higher) NodeId
@@ -74,9 +74,9 @@ public sealed class NodeRestartTests : IAsyncLifetime
     public void GracefulLeaveAndRestart_GetsNewNodeId()
     {
         // Create a 3-node cluster
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        _ = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -88,7 +88,7 @@ public sealed class NodeRestartTests : IAsyncLifetime
         _harness.WaitForConvergence();
 
         // Restart with the SAME nodeId (same address)
-        var restartedNode = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var restartedNode = _harness.JoinNode(nodeId: 1, seed: seedNode);
         _harness.WaitForConvergence();
 
         // Verify the restarted node got a NEW (higher) NodeId
@@ -104,9 +104,9 @@ public sealed class NodeRestartTests : IAsyncLifetime
     public void MultipleRestarts_NodeIdsAlwaysIncrease()
     {
         // Create a 3-node cluster
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        _ = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -121,7 +121,7 @@ public sealed class NodeRestartTests : IAsyncLifetime
             _harness.WaitForConvergence();
 
             // Restart with same address
-            currentNode = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+            currentNode = _harness.JoinNode(nodeId: 1, seed: seedNode);
             _harness.WaitForConvergence();
 
             // Verify NodeId increased
@@ -139,9 +139,9 @@ public sealed class NodeRestartTests : IAsyncLifetime
     public void SeedNodeRestart_GetsNewNodeId()
     {
         // Create a 3-node cluster
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        _ = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -154,7 +154,7 @@ public sealed class NodeRestartTests : IAsyncLifetime
 
         // Restart seed with same address (nodeId: 0)
         // Note: Must join through an existing member since it's no longer the seed
-        var restartedSeed = _harness.CreateJoinerNode(joiner1, nodeId: 0);
+        var restartedSeed = _harness.JoinNode(nodeId: 0, seed: joiner1);
         _harness.WaitForConvergence();
 
         // Verify the restarted seed got a NEW (higher) NodeId
@@ -170,11 +170,11 @@ public sealed class NodeRestartTests : IAsyncLifetime
     public void MultipleNodesRestart_AllGetNewNodeIds()
     {
         // Create a 5-node cluster (need 5 so crashing 2 leaves a majority of 3)
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 3);
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 4);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
+        _ = _harness.JoinNode(nodeId: 3, seed: seedNode);
+        _ = _harness.JoinNode(nodeId: 4, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -188,10 +188,10 @@ public sealed class NodeRestartTests : IAsyncLifetime
         _harness.WaitForConvergence();
 
         // Restart both with same addresses
-        var restarted1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var restarted1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
         _harness.WaitForConvergence();
 
-        var restarted2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var restarted2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
         _harness.WaitForConvergence();
 
         // Verify both got new NodeIds
@@ -214,9 +214,9 @@ public sealed class NodeRestartTests : IAsyncLifetime
     public void MaxNodeId_TrackedCorrectlyAcrossRestarts()
     {
         // Create a 3-node cluster
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -228,7 +228,7 @@ public sealed class NodeRestartTests : IAsyncLifetime
         _harness.CrashNode(joiner1);
         _harness.WaitForConvergence();
 
-        var restarted = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var restarted = _harness.JoinNode(nodeId: 1, seed: seedNode);
         _harness.WaitForConvergence();
 
         // MaxNodeId should have increased
@@ -248,10 +248,10 @@ public sealed class NodeRestartTests : IAsyncLifetime
     public void RestartDuringConsensus_ClusterConverges()
     {
         // Create a 4-node cluster for better fault tolerance
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
-        var joiner3 = _harness.CreateJoinerNode(seedNode, nodeId: 3);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -259,13 +259,13 @@ public sealed class NodeRestartTests : IAsyncLifetime
         _harness.CrashNode(joiner1);
 
         // Immediately try to add a new node (creates concurrent membership change)
-        var joiner4 = _harness.CreateJoinerNode(seedNode, nodeId: 4);
+        var joiner4 = _harness.JoinNode(nodeId: 4, seed: seedNode);
 
         // Wait for cluster to stabilize
         _harness.WaitForConvergence();
 
         // Now restart joiner1 at its original address
-        var restarted1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var restarted1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
         _harness.WaitForConvergence();
 
         // Verify all nodes converged
@@ -279,9 +279,9 @@ public sealed class NodeRestartTests : IAsyncLifetime
     public void RapidRestartCycles_ClusterRemainsConsistent()
     {
         // Create a 3-node cluster
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -294,7 +294,7 @@ public sealed class NodeRestartTests : IAsyncLifetime
             _harness.CrashNode(currentNode);
             _harness.WaitForConvergence();
 
-            currentNode = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+            currentNode = _harness.JoinNode(nodeId: 1, seed: seedNode);
             _harness.WaitForConvergence();
 
             // Verify MaxNodeId increased
@@ -316,9 +316,9 @@ public sealed class NodeRestartTests : IAsyncLifetime
     public void RestartedNode_CanParticipateInConsensus()
     {
         // Create a 3-node cluster
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -326,11 +326,11 @@ public sealed class NodeRestartTests : IAsyncLifetime
         _harness.CrashNode(joiner1);
         _harness.WaitForConvergence();
 
-        var restarted1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var restarted1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
         _harness.WaitForConvergence();
 
         // Now add a new node - the restarted node must participate in consensus
-        var joiner3 = _harness.CreateJoinerNode(seedNode, nodeId: 3);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: seedNode);
         _harness.WaitForConvergence();
 
         // Verify all nodes see the new member
@@ -349,9 +349,9 @@ public sealed class NodeRestartTests : IAsyncLifetime
     public void SameAddressDifferentMonotonicId_HandledCorrectly()
     {
         // Create a 3-node cluster
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -363,7 +363,7 @@ public sealed class NodeRestartTests : IAsyncLifetime
         _harness.CrashNode(joiner1);
         _harness.WaitForConvergence();
 
-        var restarted = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var restarted = _harness.JoinNode(nodeId: 1, seed: seedNode);
         _harness.WaitForConvergence();
 
         // The restarted node should have the same hostname:port

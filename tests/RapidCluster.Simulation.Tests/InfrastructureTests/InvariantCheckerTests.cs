@@ -31,7 +31,7 @@ public sealed class InvariantCheckerTests : IAsyncLifetime
     [Fact]
     public void CheckAllPassesWithSingleNode()
     {
-        _ = _harness.CreateSeedNode();
+        _ = _harness.StartCluster();
 
         var result = _checker.CheckAll();
 
@@ -42,7 +42,7 @@ public sealed class InvariantCheckerTests : IAsyncLifetime
     [Fact]
     public void CheckMembershipConsistencyPassesWithSingleNode()
     {
-        _ = _harness.CreateSeedNode();
+        _ = _harness.StartCluster();
 
         var result = _checker.CheckMembershipConsistency();
 
@@ -52,7 +52,7 @@ public sealed class InvariantCheckerTests : IAsyncLifetime
     [Fact]
     public void CheckNoSplitBrainPassesWithSingleNode()
     {
-        _ = _harness.CreateSeedNode();
+        _ = _harness.StartCluster();
 
         var result = _checker.CheckNoSplitBrain();
 
@@ -62,7 +62,7 @@ public sealed class InvariantCheckerTests : IAsyncLifetime
     [Fact]
     public void CheckConfigurationIdMonotonicityPassesWithInitializedNode()
     {
-        _ = _harness.CreateSeedNode();
+        _ = _harness.StartCluster();
 
         var result = _checker.CheckConfigurationIdMonotonicity();
 

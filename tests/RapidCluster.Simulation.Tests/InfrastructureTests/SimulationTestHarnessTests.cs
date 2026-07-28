@@ -49,9 +49,9 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
     }
 
     [Fact]
-    public void CreateSeedNodeInitializesWithOneNode()
+    public void StartClusterInitializesWithOneNode()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         Assert.NotNull(seedNode);
         Assert.True(seedNode.IsInitialized);
@@ -61,8 +61,8 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
     [Fact]
     public void JoinNodeIncreasesMembershipSize()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         Assert.NotNull(joiner);
         Assert.True(joiner.IsInitialized);
@@ -87,7 +87,7 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
     [Fact]
     public void NetworkPartitionBlocksMessages()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Isolate the node
         _harness.IsolateNode(seedNode);
@@ -119,9 +119,9 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
         await using var firstHarness = new RapidSimulationCluster(seed: 24680);
         await using var reorderedHarness = new RapidSimulationCluster(seed: 24680);
 
-        var firstNode = firstHarness.CreateUninitializedNode(nodeId: 7);
-        _ = reorderedHarness.CreateUninitializedNode(nodeId: 99);
-        var reorderedNode = reorderedHarness.CreateUninitializedNode(nodeId: 7);
+        var firstNode = firstHarness.AddUnstartedNode(nodeId: 7);
+        _ = reorderedHarness.AddUnstartedNode(nodeId: 99);
+        var reorderedNode = reorderedHarness.AddUnstartedNode(nodeId: 7);
 
 #pragma warning disable CA5394 // Do not use insecure randomness
         var firstSequence = Enumerable.Range(0, 10).Select(_ => firstNode.Context.Random.Next()).ToList();
@@ -182,7 +182,7 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
     public void SubscribeToViewChangesReceivesNotifications()
     {
         var viewChanges = new List<MembershipView>();
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         var subscription = _harness.InvokeInSimulation(
             seedNode,
@@ -190,7 +190,7 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
 
         try
         {
-            _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+            _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
             Assert.Contains(viewChanges, view => view.Size == 2);
         }
         finally

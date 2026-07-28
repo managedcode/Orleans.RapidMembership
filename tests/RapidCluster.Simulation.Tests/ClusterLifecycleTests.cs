@@ -25,13 +25,13 @@ public sealed class ClusterLifecycleTests : IAsyncLifetime
     public void FullClusterLifecycle()
     {
         // Create seed node
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         Assert.True(seedNode.IsInitialized);
         Assert.Equal(1, seedNode.MembershipSize);
 
         // Join additional nodes
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -52,12 +52,12 @@ public sealed class ClusterLifecycleTests : IAsyncLifetime
     public void ClusterScaleUpAndDown()
     {
         // Start with seed
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Scale up to 4 nodes
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
-        var joiner3 = _harness.CreateJoinerNode(seedNode, nodeId: 3);
+        _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: seedNode);
 
         _harness.WaitForConvergence();
         Assert.Equal(4, _harness.Nodes.Count);
@@ -75,7 +75,7 @@ public sealed class ClusterLifecycleTests : IAsyncLifetime
         // Create several seed nodes (each is independent)
         for (var i = 0; i < 5; i++)
         {
-            _ = _harness.CreateSeedNode(i);
+            _ = _harness.StartCluster(i);
         }
 
         Assert.Equal(5, _harness.Nodes.Count);
@@ -94,13 +94,13 @@ public sealed class ClusterLifecycleTests : IAsyncLifetime
     public void JoinThroughDifferentSeeds()
     {
         // Create initial two-node cluster
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
         // Join through joiner1 instead of original seed
-        var joiner2 = _harness.CreateJoinerNode(joiner1, nodeId: 2);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: joiner1);
 
         _harness.WaitForConvergence();
 
@@ -111,8 +111,8 @@ public sealed class ClusterLifecycleTests : IAsyncLifetime
     [Fact]
     public void RecoveryFromPartitionedState()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -132,9 +132,9 @@ public sealed class ClusterLifecycleTests : IAsyncLifetime
     [Fact]
     public void ClusterContinuesAfterSeedNodeRemoval()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -151,9 +151,9 @@ public sealed class ClusterLifecycleTests : IAsyncLifetime
     public void NewJoinsWorkAfterMembershipChange()
     {
         // Use 3-node cluster so remaining 2 nodes can reach quorum after crash
-        var seedNode = _harness.CreateSeedNode();
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -165,7 +165,7 @@ public sealed class ClusterLifecycleTests : IAsyncLifetime
         _harness.WaitForConvergence();
 
         // Add a new joiner through seed
-        var joiner3 = _harness.CreateJoinerNode(seedNode, nodeId: 3);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: seedNode);
 
         Assert.True(joiner3.IsInitialized);
         _harness.WaitForConvergence();
@@ -174,7 +174,7 @@ public sealed class ClusterLifecycleTests : IAsyncLifetime
     [Fact]
     public void ViewAccessorInitiallyHasView()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         Assert.NotNull(seedNode.ViewAccessor);
         Assert.NotNull(seedNode.ViewAccessor.CurrentView);
@@ -184,9 +184,9 @@ public sealed class ClusterLifecycleTests : IAsyncLifetime
     [Fact]
     public void ViewAccessorUpdatesOnJoin()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var initialConfigId = seedNode.ViewAccessor.CurrentView.ConfigurationId;
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -198,8 +198,8 @@ public sealed class ClusterLifecycleTests : IAsyncLifetime
     [Fact]
     public void JoinerViewAccessorHasCorrectView()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         // Joiner's view accessor should have correct view
         Assert.NotNull(joiner.ViewAccessor);

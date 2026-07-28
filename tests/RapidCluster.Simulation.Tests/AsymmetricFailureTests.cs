@@ -450,7 +450,7 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
 
         // Act: Try to join a new node through the seed
         // The join might succeed through alternative paths
-        var newNode = _harness.CreateJoinerNode(seedNode, nodeId: 10);
+        var newNode = _harness.JoinNode(nodeId: 10, seed: seedNode);
 
         // Wait for potential convergence
         _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(1));
@@ -499,8 +499,8 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
         _harness.Network.CreatePartition(addr0, addr1);
 
         // Act: Join multiple nodes in sequence
-        var newNode1 = _harness.CreateJoinerNode(nodes[0], nodeId: 20);
-        var newNode2 = _harness.CreateJoinerNode(nodes[2], nodeId: 21);
+        var newNode1 = _harness.JoinNode(nodeId: 20, seed: nodes[0]);
+        var newNode2 = _harness.JoinNode(nodeId: 21, seed: nodes[2]);
 
         // Wait for convergence
         _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(2));

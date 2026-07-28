@@ -35,7 +35,7 @@ public sealed class ChaosInjectorTests : IAsyncLifetime
     [Fact]
     public void MaybeInjectFaultReturnsFalseWithZeroRates()
     {
-        _ = _harness.CreateSeedNode();
+        _ = _harness.StartCluster();
 
         var result = _chaos.MaybeInjectFault();
 
@@ -45,7 +45,7 @@ public sealed class ChaosInjectorTests : IAsyncLifetime
     [Fact]
     public void ScheduleNodeCrashDoesNotCrashImmediately()
     {
-        var node = _harness.CreateSeedNode();
+        var node = _harness.StartCluster();
 
         _chaos.ScheduleNodeCrash(node, TimeSpan.FromSeconds(10));
 
@@ -55,7 +55,7 @@ public sealed class ChaosInjectorTests : IAsyncLifetime
     [Fact]
     public void ScheduledCrashExecutesAfterTimeAdvances()
     {
-        var node = _harness.CreateSeedNode();
+        var node = _harness.StartCluster();
         _chaos.ScheduleNodeCrash(node, TimeSpan.FromSeconds(10));
 
         // Advance time past the scheduled crash
@@ -68,7 +68,7 @@ public sealed class ChaosInjectorTests : IAsyncLifetime
     [Fact]
     public void SchedulePartitionDoesNotPartitionImmediately()
     {
-        var node1 = _harness.CreateSeedNode(0);
+        var node1 = _harness.StartCluster(0);
 
         // Can't easily create a second node synchronously, so test with single node
         _chaos.ScheduleIsolation(node1, TimeSpan.FromSeconds(10));
@@ -80,7 +80,7 @@ public sealed class ChaosInjectorTests : IAsyncLifetime
     [Fact]
     public void ClearScheduledFaultsRemovesAllScheduled()
     {
-        var node = _harness.CreateSeedNode();
+        var node = _harness.StartCluster();
         _chaos.ScheduleNodeCrash(node, TimeSpan.FromSeconds(10));
         _chaos.ScheduleIsolation(node, TimeSpan.FromSeconds(20));
 
@@ -96,7 +96,7 @@ public sealed class ChaosInjectorTests : IAsyncLifetime
     [Fact]
     public void RunChaosExecutesSpecifiedSteps()
     {
-        _ = _harness.CreateSeedNode();
+        _ = _harness.StartCluster();
 
         var initialTime = _harness.TimeProvider.GetUtcNow();
         _ = _chaos.RunChaos(steps: 10);
@@ -112,7 +112,7 @@ public sealed class ChaosInjectorTests : IAsyncLifetime
         var nodes = new List<RapidSimulationNode>();
         for (var i = 0; i < 5; i++)
         {
-            nodes.Add(_harness.CreateSeedNode(i));
+            nodes.Add(_harness.StartCluster(i));
         }
 
         _chaos.NodeCrashRate = 0.9; // Very high rate
@@ -128,7 +128,7 @@ public sealed class ChaosInjectorTests : IAsyncLifetime
     [Fact]
     public void MinimumAliveNodesIsRespected()
     {
-        _ = _harness.CreateSeedNode();
+        _ = _harness.StartCluster();
 
         _chaos.NodeCrashRate = 1.0; // 100% crash rate
         _chaos.MinimumAliveNodes = 1;
