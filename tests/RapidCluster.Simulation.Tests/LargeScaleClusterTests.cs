@@ -98,7 +98,6 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
     {
         var nodes = _harness.CreateClusterParallel(size: clusterSize);
 
-        // Use higher max iterations for very large clusters
         _harness.WaitForConvergence();
 
         Assert.Equal(clusterSize, nodes.Count);
@@ -123,18 +122,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
     /// Nodes join in batches of the specified size, providing a middle ground
     /// between fully sequential and fully parallel joining.
     /// </para>
-    /// <para>
-    /// NOTE: This test is currently skipped because batched parallel joins have a fundamental
-    /// timing issue. When batch N completes their join tasks, the cluster configuration may
-    /// still be advancing (processing alerts, consensus rounds). When batch N+1 starts joining,
-    /// they receive "Configuration changed during join" errors because the config version they
-    /// joined with is already stale. This causes a cascade of retries that eventually times out.
-    /// </para>
-    /// <para>
-    /// The fully parallel approach (batchSize=0) works correctly because all nodes join together
-    /// and the consensus protocol batches them naturally. For large-scale cluster testing, use
-    /// LargeClusterFormation_Parallel or VeryLargeClusterFormation_Parallel instead.
-    /// </para>
+    /// Each batch reaches a stable cluster view before the next batch begins joining.
     /// </summary>
     [Theory]
     [InlineData(50, 10)] // 50 nodes in batches of 10
@@ -143,12 +131,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
     [InlineData(200, 25)] // 200 nodes in batches of 25
     public void LargeClusterFormation_BatchedParallel(int clusterSize, int batchSize)
     {
-        // Use higher max iterations for larger clusters (100+ nodes need more time per batch)
-        var maxIterationsPerBatch = clusterSize >= 100 ? 500000 : 100000;
-        var nodes = _harness.CreateClusterParallel(size: clusterSize, batchSize: batchSize, maxIterationsPerBatch: maxIterationsPerBatch);
-
-        // Use higher max iterations for larger clusters (200+ nodes need more time)
-        var maxIterations = clusterSize >= 200 ? 5000000 : 100000;
+        var nodes = _harness.CreateClusterParallel(size: clusterSize, batchSize: batchSize);
         _harness.WaitForConvergence();
 
         Assert.Equal(clusterSize, nodes.Count);
@@ -231,15 +214,11 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
             nodes.Add(_harness.CreateUninitializedNode(i, seedNode));
         }
 
-        // Drive simulation until all joins complete (larger clusters need more iterations).
-        // IMPORTANT: Join tasks must be started inside DriveToCompletion so they
-        // capture the simulation's SynchronizationContext for their continuations.
-        var maxIterations = clusterSize >= 50 ? 500000 : 100000;
-        _harness.Run(() =>
+        _ = _harness.RunToCompletion(() =>
         {
             var joinTasks = nodes.Select(n => n.InitializeAsync(cts.Token));
             return Task.WhenAll(joinTasks);
-        }, maxIterations);
+        });
         _harness.WaitForConvergence();
 
         // Compute and log detailed view transitions
@@ -549,9 +528,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
     [InlineData(30, 10, 6)] // Remove 10 from 30 nodes, expect at most 6 config changes
     public void ParallelLeaves_BatchMultipleNodesPerViewChange(int clusterSize, int nodesToRemove, int maxExpectedChanges)
     {
-        // Create the cluster using parallel joins for speed (larger clusters need more iterations)
-        var maxIterationsPerBatch = clusterSize >= 30 ? 500000 : 100000;
-        var nodes = _harness.CreateClusterParallel(size: clusterSize, maxIterationsPerBatch: maxIterationsPerBatch);
+        var nodes = _harness.CreateClusterParallel(size: clusterSize);
         _harness.WaitForConvergence();
 
         var configVersionBeforeLeaves = nodes[0].CurrentView.ConfigurationId.Version;

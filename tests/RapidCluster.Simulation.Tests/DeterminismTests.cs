@@ -113,10 +113,10 @@ public sealed class DeterminismTests : IAsyncLifetime
     {
         _harness.CreateSeedNode();
 
-        // Should return true immediately since single node is already converged
-        var result = _harness.RunUntilConverged(expectedSize: 1, maxIterations: 10);
+        // The condition should already be met since the single node is converged.
+        var result = _harness.RunUntilConverged(expectedSize: 1);
 
-        Assert.True(result);
+        Assert.True(result.ConditionMet, result.ToDetailedString());
     }
 
     [Fact]

@@ -272,9 +272,9 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
         _harness.HealPartition(seedNode, joiner);
 
         // Nodes should eventually re-converge
-        var converged = _harness.RunUntilConverged(expectedSize: 2, maxIterations: 50000);
+        var convergence = _harness.RunUntilConverged(expectedSize: 2);
 
-        Assert.True(converged, "Nodes did not reconverge after partition heal");
+        Assert.True(convergence.ConditionMet, $"Nodes did not reconverge after partition heal.{Environment.NewLine}{convergence.ToDetailedString()}");
         Assert.Equal(2, seedNode.MembershipSize);
         Assert.Equal(2, joiner.MembershipSize);
     }

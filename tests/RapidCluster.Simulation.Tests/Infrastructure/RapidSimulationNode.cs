@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Metrics;
 using System.Globalization;
 using Clockwork;
+using Clockwork.Runtime.Random;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -120,7 +121,9 @@ internal sealed class RapidSimulationNode : SimulationNode
 
         // Create logger for the context (suspend/resume logging happens there)
         var contextLogger = nodeLoggerFactory.CreateLogger<SimulationNodeContext>();
-        Context = new SimulationNodeContext(harness.Clock, harness.Guard, harness.CreateDerivedRandom(), harness.TaskQueue, contextLogger);
+        var nodeRandom = new SimulationRandom(
+            harness.SeedAuthority.GetSiteSeed(SimulationSeedDomain.Application, RapidClusterUtils.Loggable(address)));
+        Context = new SimulationNodeContext(harness.Clock, harness.Guard, nodeRandom, harness.TaskQueue, contextLogger);
 
         _log = new RapidSimulationNodeLogger(nodeLoggerFactory.CreateLogger<RapidSimulationNode>());
 

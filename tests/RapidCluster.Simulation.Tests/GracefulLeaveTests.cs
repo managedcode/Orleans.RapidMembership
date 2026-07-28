@@ -15,13 +15,12 @@ namespace RapidCluster.Simulation.Tests;
 [SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Test naming convention")]
 public sealed class GracefulLeaveTests : IAsyncLifetime
 {
+    private readonly List<ObservableCollector<MembershipView>> _collectors = [];
+    private readonly Guid _instanceId = Guid.NewGuid();
     private RapidSimulationCluster _harness = null!;
     private SynchronizationContextScope _syncContextScope;
-    private const int BaseSeed = 67890;
-    private readonly List<ObservableCollector<MembershipView>> _collectors = [];
 
     // Track instance reuse - each test should get a fresh instance
-    private readonly Guid _instanceId = Guid.NewGuid();
     private int _initializeCount;
     private string? _firstTestName;
 
@@ -40,11 +39,7 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
 
         _firstTestName = currentTestName;
 
-        // Derive a unique seed from the test name to ensure test isolation
-        // This makes tests deterministic (same seed for same test) but independent of execution order
-        // Use GuidUtility.GetDeterministicHashCode instead of string.GetHashCode() because
-        // .NET's string hash is randomized per-process for security
-        var testSeed = BaseSeed ^ GuidUtility.GetDeterministicHashCode(currentTestName);
+        var testSeed = SimulationSeed.FromStrings(nameof(GracefulLeaveTests), currentTestName);
 
         _harness = new RapidSimulationCluster(seed: testSeed);
 
