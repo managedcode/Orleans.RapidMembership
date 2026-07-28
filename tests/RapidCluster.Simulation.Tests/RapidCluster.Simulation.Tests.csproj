@@ -36,15 +36,18 @@
 		     runner uninstrumented while staging instrumented production assemblies beside it. -->
 		<ClockworkInclude Include="RapidCluster.Core.dll" />
 		<ClockworkInclude Include="RapidCluster.Grpc.dll" />
+		<ClockworkInclude Include="RapidCluster.Simulation.Fixtures.dll" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\src\Clockwork\src\Clockwork\Clockwork.csproj" />
+		<ProjectReference Include="..\..\src\Clockwork\src\Clockwork.Testing\Clockwork.Testing.csproj" />
 		<ProjectReference Include="..\..\src\Clockwork\src\Clockwork.Instrumentation.Build\Clockwork.Instrumentation.Build.csproj"
 						  ReferenceOutputAssembly="false"
 						  PrivateAssets="all" />
 		<ProjectReference Include="..\..\src\RapidCluster.Core\RapidCluster.Core.csproj" />
 		<ProjectReference Include="..\..\src\RapidCluster.Grpc\RapidCluster.Grpc.csproj" />
+		<ProjectReference Include="..\RapidCluster.Simulation.Fixtures\RapidCluster.Simulation.Fixtures.csproj" />
 	</ItemGroup>
 
 	<Import Project="Clockwork.Instrumentation.ProjectReference.targets" />

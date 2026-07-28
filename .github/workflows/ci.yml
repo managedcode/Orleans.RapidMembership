@@ -51,8 +51,17 @@ jobs:
       - name: Test Integration
         run: dotnet run --project tests/RapidCluster.Integration.Tests/RapidCluster.Integration.Tests.csproj --configuration Release -- --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/integration.cobertura.xml --timeout 600s
 
-      - name: Test Simulation
-        run: dotnet run --project tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj --configuration Release -- --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/simulation.cobertura.xml --timeout 600s
+      - name: Build Simulation Instrumentation Closure
+        run: dotnet build tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj --configuration Release --no-restore
+
+      - name: Test Simulation Clockwork Acceptance
+        run: dotnet tests/RapidCluster.Simulation.Tests/obj/Release/net10.0/clockwork/instrumented/RapidCluster.Simulation.Tests.dll --filter-class RapidCluster.Simulation.Tests.DirectBclAcceptanceTests RapidCluster.Simulation.Tests.ClusterReplayAcceptanceTests --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/simulation.cobertura.xml --timeout 600s
+
+      - name: Test Simulation Clockwork Regression
+        run: dotnet tests/RapidCluster.Simulation.Tests/obj/Release/net10.0/clockwork/instrumented/RapidCluster.Simulation.Tests.dll --filter-class RapidCluster.Simulation.Tests.ClusterBasicTests RapidCluster.Simulation.Tests.GracefulLeaveTests RapidCluster.Simulation.Tests.DeterminismTests --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/simulation-regression.cobertura.xml --timeout 600s
+
+      - name: Test Simulation Clockwork Batched Convergence
+        run: dotnet tests/RapidCluster.Simulation.Tests/obj/Release/net10.0/clockwork/instrumented/RapidCluster.Simulation.Tests.dll --filter-method RapidCluster.Simulation.Tests.LargeScaleClusterTests.LargeClusterFormation_BatchedParallel --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/simulation-batched.cobertura.xml --timeout 600s
 
       - name: Test EndToEnd
         run: dotnet run --project tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests/RapidCluster.EndToEnd.Tests.csproj --configuration Release -- --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/endtoend.cobertura.xml --timeout 600s

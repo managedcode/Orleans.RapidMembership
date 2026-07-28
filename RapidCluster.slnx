@@ -27,6 +27,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj" />
     <Project Path="tests/RapidCluster.Integration.Tests/RapidCluster.Integration.Tests.csproj" />
+    <Project Path="tests/RapidCluster.Simulation.Fixtures/RapidCluster.Simulation.Fixtures.csproj" />
     <Project Path="tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj" />
   </Folder>
   <Folder Name="/tests/RapidCluster.EndToEnd/">

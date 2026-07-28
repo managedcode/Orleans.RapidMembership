@@ -41,7 +41,16 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// </summary>
     /// <param name="seed">The seed for deterministic random number generation.</param>
     public RapidSimulationCluster(int seed)
-        : base(seed, startDateTime: DateTimeOffset.UtcNow, cancellationToken: TestContext.Current.CancellationToken)
+        : this(seed, DateTimeOffset.UtcNow)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RapidSimulationCluster"/> class
+    /// with an explicit virtual-time origin.
+    /// </summary>
+    internal RapidSimulationCluster(int seed, DateTimeOffset startDateTime)
+        : base(seed, startDateTime, cancellationToken: TestContext.Current.CancellationToken)
     {
         Network = new SimulationNetwork(
             this,
