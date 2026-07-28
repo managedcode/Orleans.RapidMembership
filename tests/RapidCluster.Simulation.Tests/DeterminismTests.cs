@@ -81,7 +81,7 @@ public sealed class DeterminismTests : IAsyncLifetime
     {
         var initialTime = _harness.TimeProvider.GetUtcNow();
 
-        _ = _harness.RunForDuration(TimeSpan.FromMinutes(5));
+        _ = _harness.RunFor(TimeSpan.FromMinutes(5));
 
         var newTime = _harness.TimeProvider.GetUtcNow();
         Assert.Equal(initialTime + TimeSpan.FromMinutes(5), newTime);
@@ -96,7 +96,7 @@ public sealed class DeterminismTests : IAsyncLifetime
 
         var result = _harness.RunUntil(() => conditionMet);
 
-        Assert.True(result);
+        Assert.True(result.ConditionMet, result.ToDetailedString());
         Assert.True(conditionMet);
     }
 
@@ -105,7 +105,7 @@ public sealed class DeterminismTests : IAsyncLifetime
     {
         var result = _harness.RunUntil(() => false, maxIterations: 10);
 
-        Assert.False(result);
+        Assert.False(result.ConditionMet);
     }
 
     [Fact]

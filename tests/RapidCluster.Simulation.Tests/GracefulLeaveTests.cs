@@ -465,7 +465,7 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
         _harness.HealPartition(nodes[4], nodes[1]);
 
         // Wait for convergence
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(2));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(2));
 
         // Assert: Cluster should eventually converge (leaving node removed)
         Assert.DoesNotContain(leavingNode, _harness.Nodes);
@@ -712,7 +712,7 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
         _harness.WaitForConvergence();
 
         // Advance time to trigger failure detection cycles
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(10));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(10));
         _ = _harness.RunUntilIdle();
 
         // Assert: Remaining nodes are still monitored (cluster stable)

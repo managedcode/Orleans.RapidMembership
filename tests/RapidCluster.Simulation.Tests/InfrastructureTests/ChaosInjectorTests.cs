@@ -59,7 +59,7 @@ public sealed class ChaosInjectorTests : IAsyncLifetime
         _chaos.ScheduleNodeCrash(node, TimeSpan.FromSeconds(10));
 
         // Advance time past the scheduled crash
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(15));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(15));
         _ = _chaos.MaybeInjectFault(); // Process scheduled faults
 
         Assert.DoesNotContain(node, _harness.Nodes);
@@ -87,7 +87,7 @@ public sealed class ChaosInjectorTests : IAsyncLifetime
         _chaos.ClearScheduledFaults();
 
         // Advance time and process - nothing should happen
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(30));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(30));
         _ = _chaos.MaybeInjectFault();
 
         Assert.Contains(node, _harness.Nodes);

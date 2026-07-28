@@ -264,7 +264,7 @@ internal sealed class InvariantChecker(RapidSimulationCluster harness)
             return false;
         }
 
-        var outcome = _harness.RunUntilDetailed(
+        var outcome = _harness.RunUntil(
             () => _harness.Nodes.Sum(static node => node.Context.TaskQueue.ScheduledItems.Count) < initialNodeWork,
             maxSteps);
         if (outcome.ConditionMet)

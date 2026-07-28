@@ -164,7 +164,7 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
 
         // Run simulation to allow failure detection to potentially trigger
         // Since observer can't send probes to monitored, it might report monitored as failed
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(10));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(10));
 
         // The cluster should remain stable since monitored can still communicate with other nodes
         // and those nodes can vouch for monitored being alive
@@ -189,12 +189,12 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
         _harness.Network.CreatePartition(addrMonitored, addrObserver);
 
         // Run simulation
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(10));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(10));
 
         // The monitored node might be reported as failed by the observer
         // since probe responses can't get back
         // The cluster should eventually reach consensus
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(1));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(1));
 
         // All remaining nodes should have consistent view
         var remainingNodes = _harness.Nodes;
@@ -221,10 +221,10 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
         _harness.Network.CreatePartition(addrB, addrA);
 
         // Advance time significantly to trigger failure detection
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(30));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(30));
 
         // Wait for cluster to stabilize
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(2));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(2));
 
         // The cluster should eventually reach a stable state
         // Due to asymmetric failure, node B might be reported as failed by A
@@ -246,13 +246,13 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
 
         // Act: Create and then heal asymmetric partition
         _harness.Network.CreatePartition(addrA, addrB);
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(5));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(5));
 
         // Heal the partition before failure detection kicks in
         _harness.Network.HealPartition(addrA, addrB);
 
         // Wait for stabilization
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromSeconds(30));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromSeconds(30));
 
         // Cluster should remain intact
         Assert.Equal(4, _harness.Nodes.Count);
@@ -282,8 +282,8 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
         Assert.Equal(DeliveryStatus.Success, _harness.Network.CheckDelivery(addrC, addrB));
 
         // Run simulation
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(15));
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(1));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(15));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(1));
 
         // Cluster should maintain quorum capability
         Assert.True(_harness.Nodes.Count >= 3, "Cluster should maintain quorum");
@@ -315,8 +315,8 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
         }
 
         // Run simulation
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(20));
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(2));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(20));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(2));
 
         // The central node might be removed or the cluster adapts
         // Key assertion: cluster remains operational
@@ -349,8 +349,8 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
         }
 
         // Run simulation
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(20));
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(2));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(20));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(2));
 
         // Cluster should adapt - central may be removed as other nodes can't reach it
         Assert.True(_harness.Nodes.Count >= 3, "Cluster should remain operational");
@@ -373,20 +373,20 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
         {
             // A cannot reach B
             _harness.Network.CreatePartition(addrA, addrB);
-            _ = _harness.RunForDuration(TimeSpan.FromSeconds(2));
+            _ = _harness.RunFor(TimeSpan.FromSeconds(2));
 
             // Heal and reverse
             _harness.Network.HealPartition(addrA, addrB);
             _harness.Network.CreatePartition(addrB, addrA);
-            _ = _harness.RunForDuration(TimeSpan.FromSeconds(2));
+            _ = _harness.RunFor(TimeSpan.FromSeconds(2));
 
             // Heal
             _harness.Network.HealPartition(addrB, addrA);
-            _ = _harness.RunForDuration(TimeSpan.FromSeconds(2));
+            _ = _harness.RunFor(TimeSpan.FromSeconds(2));
         }
 
         // Wait for stabilization
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(1));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(1));
 
         // Cluster should recover
         Assert.True(_harness.Nodes.Count >= 3, "Cluster should recover from oscillating failures");
@@ -427,8 +427,8 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
         }
 
         // Run simulation
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(30));
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(2));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(30));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(2));
 
         // Cluster should adapt - some nodes may be removed
         Assert.True(_harness.Nodes.Count >= 3, "Cluster should maintain quorum");
@@ -453,7 +453,7 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
         var newNode = _harness.JoinNode(nodeId: 10, seed: seedNode);
 
         // Wait for potential convergence
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(1));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(1));
 
         // Assert: New node should be initialized (join completed)
         Assert.True(newNode.IsInitialized, "New node should complete join despite asymmetric partition");
@@ -478,7 +478,7 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
         _harness.RemoveNodeGracefully(leavingNode);
 
         // Wait for convergence
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(1));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(1));
 
         // Assert: Remaining nodes should converge
         var remainingNodes = _harness.Nodes;
@@ -503,7 +503,7 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
         var newNode2 = _harness.JoinNode(nodeId: 21, seed: nodes[2]);
 
         // Wait for convergence
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(2));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(2));
 
         // Assert: Both new nodes should join successfully
         Assert.True(newNode1.IsInitialized, "First new node should join");
@@ -542,8 +542,8 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
         }
 
         // Run simulation - isolated sender should eventually be detected as failed
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(30));
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(2));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(30));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(2));
 
         // Cluster should remain operational with 3+ nodes
         Assert.True(_harness.Nodes.Count >= 3, "Cluster should remain operational");
@@ -574,8 +574,8 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
         }
 
         // Run simulation
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(30));
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(2));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(30));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(2));
 
         // Cluster should remain operational
         Assert.True(_harness.Nodes.Count >= 3, "Cluster should remain operational");
@@ -623,15 +623,15 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
         for (var i = 0; i < 10; i++)
         {
             _harness.Network.CreatePartition(addr0, addr1);
-            _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMilliseconds(100));
+            _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMilliseconds(100));
 
             _harness.Network.HealPartition(addr0, addr1);
-            _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMilliseconds(100));
+            _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMilliseconds(100));
         }
 
         // Give time to stabilize
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(10));
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(1));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(10));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(1));
 
         // Assert: Cluster should still be operational
         Assert.True(_harness.Nodes.Count >= 2, "Cluster should survive rapid partition toggling");
@@ -663,8 +663,8 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
         Assert.Equal(DeliveryStatus.Success, _harness.Network.CheckDelivery(addr1, addr3));
 
         // Run simulation
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(20));
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(2));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(20));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(2));
 
         // Cluster should adapt somehow
         Assert.True(_harness.Nodes.Count >= 2, "Cluster should handle cyclic partitions");

@@ -64,7 +64,7 @@ public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
 
         var result = _harness.RunUntil(() => conditionMet);
 
-        Assert.True(result);
+        Assert.True(result.ConditionMet, result.ToDetailedString());
         Assert.True(conditionMet);
     }
 
@@ -73,7 +73,7 @@ public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
     {
         var result = _harness.RunUntil(() => false, maxIterations: 10);
 
-        Assert.False(result);
+        Assert.False(result.ConditionMet);
     }
 
     [Fact]
@@ -120,8 +120,8 @@ public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
     [Fact]
     public void RunUntilIdleReturnsZeroWhenNoTasks()
     {
-        var iterations = _harness.RunUntilIdle();
-        Assert.Equal(0, iterations);
+        var result = _harness.RunUntilIdle();
+        Assert.Equal(0, result.StepsExecuted);
     }
 
     [Fact]
@@ -136,9 +136,9 @@ public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
             task.Start(scheduler);
         }
 
-        var iterations = _harness.RunUntilIdle();
+        var result = _harness.RunUntilIdle();
 
-        Assert.Equal(5, iterations);
+        Assert.Equal(5, result.StepsExecuted);
         Assert.Equal(5, executionCount);
     }
 
@@ -152,10 +152,10 @@ public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
         _harness.TaskQueue.EnqueueAfter(() => executed = true, TimeSpan.FromMinutes(1));
 
         const int maxIterations = 100000;
-        var iterations = _harness.RunUntilIdle(maxIterations: maxIterations);
+        var result = _harness.RunUntilIdle(maxIterations: maxIterations);
 
         // Should reach idle (iterations < maxIterations)
-        Assert.True(iterations < maxIterations);
+        Assert.True(result.Iterations < maxIterations);
         Assert.True(executed);
         Assert.True(_harness.TimeProvider.GetUtcNow() >= initialTime + TimeSpan.FromMinutes(1));
     }
@@ -169,10 +169,10 @@ public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
         _harness.TaskQueue.EnqueueAfter(() => { }, TimeSpan.FromMinutes(10));
 
         // Limit to 5 minutes - task won't execute because it's beyond the time limit
-        var iterations = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(5));
+        var result = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(5));
 
         // No tasks were executed (task is scheduled beyond the time limit)
-        Assert.Equal(0, iterations);
+        Assert.Equal(0, result.StepsExecuted);
 
         // Time should not have advanced beyond 5 minutes
         Assert.True(_harness.TimeProvider.GetUtcNow() < initialTime + TimeSpan.FromMinutes(10));
@@ -230,7 +230,7 @@ public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
         // Step should now execute the task
         var result = _harness.RunUntil(() => executed, maxIterations: 10);
 
-        Assert.True(result);
+        Assert.True(result.ConditionMet, result.ToDetailedString());
         Assert.True(executed);
         Assert.False(seedNode.IsSuspended);
     }
@@ -251,7 +251,7 @@ public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
         Assert.True(seedNode.IsSuspended);
 
         // Run until idle - should advance time and resume the node
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromSeconds(2));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromSeconds(2));
 
         Assert.False(seedNode.IsSuspended);
         Assert.True(executed);
@@ -461,7 +461,7 @@ public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
     public void WaitForMembershipSizeTimesOutWithDetailedOutcome()
     {
         var seedNode = _harness.StartCluster();
-        var budget = new SimulationAdaptiveBudget(
+        var budget = new AdaptiveExecutionBudget(
             initialMaxIterations: 100,
             maxTotalIterations: 100);
 

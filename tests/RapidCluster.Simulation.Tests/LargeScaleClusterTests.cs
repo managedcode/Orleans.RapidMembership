@@ -218,7 +218,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
                 nodes.Add(_harness.AddUnstartedNode(i, seedNode));
             }
 
-            _ = _harness.RunToCompletion(() =>
+            _harness.RunToCompletion(() =>
             {
                 var joinTasks = nodes.Select(n => n.StartAsync(cts.Token));
                 return Task.WhenAll(joinTasks);

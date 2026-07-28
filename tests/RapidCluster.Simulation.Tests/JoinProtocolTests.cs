@@ -396,13 +396,13 @@ public sealed class JoinProtocolTests : IAsyncLifetime
         // Give failure detection time to detect the partition.
         // With a larger cluster, the partition may or may not cause node removal
         // depending on how many observers report the failure.
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(5));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(5));
 
         // Heal the partition to restore connectivity
         _harness.HealPartition(seedNode, partitionedNode);
 
         // Wait briefly for the cluster to stabilize after healing
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(2));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(2));
 
         // Get remaining nodes to find one we can join through
         var aliveNodes = _harness.Nodes.Where(n => n.IsInitialized && n.MembershipSize > 0).ToList();

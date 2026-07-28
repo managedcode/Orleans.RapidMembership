@@ -79,8 +79,8 @@ public sealed partial class RapidSimulationClusterTests
     [Fact]
     public void SimulationEnvironmentCreatesDerivedRandom()
     {
-        var derived1 = _harness.CreateDerivedRandom();
-        var derived2 = _harness.CreateDerivedRandom();
+        var derived1 = _harness.ForkRandom();
+        var derived2 = _harness.ForkRandom();
 
         // Different derived randoms should produce different sequences
 #pragma warning disable CA5394 // Do not use insecure randomness

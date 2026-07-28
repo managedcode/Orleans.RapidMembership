@@ -94,7 +94,6 @@
 			ExcludePatterns="@(ClockworkExclude)"
 			InstrumentationMode="$(ClockworkInstrumentationMode)"
 			ExcludeFrameworkAssemblies="$(ClockworkExcludeFrameworkAssemblies)"
-			RewriteDependencies="$(ClockworkRewriteDependencies)"
 			ReadyToRunPolicy="$(ClockworkReadyToRunPolicy)"
 			StrongNamePolicy="$(ClockworkStrongNamePolicy)"
 			StrongNameKeyPath="$(ClockworkStrongNameKeyPath)"

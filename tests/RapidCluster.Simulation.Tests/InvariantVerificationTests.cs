@@ -258,7 +258,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
         // Failure should eventually be detected - run until remaining nodes see size of 2
         var detected = _harness.RunUntil(() => seedNode.MembershipSize == 2 && joiner1.MembershipSize == 2, maxIterations: 100000);
 
-        Assert.True(detected, "Remaining nodes did not detect joiner failure");
+        Assert.True(detected.ConditionMet, "Remaining nodes did not detect joiner failure");
         Assert.Equal(2, seedNode.MembershipSize);
         Assert.Equal(2, joiner1.MembershipSize);
     }

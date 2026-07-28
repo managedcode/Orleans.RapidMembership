@@ -155,7 +155,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         var node = new RapidSimulationNode(this, address, seedAddress: null, metadata: null, options, failureDetectorOptions, LoggerFactory);
         RegisterNode(node);
 
-        _ = RunToCompletion(() => node.StartAsync(TestContext.Current.CancellationToken));
+        RunToCompletion(() => node.StartAsync(TestContext.Current.CancellationToken));
         node.CompleteInitialization();
 
         _log.SeedNodeCreated(nodeId);
@@ -228,7 +228,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
 
         _log.NodeJoining(nodeId);
 
-        _ = RunToCompletion(() => node.StartAsync(TestContext.Current.CancellationToken));
+        RunToCompletion(() => node.StartAsync(TestContext.Current.CancellationToken));
         node.CompleteInitialization();
 
         _log.NodeJoined(nodeId);
@@ -346,7 +346,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
                 batchNodes.Add(node);
             }
 
-            _ = RunToCompletion(
+            RunToCompletion(
                 () => Task.WhenAll(batchNodes.Select(node => node.StartAsync(TestContext.Current.CancellationToken))));
 
             // Log completion
@@ -378,7 +378,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
 
         // Dispose the node while it is still registered so the simulation can drive its task queue.
         // This cancels in-flight tasks and releases resources.
-        _ = RunToCompletion(() => node.DisposeAsync().AsTask());
+        RunToCompletion(() => node.DisposeAsync().AsTask());
 
         // Unregister after disposal - no new messages will be delivered
         UnregisterNode(node);
@@ -400,7 +400,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
 
         // Drive the stop operation to completion (sends LeaveMessages to observers)
         // Node can still receive messages after this
-        _ = RunToCompletion(() => node.StopAsync(TestContext.Current.CancellationToken));
+        RunToCompletion(() => node.StopAsync(TestContext.Current.CancellationToken));
         node.CompleteStop();
 
         // The leaving node must remain active to participate in consensus.
@@ -409,7 +409,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
 
         // Dispose the node's resources while it's still registered.
         // This ensures the simulation can drive the node's task queue during disposal.
-        _ = RunToCompletion(() => node.DisposeAsync().AsTask());
+        RunToCompletion(() => node.DisposeAsync().AsTask());
 
         // Unregister the node from the network (no more messages will be delivered)
         UnregisterNode(node);
@@ -448,7 +448,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
             _log.NodeLeavingParallel(RapidClusterUtils.Loggable(node.Address));
         }
 
-        _ = RunToCompletion(() =>
+        RunToCompletion(() =>
         {
             var leaveTasks = nodesToRemove.Select(node => node.StopAsync(TestContext.Current.CancellationToken));
             return Task.WhenAll(leaveTasks);
@@ -464,7 +464,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
 
         // Dispose all leaving nodes' resources while they're still registered.
         // This ensures the simulation can drive each node's task queue during disposal.
-        _ = RunToCompletion(() =>
+        RunToCompletion(() =>
         {
             var disposeTasks = nodesToRemove.Select(node => node.DisposeAsync().AsTask());
             return Task.WhenAll(disposeTasks);
@@ -542,17 +542,17 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     public void WaitForMembershipSize(
         int expectedSize,
         IEnumerable<RapidSimulationNode>? nodes = null,
-        SimulationAdaptiveBudget? budget = null)
+        AdaptiveExecutionBudget? budget = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(expectedSize);
         var candidates = nodes?.ToList() ?? Nodes.ToList();
         var participants = candidates
             .Where(static node => !node.IsSuspended && node.CurrentView.IsHostPresent(node.Address))
             .ToList();
-        var outcome = RunUntilConverged(
+        var outcome = RunUntil(
             () => participants.Count > 0 &&
                 participants.TrueForAll(node => node.MembershipSize == expectedSize),
-            budget);
+            budget ?? AdaptiveExecutionBudget.Default);
         if (!outcome.ConditionMet)
         {
             var nodeDetails = participants.Count == 0
@@ -570,64 +570,13 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     }
 
     /// <summary>
-    /// Starts a task normally and adaptively drives the simulation until it completes.
-    /// </summary>
-    public SimulationExecutionResult RunToCompletion(
-        Func<Task> taskFactory,
-        SimulationAdaptiveBudget? budget = null)
-    {
-        ArgumentNullException.ThrowIfNull(taskFactory);
-        Task task;
-        using (EnterNodeContext("rapidcluster-harness"))
-        using (Guard.Enter())
-        {
-            task = taskFactory();
-        }
-
-        var outcome = RunUntilConverged(() => task.IsCompleted, budget);
-        if (!outcome.ConditionMet)
-        {
-            throw new TimeoutException(
-                $"Task did not complete.{Environment.NewLine}{outcome.ToDetailedString()}");
-        }
-
-        task.GetAwaiter().GetResult();
-        return outcome;
-    }
-
-    /// <summary>
-    /// Starts a result-producing task normally and adaptively drives the simulation until it completes.
-    /// </summary>
-    public T RunToCompletion<T>(
-        Func<Task<T>> taskFactory,
-        SimulationAdaptiveBudget? budget = null)
-    {
-        ArgumentNullException.ThrowIfNull(taskFactory);
-        Task<T> task;
-        using (EnterNodeContext("rapidcluster-harness"))
-        using (Guard.Enter())
-        {
-            task = taskFactory();
-        }
-
-        var outcome = RunUntilConverged(() => task.IsCompleted, budget);
-        if (!outcome.ConditionMet)
-        {
-            throw new TimeoutException(
-                $"Task did not complete.{Environment.NewLine}{outcome.ToDetailedString()}");
-        }
-
-        return task.GetAwaiter().GetResult();
-    }
-
-    /// <summary>
     /// Waits for all active cluster members to converge to a consistent view.
     /// Suspended nodes and nodes whose current view no longer contains themselves do not
     /// participate in convergence.
     /// </summary>
     public void WaitForConvergence()
     {
-        var outcome = RunUntilConverged(() =>
+        var outcome = RunUntil(() =>
         {
             var participants = ActiveNodes.Where(n => n.CurrentView.IsHostPresent(n.Address)).ToList();
             return participants.Count > 0 && participants.TrueForAll(n => n.MembershipSize == participants.Count);
@@ -649,7 +598,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         IReadOnlyList<Endpoint> departedNodes)
     {
         var candidates = nodes.ToList();
-        var outcome = RunUntilConverged(() =>
+        var outcome = RunUntil(() =>
         {
             var participants = candidates
                 .Where(static node => !node.IsSuspended && node.CurrentView.IsHostPresent(node.Address))
@@ -797,7 +746,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
                 }
             }
 
-            _ = RunToCompletion(() => Task.WhenAll(nodes.Select(node => node.DisposeAsync().AsTask())));
+            RunToCompletion(() => Task.WhenAll(nodes.Select(node => node.DisposeAsync().AsTask())));
 
             foreach (var node in nodes)
             {

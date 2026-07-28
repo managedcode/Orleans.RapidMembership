@@ -72,7 +72,7 @@ public sealed class ClusterBasicTests : IAsyncLifetime
         Assert.True(seedNode.IsInitialized);
 
         // Stop should not throw (degenerates to shutdown for single node)
-        _ = _harness.RunToCompletion(() => seedNode.StopAsync(TestContext.Current.CancellationToken));
+        _harness.RunToCompletion(() => seedNode.StopAsync(TestContext.Current.CancellationToken));
         seedNode.CompleteStop();
     }
 

@@ -26,7 +26,7 @@ public sealed class InMemoryMessagingClientTests
                 (_, _) => failureReported = true,
                 TestContext.Current.CancellationToken));
 
-        _ = harness.RunForDuration(TimeSpan.FromSeconds(2));
+        _ = harness.RunFor(TimeSpan.FromSeconds(2));
 
         Assert.True(failureReported);
     }
@@ -51,7 +51,7 @@ public sealed class InMemoryMessagingClientTests
                 (_, _) => failureReported = true,
                 cancellation.Token));
 
-        _ = harness.RunForDuration(TimeSpan.FromSeconds(2));
+        _ = harness.RunFor(TimeSpan.FromSeconds(2));
 
         Assert.False(failureReported);
     }
