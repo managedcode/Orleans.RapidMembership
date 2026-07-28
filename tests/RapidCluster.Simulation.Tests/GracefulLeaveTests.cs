@@ -15,10 +15,9 @@ namespace RapidCluster.Simulation.Tests;
 [SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Test naming convention")]
 public sealed class GracefulLeaveTests : IAsyncLifetime
 {
-    private readonly List<ObservableCollector<MembershipView>> _collectors = [];
+    private readonly List<(RapidSimulationNode Node, ObservableCollector<MembershipView> Collector)> _collectors = [];
     private readonly Guid _instanceId = Guid.NewGuid();
     private RapidSimulationCluster _harness = null!;
-    private SynchronizationContextScope _syncContextScope;
 
     // Track instance reuse - each test should get a fresh instance
     private int _initializeCount;
@@ -43,27 +42,25 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
 
         _harness = new RapidSimulationCluster(seed: testSeed);
 
-        // Install the simulation's synchronization context to capture async continuations
-        // This ensures all async operations are routed through the simulation task queue
-        _syncContextScope = _harness.SynchronizationContext.Install();
-
         return ValueTask.CompletedTask;
     }
 
     public async ValueTask DisposeAsync()
     {
-        foreach (var collector in _collectors)
+        foreach (var (node, collector) in _collectors)
         {
-            collector.Dispose();
+            _ = _harness.StartInSimulationNode(
+                node.Address,
+                () =>
+                {
+                    collector.Dispose();
+                    return true;
+                });
         }
 
         _collectors.Clear();
 
         await _harness.DisposeAsync();
-
-        // Restore the previous synchronization context AFTER harness disposal
-        // to ensure any async cleanup operations are captured by the simulation
-        _syncContextScope.Dispose();
     }
 
     /// <summary>
@@ -71,8 +68,10 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
     /// </summary>
     private ObservableCollector<MembershipView> CreateViewCollector(RapidSimulationNode node)
     {
-        var collector = new ObservableCollector<MembershipView>(node.ViewAccessor.Updates);
-        _collectors.Add(collector);
+        var collector = _harness.StartInSimulationNode(
+            node.Address,
+            () => new ObservableCollector<MembershipView>(node.ViewAccessor.Updates));
+        _collectors.Add((node, collector));
         return collector;
     }
 

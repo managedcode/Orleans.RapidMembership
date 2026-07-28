@@ -190,7 +190,7 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
         }
 
         // Start background jobs after initialization
-        var alertBatcherTask = Task.Factory.StartNew(AlertBatcherAsync, _stoppingCts.Token, TaskCreationOptions.None, _sharedResources.TaskScheduler).Unwrap();
+        var alertBatcherTask = AlertBatcherAsync();
         TrackBackgroundTask(alertBatcherTask);
 
         _initialized = true;
@@ -1894,12 +1894,9 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
     {
         _log.StaleViewDetected(remoteEndpoint, remoteConfigId, localConfigId);
 
-        // Schedule refresh on the background task scheduler
-        var refreshTask = Task.Factory.StartNew(
+        var refreshTask = Task.Run(
             () => RefreshMembershipViewAsync(remoteEndpoint, remoteConfigId, _stoppingCts.Token),
-            _stoppingCts.Token,
-            TaskCreationOptions.None,
-            _sharedResources.TaskScheduler).Unwrap();
+            _stoppingCts.Token);
         TrackBackgroundTask(refreshTask);
     }
 
@@ -2061,11 +2058,9 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
         // so this only triggers for initialized nodes that were kicked.
         if (wasKicked)
         {
-            var rejoinTask = Task.Factory.StartNew(
+            var rejoinTask = Task.Run(
                 () => RejoinClusterAsync(_stoppingCts.Token),
-                _stoppingCts.Token,
-                TaskCreationOptions.None,
-                _sharedResources.TaskScheduler).Unwrap();
+                _stoppingCts.Token);
             TrackBackgroundTask(rejoinTask);
         }
     }
@@ -2145,34 +2140,39 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
 
     /// <summary>
     /// Registers a continuation on ConsensusCoordinator.Decided that handles the result and checks for shutdown.
-    /// The continuation is tracked as a background task to ensure proper cleanup during shutdown.
+    /// Any continuation failure is observed by the task extension.
     /// </summary>
     private void RegisterConsensusDecidedContinuation(ConsensusCoordinator consensusInstance, ConfigurationId configurationId)
     {
-        var continuationTask = consensusInstance.Decided.ContinueWith(async decision =>
+        HandleConsensusDecisionAsync(consensusInstance, configurationId).Ignore();
+    }
+
+    private async Task HandleConsensusDecisionAsync(ConsensusCoordinator consensusInstance, ConfigurationId configurationId)
+    {
+        var decision = consensusInstance.Decided;
+        await ((Task)decision).ConfigureAwait(
+            ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+
+        if (decision.IsCanceled)
         {
-            if (decision.IsCanceled)
-            {
-                // Consensus was cancelled (e.g., during shutdown or view change) - nothing to do
-                return;
-            }
+            // Consensus was cancelled (e.g., during shutdown or view change) - nothing to do
+            return;
+        }
 
-            if (decision.IsFaulted)
-            {
-                _log.ConsensusDecidedFaulted(decision.Exception);
+        if (decision.IsFaulted)
+        {
+            _log.ConsensusDecidedFaulted(decision.Exception);
 
-                // Consensus failed (e.g., exhausted all rounds during a partition).
-                // Reset state to allow new proposals when alerts arrive.
-                await ResetConsensusStateAfterFailure(consensusInstance);
-                return;
-            }
+            // Consensus failed (e.g., exhausted all rounds during a partition).
+            // Reset state to allow new proposals when alerts arrive.
+            await ResetConsensusStateAfterFailure(consensusInstance);
+            return;
+        }
 
-            // Consensus decided, so any unstable-mode timeout is obsolete.
-            DisarmUnstableModeTimeout();
+        // Consensus decided, so any unstable-mode timeout is obsolete.
+        DisarmUnstableModeTimeout();
 
-            await DecideViewChange(await decision, configurationId);
-        }, CancellationToken.None, TaskContinuationOptions.None, _sharedResources.TaskScheduler);
-        continuationTask.Unwrap().Ignore();
+        await DecideViewChange(await decision, configurationId);
     }
 
     private void ArmUnstableModeTimeoutIfNeeded()
@@ -2382,7 +2382,7 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
         }
 
         // Cancel background tasks
-        _stoppingCts.SafeCancel(_log.Logger);
+        await _stoppingCts.CancelAsync();
 
         // Wait for background tasks to complete
         Task[] backgroundTasks;
@@ -2424,7 +2424,7 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
         _log.Dispose();
 
         // Cancel background tasks (in case StopAsync wasn't called)
-        _stoppingCts.SafeCancel(_log.Logger);
+        await _stoppingCts.CancelAsync();
         _stoppingCts.Dispose();
 
         // Dispose failure detectors (may already be disposed by StopAsync)

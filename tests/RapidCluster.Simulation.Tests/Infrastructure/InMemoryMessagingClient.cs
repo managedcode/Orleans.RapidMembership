@@ -22,7 +22,7 @@ internal sealed class InMemoryMessagingClient(
     RapidSimulationNode sourceNode,
     Endpoint localEndpoint,
     RapidClusterProtocolOptions protocolOptions,
-    PingPongFailureDetectorOptions failureDetectorOptions) : IMessagingClient
+    PingPongFailureDetectorOptions failureDetectorOptions) : IMessagingClient, IDisposable
 {
     private readonly RapidClusterProtocolOptions _protocolOptions = protocolOptions;
     private readonly PingPongFailureDetectorOptions _failureDetectorOptions = failureDetectorOptions;
@@ -72,10 +72,22 @@ internal sealed class InMemoryMessagingClient(
         }
     }
 
-    public async Task<RapidClusterResponse> SendMessageAsync(Endpoint remote, RapidClusterRequest request, CancellationToken cancellationToken)
+    public Task<RapidClusterResponse> SendMessageAsync(Endpoint remote, RapidClusterRequest request, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
+        return Task.Factory.StartNew(
+            () => SendMessageCoreAsync(remote, request, cancellationToken),
+            CancellationToken.None,
+            TaskCreationOptions.DenyChildAttach,
+            sourceNode.Context.TaskScheduler).Unwrap();
+    }
+
+    private async Task<RapidClusterResponse> SendMessageCoreAsync(
+        Endpoint remote,
+        RapidClusterRequest request,
+        CancellationToken cancellationToken)
+    {
         using var sourceCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
         var localAddr = RapidClusterUtils.Loggable(localEndpoint);
         var remoteAddr = RapidClusterUtils.Loggable(remote);
@@ -112,12 +124,11 @@ internal sealed class InMemoryMessagingClient(
         // Ignore the task in case the source is terminated before it resolves.
         deliveryTask.Ignore();
 
-        var result = await deliveryTask.WaitAsync(messageTimeout, sourceContext.TimeProvider, sourceCts.Token);
-        return result;
+        return await deliveryTask.WaitAsync(messageTimeout, sourceContext.TimeProvider, sourceCts.Token);
 
         async Task<RapidClusterResponse> DeliverMessageAsync()
         {
-            await Task.Delay(network.GetMessageDelay(), targetContext.TimeProvider, targetCancellation);
+            await Task.Delay(delay, targetContext.TimeProvider, targetCancellation);
             return network.CheckDelivery(localAddr, remoteAddr) switch
             {
                 DeliveryStatus.Dropped => throw new SimulatedNetworkException($"Message from {localAddr} to {remoteAddr} was dropped by the network."),
@@ -130,13 +141,17 @@ internal sealed class InMemoryMessagingClient(
 
     public ValueTask DisposeAsync()
     {
-        if (_disposed) return ValueTask.CompletedTask;
+        Dispose();
+        return ValueTask.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
         _disposed = true;
 
-        _disposeCts.SafeCancel(_log.Logger);
+        _disposeCts.Cancel();
         _disposeCts.Dispose();
-
-        return ValueTask.CompletedTask;
     }
 
     private sealed class SimulatedNetworkException : Exception

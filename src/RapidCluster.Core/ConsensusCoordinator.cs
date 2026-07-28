@@ -939,7 +939,9 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
 
     private TimeSpan GetRandomDelay()
     {
-        var jitter = (long)(-1000 * Math.Log(1 - _sharedResources.NextRandomDouble()) / _jitterRate);
+#pragma warning disable CA5394 // Protocol jitter is not used for security.
+        var jitter = (long)(-1000 * Math.Log(1 - Random.Shared.NextDouble()) / _jitterRate);
+#pragma warning restore CA5394
         return TimeSpan.FromMilliseconds(jitter + (long)_options.ConsensusFallbackTimeoutBaseDelay.TotalMilliseconds);
     }
 
@@ -947,7 +949,9 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
     {
         var baseMs = _options.ConsensusFallbackTimeoutBaseDelay.TotalMilliseconds;
         var multiplier = Math.Min(Math.Pow(1.5, roundNumber - 2), 8);
-        var jitter = (long)(-1000 * Math.Log(1 - _sharedResources.NextRandomDouble()) / _jitterRate);
+#pragma warning disable CA5394 // Protocol jitter is not used for security.
+        var jitter = (long)(-1000 * Math.Log(1 - Random.Shared.NextDouble()) / _jitterRate);
+#pragma warning restore CA5394
 
         var ringPositionDelay = GetRingPositionDelay();
 
@@ -980,7 +984,7 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
     {
         _log.Cancelling();
 
-        _disposeCts.SafeCancel(_log.Logger);
+        _disposeCts.Cancel();
         _events.Writer.TryComplete();
         _paxosLearner.Cancel();
 
@@ -999,7 +1003,7 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
         _log.Dispose();
 
         // Cancel if not already cancelled
-        _disposeCts.SafeCancel(_log.Logger);
+        await _disposeCts.CancelAsync();
         _events.Writer.TryComplete();
 
         _paxosLearner.Cancel();

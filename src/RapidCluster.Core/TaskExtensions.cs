@@ -1,8 +1,6 @@
-using Microsoft.Extensions.Logging;
-
 namespace RapidCluster;
 
-internal static partial class TaskExtensions
+internal static class TaskExtensions
 {
     private static readonly Action<Task> IgnoreTaskContinuation = t => _ = t.Exception;
 
@@ -38,33 +36,4 @@ internal static partial class TaskExtensions
                 TaskScheduler.Default);
         }
     }
-
-    /// <summary>
-    /// Cancels the <see cref="CancellationTokenSource"/> without throwing if a registered callback throws.
-    /// Uses the synchronous Cancel method to avoid CA1849 warnings in async contexts where
-    /// CancelAsync would be preferred but synchronous cancellation is intentional.
-    /// </summary>
-    /// <param name="cts">The cancellation token source to cancel.</param>
-    /// <param name="logger">Optional logger to log exceptions from cancellation callbacks.</param>
-    public static void SafeCancel(this CancellationTokenSource cts, ILogger? logger = null)
-    {
-#pragma warning disable CA1849 // Call async methods when in an async method
-#pragma warning disable CA1031 // Do not catch general exception types
-        try
-        {
-            cts.Cancel(throwOnFirstException: false);
-        }
-        catch (Exception ex)
-        {
-            if (logger is not null)
-            {
-                LogCancellationException(logger, ex);
-            }
-        }
-#pragma warning restore CA1031 // Do not catch general exception types
-#pragma warning restore CA1849 // Call async methods when in an async method
-    }
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Exception occurred during CancellationTokenSource.Cancel")]
-    private static partial void LogCancellationException(ILogger logger, Exception ex);
 }

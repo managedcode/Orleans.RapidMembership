@@ -32,7 +32,8 @@
 	<ItemGroup>
 		<ClockworkBuiltInRuleSet Include="clockwork.bcl.deterministic" />
 		<ClockworkBuiltInRuleSet Include="clockwork.tasks.controlled" />
-		<ClockworkInclude Include="RapidCluster.Simulation.Tests.dll" />
+		<!-- The generated xUnit/MTP entry point runs before a simulation exists. Keep the
+		     runner uninstrumented while staging instrumented production assemblies beside it. -->
 		<ClockworkInclude Include="RapidCluster.Core.dll" />
 		<ClockworkInclude Include="RapidCluster.Grpc.dll" />
 	</ItemGroup>

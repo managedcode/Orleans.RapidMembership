@@ -216,9 +216,14 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
 
         _ = _harness.RunToCompletion(() =>
         {
-            var joinTasks = nodes.Select(n => n.InitializeAsync(cts.Token));
+            var joinTasks = nodes.Select(n => n.StartAsync(cts.Token));
             return Task.WhenAll(joinTasks);
         });
+        foreach (var node in nodes)
+        {
+            node.CompleteInitialization();
+        }
+
         _harness.WaitForConvergence();
 
         // Compute and log detailed view transitions

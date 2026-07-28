@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using Clockwork;
+using Clockwork.Runtime.Execution;
 using Clockwork.Runtime.Random;
 using Microsoft.Extensions.Logging;
 using RapidCluster.Monitoring;
@@ -72,6 +73,29 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// </summary>
     public SimulationNetwork Network { get; }
 
+    internal IDisposable EnterSimulationRuntime()
+    {
+        var ambient = CreateNodeAmbientContext("rapidcluster-harness");
+        return SimulationExecutionContext.EnterRuntime(ambient.ActivationToken, ambient.Runtime);
+    }
+
+    internal SimulationAmbientContextConfiguration CreateRapidNodeAmbientContext(Endpoint address) =>
+        CreateNodeAmbientContext(RapidClusterUtils.Loggable(address));
+
+    internal IDisposable EnterSimulationNodeRuntime(Endpoint address)
+    {
+        var ambient = CreateRapidNodeAmbientContext(address);
+        var runtimeScope = SimulationExecutionContext.EnterRuntime(ambient.ActivationToken, ambient.Runtime);
+        var nodeScope = SimulationExecutionContext.EnterNode(ambient.Node!);
+        return new SimulationRuntimeScope(nodeScope, runtimeScope);
+    }
+
+    internal T StartInSimulationNode<T>(Endpoint address, Func<T> action)
+    {
+        using var _ = EnterSimulationNodeRuntime(address);
+        return action();
+    }
+
     /// <summary>
     /// Gets a node by its network address.
     /// </summary>
@@ -104,9 +128,8 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         var node = new RapidSimulationNode(this, address, seedAddress: null, metadata: null, options, failureDetectorOptions, LoggerFactory);
         RegisterNode(node);
 
-        // For seed nodes, initialization is synchronous (no network I/O needed),
-        // but we still drive it through DriveToCompletion for consistency.
-        Run(() => node.InitializeAsync(TestContext.Current.CancellationToken));
+        _ = RunToCompletion(() => node.StartAsync(TestContext.Current.CancellationToken));
+        node.CompleteInitialization();
 
         _log.SeedNodeCreated(nodeId);
         return node;
@@ -169,8 +192,8 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
 
         _log.NodeJoining(nodeId);
 
-        // Drive the initialization to completion
-        Run(() => node.InitializeAsync(TestContext.Current.CancellationToken));
+        _ = RunToCompletion(() => node.StartAsync(TestContext.Current.CancellationToken));
+        node.CompleteInitialization();
 
         _log.NodeJoined(nodeId);
         return node;
@@ -282,11 +305,12 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
             }
 
             _ = RunToCompletion(
-                () => Task.WhenAll(batchNodes.Select(node => node.InitializeAsync(TestContext.Current.CancellationToken))));
+                () => Task.WhenAll(batchNodes.Select(node => node.StartAsync(TestContext.Current.CancellationToken))));
 
             // Log completion
             foreach (var node in batchNodes)
             {
+                node.CompleteInitialization();
                 _log.NodeJoinedParallel(RapidClusterUtils.Loggable(node.Address));
             }
 
@@ -317,9 +341,9 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     {
         ArgumentNullException.ThrowIfNull(node);
 
-        // Dispose the node while it's still registered so Run() can drive its task queue.
+        // Dispose the node while it is still registered so the simulation can drive its task queue.
         // This cancels in-flight tasks and releases resources.
-        Run(() => node.DisposeAsync().AsTask());
+        _ = RunToCompletion(() => node.DisposeAsync().AsTask());
 
         // Unregister after disposal - no new messages will be delivered
         UnregisterNode(node);
@@ -343,6 +367,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         // Drive the stop operation to completion (sends LeaveMessages to observers)
         // Node can still receive messages after this
         _ = RunToCompletion(() => node.StopAsync(TestContext.Current.CancellationToken));
+        node.CompleteStop();
 
         // The leaving node must remain active to participate in consensus.
         // Run the simulation until all remaining nodes converge to the new size.
@@ -357,7 +382,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         }
 
         // Dispose the node's resources while it's still registered.
-        // This ensures Run() can drive the node's task queue during disposal.
+        // This ensures the simulation can drive the node's task queue during disposal.
         _ = RunToCompletion(() => node.DisposeAsync().AsTask());
 
         // Unregister the node from the network (no more messages will be delivered)
@@ -404,6 +429,10 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
             var leaveTasks = nodesToRemove.Select(node => node.StopAsync(TestContext.Current.CancellationToken));
             return Task.WhenAll(leaveTasks);
         });
+        foreach (var node in nodesToRemove)
+        {
+            node.CompleteStop();
+        }
 
         var convergence = RunUntilConverged(remainingNodes, targetSize);
 
@@ -416,7 +445,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         }
 
         // Dispose all leaving nodes' resources while they're still registered.
-        // This ensures Run() can drive each node's task queue during disposal.
+        // This ensures the simulation can drive each node's task queue during disposal.
         _ = RunToCompletion(() =>
         {
             var disposeTasks = nodesToRemove.Select(node => node.DisposeAsync().AsTask());
@@ -510,18 +539,20 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     }
 
     /// <summary>
-    /// Starts a task on the simulation scheduler and adaptively drives it to completion.
+    /// Starts a task normally and adaptively drives the simulation until it completes.
     /// </summary>
     public SimulationExecutionResult RunToCompletion(
         Func<Task> taskFactory,
         SimulationAdaptiveBudget? budget = null)
     {
         ArgumentNullException.ThrowIfNull(taskFactory);
-        var task = Task.Factory.StartNew(
-            taskFactory,
-            CancellationToken.None,
-            TaskCreationOptions.DenyChildAttach,
-            TaskScheduler).Unwrap();
+        Task task;
+        using (EnterSimulationRuntime())
+        using (Guard.Enter())
+        {
+            task = taskFactory();
+        }
+
         var outcome = RunUntilConverged(() => task.IsCompleted, budget);
         if (!outcome.ConditionMet)
         {
@@ -534,16 +565,16 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     }
 
     /// <summary>
-    /// Waits for all active (non-suspended) nodes to converge to a consistent view where
-    /// each node sees exactly the number of active nodes in its membership.
-    /// This is the preferred overload when nodes may be suspended during the test.
+    /// Waits for all active cluster members to converge to a consistent view.
+    /// Suspended nodes and nodes whose current view no longer contains themselves do not
+    /// participate in convergence.
     /// </summary>
     public void WaitForConvergence()
     {
         var outcome = RunUntilConverged(() =>
         {
-            var activeCount = ActiveNodes.Count;
-            return activeCount > 0 && ActiveNodes.All(n => n.MembershipSize == activeCount);
+            var participants = ActiveNodes.Where(n => n.CurrentView.IsHostPresent(n.Address)).ToList();
+            return participants.Count > 0 && participants.TrueForAll(n => n.MembershipSize == participants.Count);
         });
 
         if (!outcome.ConditionMet)
@@ -670,6 +701,15 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
             }
 
             sb.AppendLine(CultureInfo.InvariantCulture, $"  {item.GetType().Name} Due={item.DueTime:O}");
+        }
+    }
+
+    private sealed class SimulationRuntimeScope(IDisposable nodeScope, IDisposable runtimeScope) : IDisposable
+    {
+        public void Dispose()
+        {
+            nodeScope.Dispose();
+            runtimeScope.Dispose();
         }
     }
 

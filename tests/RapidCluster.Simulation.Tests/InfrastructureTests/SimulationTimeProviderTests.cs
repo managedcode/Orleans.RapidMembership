@@ -669,7 +669,7 @@ state: null, TimeSpan.FromSeconds(1), TimeSpan.Zero);
         var delay = Task.Delay(InfiniteTimeout, p.TimeProvider, cts.Token);
         Assert.False(delay.IsCompleted);
 
-        cts.SafeCancel();
+        await cts.CancelAsync();
 
         await Assert.ThrowsAsync<TaskCanceledException>(async () => await delay);
     }
@@ -695,9 +695,6 @@ state: null, TimeSpan.FromSeconds(1), TimeSpan.Zero);
     {
         var p = new TestTimeProvider();
         var ct = TestContext.Current.CancellationToken;
-
-        // Install sync context so continuations are captured by the simulation
-        using var _ = p.TaskQueue.SynchronizationContext.Install();
 
         // Create delays - they immediately register timers with the provider
         var delay1 = Task.Delay(TimeSpan.FromSeconds(3), p.TimeProvider, ct);
@@ -737,9 +734,6 @@ state: null, TimeSpan.FromSeconds(1), TimeSpan.Zero);
         var scheduler = new SimulationTaskScheduler(p.TaskQueue);
         var completionOrder = new List<int>();
         var ct = TestContext.Current.CancellationToken;
-
-        // Install sync context so continuations are captured by the simulation
-        using var _ = p.TaskQueue.SynchronizationContext.Install();
 
         // Create delays with continuations that record completion order
         var delay1 = Task.Delay(TimeSpan.FromSeconds(3), p.TimeProvider, ct).ContinueWith(_ => completionOrder.Add(1), ct, TaskContinuationOptions.None, scheduler);

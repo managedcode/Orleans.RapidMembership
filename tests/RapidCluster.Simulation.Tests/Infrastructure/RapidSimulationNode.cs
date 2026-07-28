@@ -4,6 +4,7 @@ using System.Diagnostics.Metrics;
 using System.Globalization;
 using Clockwork;
 using Clockwork.Runtime.Random;
+using Clockwork.Runtime.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -20,14 +21,16 @@ namespace RapidCluster.Simulation.Tests.Infrastructure;
 /// <summary>
 /// Represents a simulated node in a Rapid cluster.
 /// Uses in-memory transport instead of gRPC and does not require a WebApplication.
-/// Lifetime is managed by the SimulationHarness via Destroy() - do not implement IDisposable.
+/// Lifetime is managed asynchronously by the simulation harness.
 /// </summary>
 [SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable",
-    Justification = "Lifetime is managed by SimulationHarness.Destroy() to avoid CA2000 warnings in tests")]
+    Justification = "Lifetime is managed by the simulation harness.")]
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 internal sealed class RapidSimulationNode : SimulationNode
 {
+    private readonly RapidSimulationCluster _harness;
     private readonly RapidSimulationNodeLogger _log;
+    private readonly ILoggerFactory _nodeLoggerFactory;
     private readonly MembershipService _membershipService;
     private readonly IMembershipViewAccessor _viewAccessor;
     private readonly IRapidClusterLifecycle _lifecycle;
@@ -110,36 +113,43 @@ internal sealed class RapidSimulationNode : SimulationNode
         PingPongFailureDetectorOptions? failureDetectorOptions,
         ILoggerFactory? loggerFactory)
     {
+        using var runtimeScope = harness.EnterSimulationNodeRuntime(address);
+        using var guardScope = harness.Guard.Enter();
+        _harness = harness;
         Address = address;
 
         // Wrap the logger factory to prepend the node name to all log messages
         var baseLoggerFactory = loggerFactory ?? harness.LoggerFactory;
         var nodeName = string.Create(CultureInfo.InvariantCulture, $"{address.Hostname.ToStringUtf8()}:{address.Port}");
-        ILoggerFactory nodeLoggerFactory = baseLoggerFactory != null
+        _nodeLoggerFactory = baseLoggerFactory != null
             ? new NodePrefixedLoggerFactory(baseLoggerFactory, nodeName)
             : NullLoggerFactory.Instance;
 
         // Create logger for the context (suspend/resume logging happens there)
-        var contextLogger = nodeLoggerFactory.CreateLogger<SimulationNodeContext>();
+        var contextLogger = _nodeLoggerFactory.CreateLogger<SimulationNodeContext>();
         var nodeRandom = new SimulationRandom(
             harness.SeedAuthority.GetSiteSeed(SimulationSeedDomain.Application, RapidClusterUtils.Loggable(address)));
-        Context = new SimulationNodeContext(harness.Clock, harness.Guard, nodeRandom, harness.TaskQueue, contextLogger);
+        Context = new SimulationNodeContext(
+            harness.Clock,
+            harness.Guard,
+            nodeRandom,
+            harness.TaskQueue,
+            contextLogger,
+            harness.CreateRapidNodeAmbientContext(address));
 
-        _log = new RapidSimulationNodeLogger(nodeLoggerFactory.CreateLogger<RapidSimulationNode>());
+        _log = new RapidSimulationNodeLogger(_nodeLoggerFactory.CreateLogger<RapidSimulationNode>());
 
         var configuredProtocolOptions = protocolOptions ?? new RapidClusterProtocolOptions();
         var configuredFailureDetectorOptions = failureDetectorOptions ?? new PingPongFailureDetectorOptions();
+        var simulationTimeProvider = ControlledTimeProvider.System;
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<ILoggerFactory>(_ => nodeLoggerFactory);
+        services.AddSingleton<ILoggerFactory>(_ => _nodeLoggerFactory);
         services.AddSingleton<IMeterFactory>(_ => new TestMeterFactory());
         services.AddSingleton<IHostApplicationLifetime>(
             _ => new SimulationHostApplicationLifetime(harness.TeardownCancellationToken));
         services.AddSingleton(new SharedResources(
-            Context.TimeProvider,
-            Context.TaskScheduler,
-            Context.Random,
-            Context.Random.NextGuid,
+            simulationTimeProvider,
             harness.TeardownCancellationToken));
         services.AddSingleton<IMessagingClient>(sp => new InMemoryMessagingClient(
             harness,
@@ -159,7 +169,7 @@ internal sealed class RapidSimulationNode : SimulationNode
                         kvp => kvp.Value.ToByteArray(),
                         StringComparer.Ordinal) ?? [];
                 },
-                Context.TimeProvider)
+                simulationTimeProvider)
             .UseListenAddress(address.ToEndPointPreferIP())
             .ConfigureProtocol(options => CopyOptions(configuredProtocolOptions, options))
             .ConfigureFailureDetector(options => CopyOptions(configuredFailureDetectorOptions, options));
@@ -181,9 +191,11 @@ internal sealed class RapidSimulationNode : SimulationNode
     /// <summary>
     /// Initializes the membership service (completes the join or cluster start).
     /// </summary>
-    internal async Task InitializeAsync(CancellationToken cancellationToken = default)
+    internal Task StartAsync(CancellationToken cancellationToken = default)
+        => _harness.StartInSimulationNode(Address, () => _lifecycle.StartAsync(cancellationToken));
+
+    internal void CompleteInitialization()
     {
-        await _lifecycle.StartAsync(cancellationToken);
         _isInitialized = true;
 
         _log.NodeInitialized(RapidClusterUtils.Loggable(Address), CurrentView.Size, CurrentView.ConfigurationId.Version);
@@ -196,8 +208,6 @@ internal sealed class RapidSimulationNode : SimulationNode
     {
         _log.HandlingRequest(RapidClusterUtils.Loggable(Address), request.ContentCase);
 
-        // Link the caller's cancellation token with our disposal token so that
-        // in-flight requests complete when this node is disposed
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
         return await _membershipService.HandleMessageAsync(request, linkedCts.Token);
     }
@@ -207,32 +217,55 @@ internal sealed class RapidSimulationNode : SimulationNode
     /// The node can still receive messages after this method returns.
     /// Call <see cref="DisposeAsync"/> after unregistering from the network to release resources.
     /// </summary>
-    public async Task StopAsync(CancellationToken cancellationToken = default)
+    public Task StopAsync(CancellationToken cancellationToken = default)
     {
-        if (_disposed) return;
+        if (_disposed) return Task.CompletedTask;
 
         _log.NodeLeaving(RapidClusterUtils.Loggable(Address));
 
         // Graceful stop: notify observers and wait for background tasks
         // Keep MessagingClient alive so we can still participate in consensus
-        await _lifecycle.StopAsync(cancellationToken);
+        return _harness.StartInSimulationNode(Address, () => _lifecycle.StopAsync(cancellationToken));
+    }
 
+    internal void CompleteStop()
+    {
         _log.NodeLeftGracefully(RapidClusterUtils.Loggable(Address));
     }
 
     /// <summary>
     /// Disposes the node's resources. Should be called after unregistering from the network.
     /// </summary>
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        if (_disposed) return;
+        if (_disposed) return ValueTask.CompletedTask;
         _disposed = true;
 
         // Cancel any in-flight requests first so they complete promptly
-        _disposeCts.SafeCancel(_log.Logger);
+        var cancellationTask = _disposeCts.CancelAsync();
+        var disposalTask = cancellationTask.ContinueWith(
+            static async (task, state) =>
+            {
+                var node = (RapidSimulationNode)state!;
+                try
+                {
+                    await task;
+                    var providerDisposal = node._harness.StartInSimulationNode(
+                        node.Address,
+                        node._serviceProvider.DisposeAsync);
 
-        await _serviceProvider.DisposeAsync();
-        _disposeCts.Dispose();
+                    await providerDisposal;
+                }
+                finally
+                {
+                    node._disposeCts.Dispose();
+                }
+            },
+            this,
+            CancellationToken.None,
+            TaskContinuationOptions.None,
+            Context.TaskScheduler).Unwrap();
+        return new ValueTask(disposalTask);
     }
 
     private string DebuggerDisplay => string.Create(CultureInfo.InvariantCulture, $"{RapidClusterUtils.Loggable(Address)} Size={MembershipSize} {(IsSuspended ? "Suspended" : "Running")}");

@@ -964,7 +964,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
         {
             ConsensusFallbackTimeoutBaseDelay = TimeSpan.FromMilliseconds(100),
         });
-        var sharedResources = new SharedResources(_timeProvider, random: new Random(42));
+        var sharedResources = new SharedResources(_timeProvider);
         var metrics = CreateMetrics();
 
         var coordinator = new ConsensusCoordinator(

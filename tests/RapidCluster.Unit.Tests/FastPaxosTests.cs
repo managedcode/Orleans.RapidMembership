@@ -25,7 +25,7 @@ public sealed class FastRoundConsensusCoordinatorTests
         var broadcaster = new NoopBroadcaster();
         var viewAccessor = new TestMembershipViewAccessor(membershipSize);
         var options = Options.Create(new RapidClusterProtocolOptions());
-        var sharedResources = new SharedResources(new FakeTimeProvider(), random: new Random(42));
+        var sharedResources = new SharedResources(new FakeTimeProvider());
         var metrics = CreateMetrics();
 
         await using var coordinator = new ConsensusCoordinator(
@@ -73,7 +73,7 @@ public sealed class FastRoundConsensusCoordinatorTests
         var broadcaster = new NoopBroadcaster();
         var viewAccessor = new TestMembershipViewAccessor(membershipSize);
         var options = Options.Create(new RapidClusterProtocolOptions());
-        var sharedResources = new SharedResources(new FakeTimeProvider(), random: new Random(42));
+        var sharedResources = new SharedResources(new FakeTimeProvider());
         var metrics = CreateMetrics();
 
         await using var coordinator = new ConsensusCoordinator(
@@ -134,7 +134,7 @@ public sealed class FastRoundConsensusCoordinatorTests
         var broadcaster = new NoopBroadcaster();
         var viewAccessor = new TestMembershipViewAccessor(membershipSize);
         var options = Options.Create(new RapidClusterProtocolOptions());
-        var sharedResources = new SharedResources(new FakeTimeProvider(), random: new Random(42));
+        var sharedResources = new SharedResources(new FakeTimeProvider());
         var metrics = CreateMetrics();
 
         await using var coordinator = new ConsensusCoordinator(
