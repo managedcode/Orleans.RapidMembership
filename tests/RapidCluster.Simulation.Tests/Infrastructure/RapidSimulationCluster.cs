@@ -79,38 +79,35 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// </summary>
     public SimulationNetwork Network { get; }
 
-    internal IDisposable EnterSimulationRuntime()
+    internal IDisposable EnterNodeContext(Endpoint address) =>
+        EnterNodeContext(RapidClusterUtils.Loggable(address));
+
+    internal SimulationNodeContext CreateSimulationNodeContext(
+        Endpoint address,
+        SimulationRandom random,
+        ILogger<SimulationNodeContext> logger)
     {
-        var ambient = CreateNodeAmbientContext("rapidcluster-harness");
-        return SimulationExecutionContext.EnterRuntime(ambient.ActivationToken, ambient.Runtime);
+        var ambient = CreateNodeAmbientContext(RapidClusterUtils.Loggable(address));
+        return new SimulationNodeContext(Clock, Guard, random, TaskQueue, logger, ambient);
     }
 
-    internal SimulationAmbientContextConfiguration CreateRapidNodeAmbientContext(Endpoint address) =>
-        CreateNodeAmbientContext(RapidClusterUtils.Loggable(address));
-
-    internal IDisposable EnterSimulationNodeRuntime(Endpoint address)
+    internal T RunInNodeContext<T>(Endpoint address, Func<T> action)
     {
-        var ambient = CreateRapidNodeAmbientContext(address);
-        var runtimeScope = SimulationExecutionContext.EnterRuntime(ambient.ActivationToken, ambient.Runtime);
-        var nodeScope = SimulationExecutionContext.EnterNode(ambient.Node!);
-        return new SimulationRuntimeScope(nodeScope, runtimeScope);
-    }
-
-    internal T StartInSimulationNode<T>(Endpoint address, Func<T> action)
-    {
-        using var _ = EnterSimulationNodeRuntime(address);
+        ArgumentNullException.ThrowIfNull(action);
+        using var _ = EnterNodeContext(address);
+        using var guardScope = Guard.Enter();
         return action();
     }
 
     /// <summary>
     /// Executes a synchronous boundary call within the specified node's simulation runtime.
     /// </summary>
-    public void ExecuteInSimulation(RapidSimulationNode node, Action action)
+    public void RunOnNode(RapidSimulationNode node, Action action)
     {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(action);
-        _ = InvokeInSimulation(
-            node,
+        _ = RunInNodeContext(
+            node.Address,
             () =>
             {
                 action();
@@ -121,13 +118,11 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// <summary>
     /// Invokes a synchronous boundary call within the specified node's simulation runtime.
     /// </summary>
-    public T InvokeInSimulation<T>(RapidSimulationNode node, Func<T> action)
+    public T RunOnNode<T>(RapidSimulationNode node, Func<T> action)
     {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(action);
-        using var runtimeScope = EnterSimulationNodeRuntime(node.Address);
-        using var guardScope = Guard.Enter();
-        return action();
+        return RunInNodeContext(node.Address, action);
     }
 
     /// <summary>
@@ -583,7 +578,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     {
         ArgumentNullException.ThrowIfNull(taskFactory);
         Task task;
-        using (EnterSimulationRuntime())
+        using (EnterNodeContext("rapidcluster-harness"))
         using (Guard.Enter())
         {
             task = taskFactory();
@@ -609,7 +604,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     {
         ArgumentNullException.ThrowIfNull(taskFactory);
         Task<T> task;
-        using (EnterSimulationRuntime())
+        using (EnterNodeContext("rapidcluster-harness"))
         using (Guard.Enter())
         {
             task = taskFactory();
@@ -731,6 +726,14 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
 
             _ = sb.AppendLine(CultureInfo.InvariantCulture, $"  {item.GetType().Name} Due={item.DueTime:O}");
         }
+    }
+
+    private SimulationRuntimeScope EnterNodeContext(string nodeAddress)
+    {
+        var ambient = CreateNodeAmbientContext(nodeAddress);
+        var runtimeScope = SimulationExecutionContext.EnterRuntime(ambient.ActivationToken, ambient.Runtime);
+        var nodeScope = SimulationExecutionContext.EnterNode(ambient.Node!);
+        return new SimulationRuntimeScope(nodeScope, runtimeScope);
     }
 
     private sealed class SimulationRuntimeScope(IDisposable nodeScope, IDisposable runtimeScope) : IDisposable

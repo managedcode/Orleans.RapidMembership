@@ -205,7 +205,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
         // This avoids Task.Run which introduces real concurrency outside the simulation.
         // The observer's OnNext will be called synchronously during view publication,
         // which happens during simulation step execution.
-        var subscription = _harness.InvokeInSimulation(
+        var subscription = _harness.RunOnNode(
             seedNode,
             () => seedNode.ViewAccessor.Updates.Subscribe(new ViewHistoryObserver(viewHistory, clusterSize)));
 
@@ -248,7 +248,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
         }
         finally
         {
-            _harness.ExecuteInSimulation(seedNode, subscription.Dispose);
+            _harness.RunOnNode(seedNode, subscription.Dispose);
         }
     }
 

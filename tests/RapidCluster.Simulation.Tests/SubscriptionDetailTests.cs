@@ -27,7 +27,7 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
     {
         foreach (var (node, collector) in _collectors)
         {
-            _harness.ExecuteInSimulation(node, collector.Dispose);
+            _harness.RunOnNode(node, collector.Dispose);
         }
 
         _collectors.Clear();
@@ -40,7 +40,7 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
     /// </summary>
     private ObservableCollector<MembershipView> CreateViewCollector(RapidSimulationNode node)
     {
-        var collector = _harness.InvokeInSimulation(
+        var collector = _harness.RunOnNode(
             node,
             () => new ObservableCollector<MembershipView>(node.ViewAccessor.Updates));
         _collectors.Add((node, collector));

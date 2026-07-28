@@ -17,7 +17,7 @@ public sealed class InMemoryMessagingClientTests
         var unavailable = RapidClusterUtils.HostFromParts("node", 999);
         var failureReported = false;
 
-        harness.ExecuteInSimulation(
+        harness.RunOnNode(
             source,
             () => source.MessagingClient.SendOneWayMessage(
                 unavailable,
@@ -42,7 +42,7 @@ public sealed class InMemoryMessagingClientTests
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        harness.ExecuteInSimulation(
+        harness.RunOnNode(
             source,
             () => source.MessagingClient.SendOneWayMessage(
                 unavailable,

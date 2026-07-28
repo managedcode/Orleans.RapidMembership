@@ -1,4 +1,5 @@
 using Clockwork;
+using Clockwork.Runtime.Execution;
 using RapidCluster.Simulation.Tests.Infrastructure;
 
 namespace RapidCluster.Simulation.Tests.InfrastructureTests;
@@ -183,20 +184,36 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
     {
         var viewChanges = new List<MembershipView>();
         var seedNode = _harness.StartCluster();
+        SimulationExecutionSnapshot? subscriptionContext = null;
 
-        var subscription = _harness.InvokeInSimulation(
+        var subscription = _harness.RunOnNode(
             seedNode,
-            () => seedNode.ViewAccessor.Updates.Subscribe(new ViewObserver(viewChanges.Add)));
+            () =>
+            {
+                subscriptionContext = SimulationExecutionContext.Current;
+                return seedNode.ViewAccessor.Updates.Subscribe(new ViewObserver(viewChanges.Add));
+            });
 
         try
         {
             _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
             Assert.Contains(viewChanges, view => view.Size == 2);
+            AssertNodeContext(subscriptionContext, seedNode);
         }
         finally
         {
-            _harness.ExecuteInSimulation(seedNode, subscription.Dispose);
+            SimulationExecutionSnapshot? disposalContext = null;
+            _harness.RunOnNode(
+                seedNode,
+                () =>
+                {
+                    disposalContext = SimulationExecutionContext.Current;
+                    subscription.Dispose();
+                });
+            AssertNodeContext(disposalContext, seedNode);
         }
+
+        Assert.Null(SimulationExecutionContext.Current);
     }
 
     private sealed class ViewObserver(Action<MembershipView> onNext) : IObserver<MembershipView>
@@ -220,5 +237,14 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
         _ = harness.RunUntilIdle();
 
         return Assert.IsType<DateTimeOffset>(firedAt);
+    }
+
+    private static void AssertNodeContext(
+        SimulationExecutionSnapshot? context,
+        RapidSimulationNode node)
+    {
+        var actual = Assert.IsType<SimulationExecutionSnapshot>(context);
+        Assert.Equal(node.NetworkAddress, Assert.IsType<SimulationNodeIdentity>(actual.Node).Address);
+        Assert.Equal(12345, actual.Runtime.Seed);
     }
 }
