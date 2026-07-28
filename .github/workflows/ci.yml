@@ -35,30 +35,30 @@ jobs:
         run: dotnet restore RapidCluster.slnx
 
       - name: Check formatting
-        run: dotnet format RapidCluster.slnx --verify-no-changes --verbosity diagnostic
+        run: dotnet format RapidCluster.slnx --exclude src/Clockwork --verify-no-changes --verbosity diagnostic
         if: matrix.os == 'ubuntu-latest'
 
       - name: Build
-        run: dotnet build RapidCluster.slnx --configuration Release --no-restore
+        run: dotnet build RapidCluster.slnx --configuration Release --no-restore -p:EnforceCodeStyleInBuild=false
 
       - name: Create coverage directory
         run: mkdir -p ${{ github.workspace }}/coverage
         shell: bash
 
       - name: Test Unit
-        run: dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj --configuration Release -- --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/unit.cobertura.xml --timeout 600s
+        run: dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj --configuration Release --no-build -- --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/unit.cobertura.xml --timeout 600s
 
       - name: Test Integration
-        run: dotnet run --project tests/RapidCluster.Integration.Tests/RapidCluster.Integration.Tests.csproj --configuration Release -- --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/integration.cobertura.xml --timeout 600s
+        run: dotnet run --project tests/RapidCluster.Integration.Tests/RapidCluster.Integration.Tests.csproj --configuration Release --no-build -- --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/integration.cobertura.xml --timeout 600s
 
       - name: Build Simulation Instrumentation Closure
-        run: dotnet build tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj --configuration Release --no-restore
+        run: dotnet build tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj --configuration Release --no-restore -p:EnforceCodeStyleInBuild=false
 
       - name: Test Simulation Clockwork
         run: dotnet tests/RapidCluster.Simulation.Tests/obj/Release/net10.0/clockwork/instrumented/RapidCluster.Simulation.Tests.dll --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/simulation.cobertura.xml --timeout 600s
 
       - name: Test EndToEnd
-        run: dotnet run --project tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests/RapidCluster.EndToEnd.Tests.csproj --configuration Release -- --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/endtoend.cobertura.xml --timeout 600s
+        run: dotnet run --project tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests/RapidCluster.EndToEnd.Tests.csproj --configuration Release --no-build -- --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/endtoend.cobertura.xml --timeout 600s
 
       - name: Install dotnet-coverage tool
         run: dotnet tool install --global dotnet-coverage

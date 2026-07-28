@@ -5,14 +5,16 @@
 ## Build & Test Commands
 ```bash
 git submodule update --init --recursive               # Initialize Clockwork after cloning
-dotnet build RapidCluster.slnx                    # Build
+dotnet build RapidCluster.slnx -p:EnforceCodeStyleInBuild=false  # Build (format is checked separately)
+dotnet format RapidCluster.slnx --exclude src/Clockwork --verify-no-changes
 
 # Run tests using dotnet run (xUnit v3 with Microsoft.Testing.Platform)
 # Each test project is run separately:
-dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --timeout 60s
-dotnet run --project tests/RapidCluster.Integration.Tests/RapidCluster.Integration.Tests.csproj -- --timeout 60s
-dotnet run --project tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj -- --timeout 60s
-dotnet run --project tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests/RapidCluster.EndToEnd.Tests.csproj -- --timeout 60s
+dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj --no-build -- --timeout 60s
+dotnet run --project tests/RapidCluster.Integration.Tests/RapidCluster.Integration.Tests.csproj --no-build -- --timeout 60s
+dotnet build tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj -p:EnforceCodeStyleInBuild=false
+dotnet tests/RapidCluster.Simulation.Tests/obj/Debug/net10.0/clockwork/instrumented/RapidCluster.Simulation.Tests.dll --timeout 600s
+dotnet run --project tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests/RapidCluster.EndToEnd.Tests.csproj --no-build -- --timeout 60s
 
 # Common test options:
 dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --timeout 60s --filter-class "*ClusterBasicTests"    # Single test class
@@ -24,7 +26,7 @@ dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.cspro
 dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --coverage --coverage-output-format cobertura --coverage-output coverage.xml --timeout 60s
 ```
 
-Note: This project uses xUnit v3 with Microsoft.Testing.Platform (MTP). Use `dotnet run --` to run tests, not `dotnet test`. The `--timeout` parameter sets a global test execution timeout (format: `<value>[h|m|s]`).
+Note: This project uses xUnit v3 with Microsoft.Testing.Platform (MTP). Unit, integration, and end-to-end tests use `dotnet run --`; simulation tests execute the out-of-place Clockwork-instrumented application closure. The `--timeout` parameter sets a global test execution timeout (format: `<value>[h|m|s]`).
 
 ## Code Coverage
 Code coverage is collected using `Microsoft.Testing.Extensions.CodeCoverage`. Use the `--coverage` flag when running tests:
