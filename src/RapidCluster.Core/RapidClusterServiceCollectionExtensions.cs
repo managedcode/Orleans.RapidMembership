@@ -31,10 +31,7 @@ public static class RapidClusterServiceCollectionExtensions
     /// </remarks>
     /// <param name="services">The service collection.</param>
     /// <returns>A builder for further configuration.</returns>
-    public static IRapidClusterBuilder AddRapidCluster(this IServiceCollection services)
-    {
-        return services.AddRapidCluster(_ => { });
-    }
+    public static IRapidClusterBuilder AddRapidCluster(this IServiceCollection services) => services.AddRapidCluster(_ => { });
 
     /// <summary>
     /// Adds RapidCluster core services to the service collection with automatic lifecycle management.
@@ -65,7 +62,7 @@ public static class RapidClusterServiceCollectionExtensions
         AddRapidClusterCore(services, configure, timeProvider);
 
         // Register the cluster service as a hosted service for automatic lifecycle management
-        services.AddHostedService(sp => sp.GetRequiredService<RapidClusterLifecycleService>());
+        _ = services.AddHostedService(sp => sp.GetRequiredService<RapidClusterLifecycleService>());
 
         return new RapidClusterBuilder(services);
     }
@@ -95,10 +92,7 @@ public static class RapidClusterServiceCollectionExtensions
     /// </remarks>
     /// <param name="services">The service collection.</param>
     /// <returns>A builder for further configuration.</returns>
-    public static IRapidClusterBuilder AddRapidClusterManual(this IServiceCollection services)
-    {
-        return services.AddRapidClusterManual(_ => { });
-    }
+    public static IRapidClusterBuilder AddRapidClusterManual(this IServiceCollection services) => services.AddRapidClusterManual(_ => { });
 
     /// <summary>
     /// Adds RapidCluster core services to the service collection with manual lifecycle management.
@@ -151,16 +145,16 @@ public static class RapidClusterServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configure);
 
         // Configure options
-        services.Configure(configure);
+        _ = services.Configure(configure);
 
         // Configure default protocol options (can be overridden via builder)
-        services.Configure<RapidClusterProtocolOptions>(_ => { });
+        _ = services.Configure<RapidClusterProtocolOptions>(_ => { });
 
         // Configure default failure detector options (can be overridden via builder)
-        services.Configure<PingPongFailureDetectorOptions>(_ => { });
+        _ = services.Configure<PingPongFailureDetectorOptions>(_ => { });
 
         // Add validation
-        services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<RapidClusterProtocolOptions>, RapidClusterProtocolOptionsValidator>();
+        _ = services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<RapidClusterProtocolOptions>, RapidClusterProtocolOptionsValidator>();
 
         // Register TimeProvider
         var provider = timeProvider ?? TimeProvider.System;

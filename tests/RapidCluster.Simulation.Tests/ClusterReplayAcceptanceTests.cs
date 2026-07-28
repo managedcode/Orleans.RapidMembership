@@ -14,7 +14,7 @@ public sealed class ClusterReplayAcceptanceTests
     [Fact]
     public void ArtifactControlsOperationsThatDriveThreeNodeFormationAndGracefulRemoval()
     {
-        string artifactDirectory = Path.Combine(
+        var artifactDirectory = Path.Combine(
             Path.GetTempPath(),
             "rapidcluster-clockwork-replay-" + Guid.NewGuid().ToString("N"));
 
@@ -31,7 +31,7 @@ public sealed class ClusterReplayAcceptanceTests
                 RecordSuccessfulRuns = true,
             });
 
-            ReplayTestResult recorded = fixture.Run(
+            var recorded = fixture.Run(
                 scheduler => ScheduleClusterScenario(scheduler, recordedObservation),
                 TestContext.Current.CancellationToken);
 
@@ -39,11 +39,11 @@ public sealed class ClusterReplayAcceptanceTests
                 recorded.IsSuccessful,
                 recorded.ToFailureMessage() + Environment.NewLine + recordedObservation.Failure);
             Assert.False(recorded.Execution.Reproduced);
-            string artifactPath = Assert.IsType<string>(recorded.ArtifactPath);
+            var artifactPath = Assert.IsType<string>(recorded.ArtifactPath);
             Assert.True(File.Exists(artifactPath));
 
-            ReplayArtifact artifact = ReplayArtifactSerializer.Read(artifactPath);
-            string persistedArtifactId = ReplayArtifactSerializer.ComputeId(artifact);
+            var artifact = ReplayArtifactSerializer.Read(artifactPath);
+            var persistedArtifactId = ReplayArtifactSerializer.ComputeId(artifact);
             Assert.Equal(recorded.Execution.ArtifactId, persistedArtifactId);
             Assert.Equal(ReplayRecordingState.Complete, artifact.RecordingState);
             Assert.Equal(ReplayTerminationKind.Completed, artifact.Outcome.Kind);
@@ -52,7 +52,7 @@ public sealed class ClusterReplayAcceptanceTests
             Assert.Equal(artifact.Decisions.Count - 1, artifact.Decisions[^1].Sequence);
 
             var replayedObservation = new ClusterScenarioObservation();
-            ReplayExecutionResult replayed = ReplayRunner.Replay(
+            var replayed = ReplayRunner.Replay(
                 artifact,
                 ReplayCompatibilityRequirements.Current(),
                 scheduler => ScheduleClusterScenario(scheduler, replayedObservation),
@@ -78,7 +78,7 @@ public sealed class ClusterReplayAcceptanceTests
         ControlledOperationScheduler scheduler,
         ClusterScenarioObservation observation)
     {
-        scheduler.Schedule(
+        _ = scheduler.Schedule(
             "drive-three-node-cluster-through-graceful-removal",
             () =>
             {
@@ -94,7 +94,7 @@ public sealed class ClusterReplayAcceptanceTests
                     throw;
                 }
             });
-        scheduler.Schedule(
+        _ = scheduler.Schedule(
             "artifact-controlled-companion-operation",
             () =>
             {
@@ -123,7 +123,7 @@ public sealed class ClusterReplayAcceptanceTests
 
         try
         {
-            IReadOnlyList<RapidSimulationNode> nodes = harness.CreateCluster(size: 3);
+            var nodes = harness.CreateCluster(size: 3);
             harness.WaitForConvergence();
             Ensure(nodes.Count == 3 && nodes.All(static node => node.MembershipSize == 3), "Three-node formation did not converge.");
             observation.ClusterEvents.Add("formed:3");

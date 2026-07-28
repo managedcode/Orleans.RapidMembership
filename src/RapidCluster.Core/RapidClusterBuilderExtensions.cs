@@ -21,8 +21,8 @@ public static class RapidClusterBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(listenAddress);
 
-        builder.Services.RemoveAll<IListenAddressProvider>();
-        builder.Services.AddSingleton<IListenAddressProvider>(new StaticListenAddressProvider(listenAddress));
+        _ = builder.Services.RemoveAll<IListenAddressProvider>();
+        _ = builder.Services.AddSingleton<IListenAddressProvider>(new StaticListenAddressProvider(listenAddress));
 
         return builder;
     }
@@ -38,7 +38,7 @@ public static class RapidClusterBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(configure);
 
-        builder.Services.Configure(configure);
+        _ = builder.Services.Configure(configure);
 
         return builder;
     }
@@ -54,7 +54,7 @@ public static class RapidClusterBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(configure);
 
-        builder.Services.Configure(configure);
+        _ = builder.Services.Configure(configure);
 
         return builder;
     }

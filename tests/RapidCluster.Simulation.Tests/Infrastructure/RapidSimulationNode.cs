@@ -32,7 +32,6 @@ internal sealed class RapidSimulationNode : SimulationNode
     private readonly RapidSimulationNodeLogger _log;
     private readonly ILoggerFactory _nodeLoggerFactory;
     private readonly MembershipService _membershipService;
-    private readonly IMembershipViewAccessor _viewAccessor;
     private readonly IRapidClusterLifecycle _lifecycle;
     private readonly ServiceProvider _serviceProvider;
     private readonly CancellationTokenSource _disposeCts = new();
@@ -57,12 +56,12 @@ internal sealed class RapidSimulationNode : SimulationNode
     /// <summary>
     /// Gets the current membership view of this node.
     /// </summary>
-    public MembershipView CurrentView => _viewAccessor.CurrentView;
+    public MembershipView CurrentView => ViewAccessor.CurrentView;
 
     /// <summary>
     /// Gets the membership view accessor for subscribing to view changes.
     /// </summary>
-    public IMembershipViewAccessor ViewAccessor => _viewAccessor;
+    public IMembershipViewAccessor ViewAccessor { get; }
 
     /// <summary>
     /// Gets a value indicating whether gets whether this node is initialized and part of a cluster.
@@ -72,7 +71,7 @@ internal sealed class RapidSimulationNode : SimulationNode
     /// <summary>
     /// Gets the membership size of this node's view.
     /// </summary>
-    public int MembershipSize => _viewAccessor.CurrentView.Size;
+    public int MembershipSize => ViewAccessor.CurrentView.Size;
 
     /// <summary>
     /// Gets the messaging client for testing purposes.
@@ -143,23 +142,23 @@ internal sealed class RapidSimulationNode : SimulationNode
         var configuredFailureDetectorOptions = failureDetectorOptions ?? new PingPongFailureDetectorOptions();
         var simulationTimeProvider = ControlledTimeProvider.System;
         var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddSingleton<ILoggerFactory>(_ => _nodeLoggerFactory);
-        services.AddSingleton<IMeterFactory>(_ => new TestMeterFactory());
-        services.AddSingleton<IHostApplicationLifetime>(
-            _ => new SimulationHostApplicationLifetime(harness.TeardownCancellationToken));
-        services.AddSingleton(new SharedResources(
+        _ = services.AddLogging();
+        _ = services.AddSingleton<ILoggerFactory>(_ => _nodeLoggerFactory);
+        _ = services.AddSingleton<IMeterFactory>(_ => new TestMeterFactory());
+        _ = services.AddSingleton<IHostApplicationLifetime>(
+            _ => new SimulationHostApplicationLifetime(_disposeCts.Token));
+        _ = services.AddSingleton(new SharedResources(
             simulationTimeProvider,
-            harness.TeardownCancellationToken));
-        services.AddSingleton<IMessagingClient>(sp => new InMemoryMessagingClient(
+            _disposeCts.Token));
+        _ = services.AddSingleton<IMessagingClient>(sp => new InMemoryMessagingClient(
             harness,
             this,
             address,
             sp.GetRequiredService<IOptions<RapidClusterProtocolOptions>>().Value,
             sp.GetRequiredService<IOptions<PingPongFailureDetectorOptions>>().Value));
-        services.AddSingleton(sp => new RapidClusterMetrics(sp.GetRequiredService<IMeterFactory>(), cluster: null));
+        _ = services.AddSingleton(sp => new RapidClusterMetrics(sp.GetRequiredService<IMeterFactory>(), cluster: null));
 
-        services
+        _ = services
             .AddRapidClusterManual(
                 options =>
                 {
@@ -175,7 +174,7 @@ internal sealed class RapidSimulationNode : SimulationNode
             .ConfigureFailureDetector(options => CopyOptions(configuredFailureDetectorOptions, options));
 
         // Preserve simulation coverage for protocol edge cases which production validation rejects.
-        services.RemoveAll<IValidateOptions<RapidClusterProtocolOptions>>();
+        _ = services.RemoveAll<IValidateOptions<RapidClusterProtocolOptions>>();
 
         _serviceProvider = services.BuildServiceProvider(new ServiceProviderOptions
         {
@@ -183,7 +182,7 @@ internal sealed class RapidSimulationNode : SimulationNode
             ValidateScopes = true,
         });
         _membershipService = _serviceProvider.GetRequiredService<MembershipService>();
-        _viewAccessor = _serviceProvider.GetRequiredService<IMembershipViewAccessor>();
+        ViewAccessor = _serviceProvider.GetRequiredService<IMembershipViewAccessor>();
         _lifecycle = _serviceProvider.GetRequiredService<IRapidClusterLifecycle>();
         MessagingClient = (InMemoryMessagingClient)_serviceProvider.GetRequiredService<IMessagingClient>();
     }
@@ -228,10 +227,7 @@ internal sealed class RapidSimulationNode : SimulationNode
         return _harness.StartInSimulationNode(Address, () => _lifecycle.StopAsync(cancellationToken));
     }
 
-    internal void CompleteStop()
-    {
-        _log.NodeLeftGracefully(RapidClusterUtils.Loggable(Address));
-    }
+    internal void CompleteStop() => _log.NodeLeftGracefully(RapidClusterUtils.Loggable(Address));
 
     /// <summary>
     /// Disposes the node's resources. Should be called after unregistering from the network.
@@ -242,14 +238,15 @@ internal sealed class RapidSimulationNode : SimulationNode
         _disposed = true;
 
         // Cancel any in-flight requests first so they complete promptly
-        var cancellationTask = _disposeCts.CancelAsync();
-        var disposalTask = cancellationTask.ContinueWith(
-            static async (task, state) =>
+#pragma warning disable CA1849 // Synchronous cancellation keeps callbacks on the simulation thread.
+        _disposeCts.Cancel();
+#pragma warning restore CA1849
+        var disposalTask = Task.Factory.StartNew(
+            static async state =>
             {
                 var node = (RapidSimulationNode)state!;
                 try
                 {
-                    await task;
                     var providerDisposal = node._harness.StartInSimulationNode(
                         node.Address,
                         node._serviceProvider.DisposeAsync);
@@ -261,9 +258,9 @@ internal sealed class RapidSimulationNode : SimulationNode
                     node._disposeCts.Dispose();
                 }
             },
-            this,
+            state: this,
             CancellationToken.None,
-            TaskContinuationOptions.None,
+            TaskCreationOptions.DenyChildAttach,
             Context.TaskScheduler).Unwrap();
         return new ValueTask(disposalTask);
     }

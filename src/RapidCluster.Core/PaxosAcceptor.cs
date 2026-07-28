@@ -25,7 +25,7 @@ internal sealed class PaxosAcceptor
     private readonly Endpoint _myAddr;
 
     // Local fast-round vote tracking (primarily for observability)
-    private readonly Dictionary<MembershipProposal, int> _fastRoundVotes = new(MembershipProposalComparer.Instance);
+    private readonly Dictionary<MembershipProposal, int> _fastRoundVotes = [with(MembershipProposalComparer.Instance)];
 
     private Rank _promisedRank;
     private Rank _acceptedRank;

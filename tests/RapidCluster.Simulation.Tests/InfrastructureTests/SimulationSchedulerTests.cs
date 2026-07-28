@@ -100,7 +100,7 @@ public sealed class SimulationSchedulerTests
             task.Start(scheduler);
         }
 
-        taskQueue.RunUntilIdle();
+        _ = taskQueue.RunUntilIdle();
 
         Assert.Equal([0, 1, 2, 3, 4], order);
     }
@@ -115,7 +115,7 @@ public sealed class SimulationSchedulerTests
         syncContext.Post(_ => executed = true, state: null);
 
         Assert.False(executed);
-        taskQueue.RunOnce();
+        _ = taskQueue.RunOnce();
         Assert.True(executed);
     }
 
@@ -126,9 +126,10 @@ public sealed class SimulationSchedulerTests
         var syncContext = taskQueue.SynchronizationContext;
         var executed = false;
 
-        Assert.Throws<InvalidOperationException>(() => syncContext.Send(_ => executed = true, state: null));
+        syncContext.Send(_ => executed = true, state: null);
 
-        Assert.False(executed);
+        Assert.True(executed);
+        Assert.False(taskQueue.HasItems);
     }
 
     [Fact]
@@ -140,7 +141,7 @@ public sealed class SimulationSchedulerTests
         var copy = syncContext.CreateCopy();
 
         Assert.NotSame(syncContext, copy);
-        Assert.IsType<SynchronizationContext>(copy, exactMatch: false);
+        _ = Assert.IsType<SynchronizationContext>(copy, exactMatch: false);
     }
 
     [Fact]
@@ -158,7 +159,7 @@ public sealed class SimulationSchedulerTests
         var task2 = new Task(() => order.Add("second"));
         task2.Start(scheduler);
 
-        taskQueue.RunUntilIdle();
+        _ = taskQueue.RunUntilIdle();
 
         // First task should execute before second (queued at earlier time)
         Assert.Equal(["first", "second"], order);
@@ -186,7 +187,7 @@ public sealed class SimulationSchedulerTests
 
         Assert.True(scheduler.Tasks.Count > 0);
 
-        taskQueue.RunOnce();
+        _ = taskQueue.RunOnce();
 
         Assert.Empty(scheduler.Tasks);
     }

@@ -51,7 +51,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
         var seedNode = _harness.CreateSeedNode();
         var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
 
-        _harness.RunUntilConverged(expectedSize: 2);
+        _ = _harness.RunUntilConverged(expectedSize: 2);
 
         var knownAddresses = _harness.Nodes
             .Select(n => string.Create(CultureInfo.InvariantCulture, $"{n.Address.Hostname.ToStringUtf8()}:{n.Address.Port}"))
@@ -68,7 +68,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void NoSplitBrainWithSingleNode()
     {
-        _harness.CreateSeedNode();
+        _ = _harness.CreateSeedNode();
 
         var result = _checker.CheckNoSplitBrain();
 
@@ -82,7 +82,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
         var seedNode = _harness.CreateSeedNode();
         _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
 
-        _harness.RunUntilConverged(expectedSize: 2);
+        _ = _harness.RunUntilConverged(expectedSize: 2);
 
         var result = _checker.CheckNoSplitBrain();
 
@@ -93,7 +93,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void ConfigurationIdMonotonicityWithSingleNode()
     {
-        _harness.CreateSeedNode();
+        _ = _harness.CreateSeedNode();
 
         var result = _checker.CheckConfigurationIdMonotonicity();
 
@@ -107,7 +107,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
         var initialConfigId = seedNode.CurrentView.ConfigurationId;
         _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
 
-        _harness.RunUntilConverged(expectedSize: 2);
+        _ = _harness.RunUntilConverged(expectedSize: 2);
 
         // Config ID should have changed after membership change (it's a hash, not monotonically increasing)
         Assert.NotEqual(initialConfigId, seedNode.CurrentView.ConfigurationId);
@@ -126,7 +126,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void MembershipConsistencyWithSingleNode()
     {
-        _harness.CreateSeedNode();
+        _ = _harness.CreateSeedNode();
 
         var result = _checker.CheckMembershipConsistency();
         Assert.True(result);
@@ -138,7 +138,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
         var seedNode = _harness.CreateSeedNode();
         _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
 
-        _harness.RunUntilConverged(expectedSize: 2);
+        _ = _harness.RunUntilConverged(expectedSize: 2);
 
         var result = _checker.CheckMembershipConsistency();
         Assert.True(result);
@@ -155,7 +155,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void CheckAllWithSingleNode()
     {
-        _harness.CreateSeedNode();
+        _ = _harness.CreateSeedNode();
 
         var result = _checker.CheckAll();
         Assert.True(result);
@@ -168,7 +168,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
         var seedNode = _harness.CreateSeedNode();
         _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
 
-        _harness.RunUntilConverged(expectedSize: 2);
+        _ = _harness.RunUntilConverged(expectedSize: 2);
 
         var result = _checker.CheckAll();
         Assert.True(result);
@@ -239,7 +239,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
         var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
         var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
 
-        _harness.RunUntilConverged(expectedSize: 3);
+        _ = _harness.RunUntilConverged(expectedSize: 3);
 
         // Crash one joiner
         _harness.CrashNode(joiner2);
@@ -263,7 +263,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
         var seedNode = _harness.CreateSeedNode();
         var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
 
-        _harness.RunUntilConverged(expectedSize: 2);
+        _ = _harness.RunUntilConverged(expectedSize: 2);
 
         // Create partition
         _harness.PartitionNodes(seedNode, joiner);

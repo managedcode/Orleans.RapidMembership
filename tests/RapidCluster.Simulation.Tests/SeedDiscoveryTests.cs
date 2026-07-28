@@ -130,7 +130,7 @@ public sealed class SeedDiscoveryTests : IAsyncLifetime
     [Fact]
     public void EmptySeedList_ThrowsException()
     {
-        Assert.Throws<ArgumentException>(() =>
+        _ = Assert.Throws<ArgumentException>(() =>
             _harness.CreateJoinerNodeWithSeedAddresses([], nodeId: 1));
     }
 

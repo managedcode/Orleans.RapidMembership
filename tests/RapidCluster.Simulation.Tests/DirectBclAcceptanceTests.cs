@@ -20,8 +20,8 @@ public sealed class DirectBclAcceptanceTests
     [Fact]
     public void SameSeed_ReplaysIdentityRandomWorkOrderAndVirtualTimeExactly()
     {
-        DirectBclSnapshot first = Capture(seed: 73);
-        DirectBclSnapshot replay = Capture(seed: 73);
+        var first = Capture(seed: 73);
+        var replay = Capture(seed: 73);
 
         Assert.Equal(first, replay);
         AssertSnapshotContract(first);
@@ -30,8 +30,8 @@ public sealed class DirectBclAcceptanceTests
     [Fact]
     public void DifferentSeeds_VaryIdentityAndRandomWhilePreservingVirtualTimeContract()
     {
-        DirectBclSnapshot first = Capture(seed: 73);
-        DirectBclSnapshot second = Capture(seed: 74);
+        var first = Capture(seed: 73);
+        var second = Capture(seed: 74);
 
         Assert.NotEqual(first.FirstGuid, second.FirstGuid);
         Assert.NotEqual(first.SecondGuid, second.SecondGuid);
@@ -51,9 +51,9 @@ public sealed class DirectBclAcceptanceTests
     [InlineData(2147483646)]
     public void RepeatedSeedStress_EachScenarioReplaysTwice(int seed)
     {
-        DirectBclSnapshot first = Capture(seed);
-        DirectBclSnapshot replayOne = Capture(seed);
-        DirectBclSnapshot replayTwo = Capture(seed);
+        var first = Capture(seed);
+        var replayOne = Capture(seed);
+        var replayTwo = Capture(seed);
 
         Assert.Equal(first, replayOne);
         Assert.Equal(first, replayTwo);

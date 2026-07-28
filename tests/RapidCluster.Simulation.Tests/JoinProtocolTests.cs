@@ -280,7 +280,9 @@ public sealed class JoinProtocolTests : IAsyncLifetime
         {
             MaxJoinRetries = 3,
         };
-        Assert.Throws<JoinException>(() => _harness.CreateJoinerNode(seedNode, nodeId: 2, limitedRetryOptions));
+        var joiningNode = _harness.CreateUninitializedNode(nodeId: 2, seedNode, limitedRetryOptions);
+        _ = Assert.Throws<JoinException>(() => _harness.RunToCompletion(
+            () => joiningNode.StartAsync(TestContext.Current.CancellationToken)));
     }
 
     /// <summary>
@@ -394,13 +396,13 @@ public sealed class JoinProtocolTests : IAsyncLifetime
         // Give failure detection time to detect the partition.
         // With a larger cluster, the partition may or may not cause node removal
         // depending on how many observers report the failure.
-        _harness.RunForDuration(TimeSpan.FromSeconds(5));
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(5));
 
         // Heal the partition to restore connectivity
         _harness.HealPartition(seedNode, partitionedNode);
 
         // Wait briefly for the cluster to stabilize after healing
-        _harness.RunForDuration(TimeSpan.FromSeconds(2));
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(2));
 
         // Get remaining nodes to find one we can join through
         var aliveNodes = _harness.Nodes.Where(n => n.IsInitialized && n.MembershipSize > 0).ToList();

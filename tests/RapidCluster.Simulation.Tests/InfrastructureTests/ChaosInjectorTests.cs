@@ -35,7 +35,7 @@ public sealed class ChaosInjectorTests : IAsyncLifetime
     [Fact]
     public void MaybeInjectFaultReturnsFalseWithZeroRates()
     {
-        _harness.CreateSeedNode();
+        _ = _harness.CreateSeedNode();
 
         var result = _chaos.MaybeInjectFault();
 
@@ -59,8 +59,8 @@ public sealed class ChaosInjectorTests : IAsyncLifetime
         _chaos.ScheduleNodeCrash(node, TimeSpan.FromSeconds(10));
 
         // Advance time past the scheduled crash
-        _harness.RunForDuration(TimeSpan.FromSeconds(15));
-        _chaos.MaybeInjectFault(); // Process scheduled faults
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(15));
+        _ = _chaos.MaybeInjectFault(); // Process scheduled faults
 
         Assert.DoesNotContain(node, _harness.Nodes);
     }
@@ -87,8 +87,8 @@ public sealed class ChaosInjectorTests : IAsyncLifetime
         _chaos.ClearScheduledFaults();
 
         // Advance time and process - nothing should happen
-        _harness.RunForDuration(TimeSpan.FromSeconds(30));
-        _chaos.MaybeInjectFault();
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(30));
+        _ = _chaos.MaybeInjectFault();
 
         Assert.Contains(node, _harness.Nodes);
     }
@@ -96,10 +96,10 @@ public sealed class ChaosInjectorTests : IAsyncLifetime
     [Fact]
     public void RunChaosExecutesSpecifiedSteps()
     {
-        _harness.CreateSeedNode();
+        _ = _harness.CreateSeedNode();
 
         var initialTime = _harness.TimeProvider.GetUtcNow();
-        _chaos.RunChaos(steps: 10);
+        _ = _chaos.RunChaos(steps: 10);
 
         // Time should have advanced (chaos injects delays and events)
         Assert.True(_harness.TimeProvider.GetUtcNow() >= initialTime);
@@ -119,7 +119,7 @@ public sealed class ChaosInjectorTests : IAsyncLifetime
         _chaos.MinimumAliveNodes = 1;
 
         // Run chaos for many steps
-        _chaos.RunChaos(steps: 100);
+        _ = _chaos.RunChaos(steps: 100);
 
         // At least some nodes should have crashed
         Assert.True(_harness.Nodes.Count < 5);
@@ -134,9 +134,9 @@ public sealed class ChaosInjectorTests : IAsyncLifetime
         _chaos.MinimumAliveNodes = 1;
 
         // Run chaos
-        _chaos.RunChaos(steps: 10);
+        _ = _chaos.RunChaos(steps: 10);
 
         // Node should still be alive due to minimum
-        Assert.Single(_harness.Nodes);
+        _ = Assert.Single(_harness.Nodes);
     }
 }

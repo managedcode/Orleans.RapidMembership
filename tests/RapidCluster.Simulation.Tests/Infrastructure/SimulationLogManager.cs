@@ -35,8 +35,8 @@ internal sealed class SimulationLogManager : IDisposable
         _inMemoryLoggerProvider = new InMemoryLoggerProvider(timeProvider);
         LoggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder =>
         {
-            builder.AddProvider(_inMemoryLoggerProvider);
-            builder.SetMinimumLevel(LogLevel.Debug);
+            _ = builder.AddProvider(_inMemoryLoggerProvider);
+            _ = builder.SetMinimumLevel(LogLevel.Debug);
         });
     }
 
@@ -111,7 +111,7 @@ internal sealed class SimulationLogManager : IDisposable
         var sanitized = new System.Text.StringBuilder();
         foreach (var c in name)
         {
-            sanitized.Append(invalidChars.Contains(c) ? '_' : c);
+            _ = sanitized.Append(invalidChars.Contains(c) ? '_' : c);
         }
 
         // Truncate to a reasonable length to avoid path length issues

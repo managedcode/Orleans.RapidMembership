@@ -19,7 +19,7 @@ internal sealed class MembershipViewBuilder
     private readonly int _maxRingCount;
     private readonly List<AddressComparator> _addressComparators;
     private readonly List<List<MemberInfo>> _rings;
-    private readonly Dictionary<Endpoint, MemberInfo> _memberInfoByEndpoint = new(EndpointAddressComparer.Instance);
+    private readonly Dictionary<Endpoint, MemberInfo> _memberInfoByEndpoint = [with(EndpointAddressComparer.Instance)];
     private long _maxNodeId;
     private bool _isSealed;
 
@@ -35,8 +35,8 @@ internal sealed class MembershipViewBuilder
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxRingCount);
 
         _maxRingCount = maxRingCount;
-        _rings = new List<List<MemberInfo>>(maxRingCount);
-        _addressComparators = new List<AddressComparator>(maxRingCount);
+        _rings = [with(maxRingCount)];
+        _addressComparators = [with(maxRingCount)];
         _maxNodeId = 0;
 
         for (var i = 0; i < maxRingCount; i++)
@@ -72,8 +72,8 @@ internal sealed class MembershipViewBuilder
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxRingCount);
 
         _maxRingCount = maxRingCount;
-        _rings = new List<List<MemberInfo>>(_maxRingCount);
-        _addressComparators = new List<AddressComparator>(_maxRingCount);
+        _rings = [with(_maxRingCount)];
+        _addressComparators = [with(_maxRingCount)];
         _maxNodeId = view.MaxNodeId;
 
         foreach (var memberInfo in view.MemberInfos)
@@ -106,8 +106,8 @@ internal sealed class MembershipViewBuilder
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxRingCount);
 
         _maxRingCount = maxRingCount;
-        _rings = new List<List<MemberInfo>>(maxRingCount);
-        _addressComparators = new List<AddressComparator>(maxRingCount);
+        _rings = [with(maxRingCount)];
+        _addressComparators = [with(maxRingCount)];
 
         // Compute maxNodeId from members if not provided
         _maxNodeId = maxNodeId ?? members.Select(m => m.Endpoint.NodeId).DefaultIfEmpty(0).Max();
@@ -314,7 +314,7 @@ internal sealed class MembershipViewBuilder
             comparator.RemoveMemberInfo(memberInfo);
         }
 
-        _memberInfoByEndpoint.Remove(node);
+        _ = _memberInfoByEndpoint.Remove(node);
 
         return this;
     }
@@ -597,7 +597,7 @@ internal sealed class MembershipViewBuilder
     private sealed class AddressComparator(int seed) : IComparer<MemberInfo>
     {
         private readonly int _seed = seed;
-        private readonly Dictionary<Endpoint, long> _hashCache = new(EndpointAddressComparer.Instance);
+        private readonly Dictionary<Endpoint, long> _hashCache = [with(EndpointAddressComparer.Instance)];
 
         public int Compare(MemberInfo? x, MemberInfo? y)
         {

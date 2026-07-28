@@ -157,29 +157,18 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
         var viewChanges = new List<MembershipView>();
         var seedNode = _harness.CreateSeedNode();
 
-        var listenerStarted = new SimulationLatch(_harness.TaskQueue, initialCount: 1, name: "view-listener-started");
-        IDisposable? subscription = null;
-        var subscribeTask = new Task(() =>
-        {
-            subscription = seedNode.ViewAccessor.Updates.Subscribe(new ViewObserver(view =>
-            {
-                viewChanges.Add(view);
-            }));
-            listenerStarted.Signal();
-        });
-        subscribeTask.Start(_harness.TaskScheduler);
-
-        var listenerOutcome = _harness.RunUntilConverged(() => listenerStarted.IsSignaled);
-        Assert.True(listenerOutcome.ConditionMet, listenerOutcome.ToDetailedString());
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var subscription = _harness.InvokeInSimulation(
+            seedNode,
+            () => seedNode.ViewAccessor.Updates.Subscribe(new ViewObserver(viewChanges.Add)));
 
         try
         {
-            Assert.True(viewChanges.Count >= 2, "Expected the initial view and the joined view.");
+            _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+            Assert.Contains(viewChanges, view => view.Size == 2);
         }
         finally
         {
-            subscription?.Dispose();
+            _harness.ExecuteInSimulation(seedNode, subscription.Dispose);
         }
     }
 

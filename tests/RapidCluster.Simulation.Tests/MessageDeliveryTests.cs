@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using RapidCluster.Pb;
 using RapidCluster.Simulation.Tests.Infrastructure;
 
 namespace RapidCluster.Simulation.Tests;
@@ -176,5 +177,34 @@ public sealed class MessageDeliveryTests : IAsyncLifetime
         _harness.WaitForConvergence();
 
         Assert.All(_harness.Nodes, n => Assert.Equal(3, n.MembershipSize));
+    }
+
+    [Fact]
+    public void UnavailableEndpointReturnsRetryableJoinFailure()
+    {
+        var seedNode = _harness.CreateSeedNode();
+        var unavailable = RapidClusterUtils.HostFromParts("missing", 99);
+        var request = new PreJoinMessage { Sender = seedNode.Address }.ToRapidClusterRequest();
+
+        var response = _harness.RunToCompletion(
+            () => seedNode.MessagingClient.SendMessageAsync(
+                unavailable,
+                request,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(JoinStatusCode.MembershipRejected, response.JoinResponse.StatusCode);
+    }
+
+    [Fact]
+    public void NullEndpointIsRejectedSynchronously()
+    {
+        var seedNode = _harness.CreateSeedNode();
+        var request = new PreJoinMessage { Sender = seedNode.Address }.ToRapidClusterRequest();
+
+        _ = Assert.Throws<ArgumentNullException>(
+            () =>
+            {
+                _ = seedNode.MessagingClient.SendMessageAsync(null!, request, CancellationToken.None);
+            });
     }
 }

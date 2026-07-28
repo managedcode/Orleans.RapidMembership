@@ -106,6 +106,34 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     }
 
     /// <summary>
+    /// Executes a synchronous boundary call within the specified node's simulation runtime.
+    /// </summary>
+    public void ExecuteInSimulation(RapidSimulationNode node, Action action)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(action);
+        _ = InvokeInSimulation(
+            node,
+            () =>
+            {
+                action();
+                return true;
+            });
+    }
+
+    /// <summary>
+    /// Invokes a synchronous boundary call within the specified node's simulation runtime.
+    /// </summary>
+    public T InvokeInSimulation<T>(RapidSimulationNode node, Func<T> action)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(action);
+        using var runtimeScope = EnterSimulationNodeRuntime(node.Address);
+        using var guardScope = Guard.Enter();
+        return action();
+    }
+
+    /// <summary>
     /// Gets a node by its network address.
     /// </summary>
     /// <param name="address">The network address of the node.</param>
@@ -574,6 +602,31 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     }
 
     /// <summary>
+    /// Starts a result-producing task normally and adaptively drives the simulation until it completes.
+    /// </summary>
+    public T RunToCompletion<T>(
+        Func<Task<T>> taskFactory,
+        SimulationAdaptiveBudget? budget = null)
+    {
+        ArgumentNullException.ThrowIfNull(taskFactory);
+        Task<T> task;
+        using (EnterSimulationRuntime())
+        using (Guard.Enter())
+        {
+            task = taskFactory();
+        }
+
+        var outcome = RunUntilConverged(() => task.IsCompleted, budget);
+        if (!outcome.ConditionMet)
+        {
+            throw new TimeoutException(
+                $"Task did not complete.{Environment.NewLine}{outcome.ToDetailedString()}");
+        }
+
+        return task.GetAwaiter().GetResult();
+    }
+
+    /// <summary>
     /// Waits for all active cluster members to converge to a consistent view.
     /// Suspended nodes and nodes whose current view no longer contains themselves do not
     /// participate in convergence.
@@ -683,15 +736,15 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     private string BuildMaxIterationDiagnostics(int maxItemsPerQueue)
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine(CultureInfo.InvariantCulture, $"SimulatedTime={TimeProvider.GetUtcNow():O}");
+        _ = sb.AppendLine(CultureInfo.InvariantCulture, $"SimulatedTime={TimeProvider.GetUtcNow():O}");
 
-        sb.AppendLine(CultureInfo.InvariantCulture, $"ClusterQueue: Items={TaskQueue.ScheduledItems.Count}, NextWaiting={TaskQueue.NextWaitingDueTime:O}");
+        _ = sb.AppendLine(CultureInfo.InvariantCulture, $"ClusterQueue: Items={TaskQueue.ScheduledItems.Count}, NextWaiting={TaskQueue.NextWaitingDueTime:O}");
         AppendQueueHead(sb, TaskQueue, maxItemsPerQueue);
 
         foreach (var node in Nodes)
         {
             var ctx = node.Context;
-            sb.AppendLine(CultureInfo.InvariantCulture, $"Node={node.NetworkAddress} State={ctx.State} Items={ctx.TaskQueue.ScheduledItems.Count} HasReady={ctx.HasReadyTasks} NextWaiting={ctx.NextWaitingDueTime:O}");
+            _ = sb.AppendLine(CultureInfo.InvariantCulture, $"Node={node.NetworkAddress} State={ctx.State} Items={ctx.TaskQueue.ScheduledItems.Count} HasReady={ctx.HasReadyTasks} NextWaiting={ctx.NextWaitingDueTime:O}");
             AppendQueueHead(sb, ctx.TaskQueue, maxItemsPerQueue);
         }
 
@@ -705,11 +758,11 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         {
             if (count++ >= maxItems)
             {
-                sb.AppendLine("  ...");
+                _ = sb.AppendLine("  ...");
                 break;
             }
 
-            sb.AppendLine(CultureInfo.InvariantCulture, $"  {item.GetType().Name} Due={item.DueTime:O}");
+            _ = sb.AppendLine(CultureInfo.InvariantCulture, $"  {item.GetType().Name} Due={item.DueTime:O}");
         }
     }
 
@@ -731,20 +784,58 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// <inheritdoc />
     protected override void OnTimeAdvancing(TimeSpan delta) => _log.TimeAdvancing($"{delta}");
 
-    /// <inheritdoc />
-    protected override async ValueTask DisposeAsyncCore()
+    /// <summary>
+    /// Disposes nodes through the adaptive simulation driver before releasing the base runtime.
+    /// </summary>
+    public new async ValueTask DisposeAsync()
     {
         if (_disposed) return;
         _disposed = true;
 
-        // Dispose all nodes to cancel in-flight tasks and release resources.
-        // This triggers cancellation of each node's _disposeCts, which propagates
-        // to MembershipService and MessagingClient, allowing pending tasks to complete.
+        var nodes = Nodes.ToList();
+        try
+        {
+            foreach (var node in nodes)
+            {
+                if (node.IsSuspended)
+                {
+                    node.Resume();
+                }
+            }
+
+            _ = RunToCompletion(() => Task.WhenAll(nodes.Select(node => node.DisposeAsync().AsTask())));
+
+            foreach (var node in nodes)
+            {
+                UnregisterNode(node);
+            }
+        }
+        finally
+        {
+            await base.DisposeAsync();
+        }
+    }
+
+    /// <inheritdoc />
+    protected override async ValueTask DisposeAsyncCore()
+    {
+        // This fallback covers disposal through an IAsyncDisposable/base-typed reference.
         var nodes = Nodes.ToList();
         foreach (var node in nodes)
         {
-            await node.DisposeAsync();
-            UnregisterNode(node);
+            if (node.IsSuspended)
+            {
+                node.Resume();
+            }
+        }
+
+        if (nodes.Count > 0)
+        {
+            await Task.WhenAll(nodes.Select(node => node.DisposeAsync().AsTask()));
+            foreach (var node in nodes)
+            {
+                UnregisterNode(node);
+            }
         }
 
         // Attach logs to test context BEFORE disposing the provider

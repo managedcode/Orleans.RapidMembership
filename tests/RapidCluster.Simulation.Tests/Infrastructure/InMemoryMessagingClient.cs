@@ -1,9 +1,7 @@
 using Clockwork;
-using Microsoft.Extensions.Logging;
 using RapidCluster.Messaging;
 using RapidCluster.Monitoring;
 using RapidCluster.Pb;
-using RapidCluster.Simulation.Tests.Infrastructure.Logging;
 
 namespace RapidCluster.Simulation.Tests.Infrastructure;
 
@@ -26,7 +24,6 @@ internal sealed class InMemoryMessagingClient(
 {
     private readonly RapidClusterProtocolOptions _protocolOptions = protocolOptions;
     private readonly PingPongFailureDetectorOptions _failureDetectorOptions = failureDetectorOptions;
-    private readonly InMemoryMessagingClientLogger _log = new(harness.LoggerFactory.CreateLogger<InMemoryMessagingClient>());
     private readonly CancellationTokenSource _disposeCts = new();
     private bool _disposed;
 
@@ -40,18 +37,23 @@ internal sealed class InMemoryMessagingClient(
     /// </summary>
     private static readonly TimeSpan JoinTimeout = TimeSpan.FromSeconds(5);
 
-    private TimeSpan GetTimeout(RapidClusterRequest request) => request.ContentCase switch
+    private TimeSpan GetTimeout(RapidClusterRequest request)
     {
-        RapidClusterRequest.ContentOneofCase.ProbeMessage => _failureDetectorOptions.ProbeTimeout,
-        RapidClusterRequest.ContentOneofCase.PreJoinMessage => JoinTimeout,
-        RapidClusterRequest.ContentOneofCase.JoinMessage => JoinTimeout,
-        RapidClusterRequest.ContentOneofCase.LeaveMessage => _protocolOptions.LeaveMessageTimeout,
-        _ => DefaultRpcTimeout,
-    };
+#pragma warning disable IDE0072 // Protobuf enums can contain unnamed numeric values.
+        return request.ContentCase switch
+        {
+            RapidClusterRequest.ContentOneofCase.ProbeMessage => _failureDetectorOptions.ProbeTimeout,
+            RapidClusterRequest.ContentOneofCase.PreJoinMessage => JoinTimeout,
+            RapidClusterRequest.ContentOneofCase.JoinMessage => JoinTimeout,
+            RapidClusterRequest.ContentOneofCase.LeaveMessage => _protocolOptions.LeaveMessageTimeout,
+            _ => DefaultRpcTimeout,
+        };
+#pragma warning restore IDE0072
+    }
 
     public void SendOneWayMessage(Endpoint remote, RapidClusterRequest request, Rank? rank, DeliveryFailureCallback? onDeliveryFailure, CancellationToken cancellationToken)
     {
-        var sendTask = SendMessageAsync(remote, request, cancellationToken);
+        var sendTask = StartSend(remote, request, cancellationToken);
         sendTask.Ignore();
 
         if (onDeliveryFailure is not null)
@@ -60,7 +62,7 @@ internal sealed class InMemoryMessagingClient(
                 static (t, state) =>
                 {
                     var (callback, endpoint, rank) = ((DeliveryFailureCallback, Endpoint, Rank))state!;
-                    if (t.IsFaulted)
+                    if (!t.IsCompletedSuccessfully || !t.Result.Delivered)
                     {
                         callback(endpoint, rank);
                     }
@@ -74,43 +76,63 @@ internal sealed class InMemoryMessagingClient(
 
     public Task<RapidClusterResponse> SendMessageAsync(Endpoint remote, RapidClusterRequest request, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(remote);
+        ArgumentNullException.ThrowIfNull(request);
         ObjectDisposedException.ThrowIf(_disposed, this);
 
+        return StartSend(remote, request, cancellationToken).ContinueWith(
+            static (task, state) =>
+            {
+                var result = task.GetAwaiter().GetResult();
+                return result.Delivered
+                    ? result.Response!
+                    : CreateFailureResponse((RapidClusterRequest)state!);
+            },
+            request,
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            sourceNode.Context.TaskScheduler);
+    }
+
+    private Task<MessageDeliveryResult> StartSend(
+        Endpoint remote,
+        RapidClusterRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(remote);
+        ArgumentNullException.ThrowIfNull(request);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        var localAddr = RapidClusterUtils.Loggable(localEndpoint);
+        var remoteAddr = RapidClusterUtils.Loggable(remote);
+        var targetNode = harness.GetNode(remoteAddr);
+        var messageTimeout = GetTimeout(request);
+        if (targetNode is null ||
+            harness.Network.CheckDelivery(localAddr, remoteAddr) is not DeliveryStatus.Success)
+        {
+            return CreateFailureTask(messageTimeout, cancellationToken);
+        }
+
         return Task.Factory.StartNew(
-            () => SendMessageCoreAsync(remote, request, cancellationToken),
+            () => SendMessageCoreAsync(targetNode, request, localAddr, remoteAddr, cancellationToken),
             CancellationToken.None,
             TaskCreationOptions.DenyChildAttach,
             sourceNode.Context.TaskScheduler).Unwrap();
     }
 
-    private async Task<RapidClusterResponse> SendMessageCoreAsync(
-        Endpoint remote,
+    private async Task<MessageDeliveryResult> SendMessageCoreAsync(
+        RapidSimulationNode targetNode,
         RapidClusterRequest request,
+        string localAddr,
+        string remoteAddr,
         CancellationToken cancellationToken)
     {
         using var sourceCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
-        var localAddr = RapidClusterUtils.Loggable(localEndpoint);
-        var remoteAddr = RapidClusterUtils.Loggable(remote);
-        var targetNode = harness.GetNode(remoteAddr) ?? throw new SimulatedNetworkException($"No target node found for address {remoteAddr}");
         var sourceContext = sourceNode.Context;
+        var messageTimeout = GetTimeout(request);
         var targetContext = targetNode.Context;
         var network = harness.Network;
-        var networkStatus = network.CheckDelivery(localAddr, remoteAddr);
         var delay = network.GetMessageDelay();
-        var messageTimeout = GetTimeout(request);
-        if (networkStatus is DeliveryStatus.Dropped)
-        {
-            await Task.Delay(messageTimeout, sourceContext.TimeProvider, sourceCts.Token);
-            throw new SimulatedNetworkException($"Message from {localAddr} to {remoteAddr} was dropped by the network.");
-        }
-
-        if (networkStatus is DeliveryStatus.Partitioned)
-        {
-            // In real networking, a partition behaves like a timeout, not an immediate failure.
-            // Delaying here prevents tight retry loops from starving simulated time advancement.
-            await Task.Delay(messageTimeout, sourceContext.TimeProvider, sourceCts.Token);
-            throw new SimulatedNetworkException($"Message from {localAddr} to {remoteAddr} could not be delivered due to network partition.");
-        }
 
         // Schedule delivery on the target node.
         var targetCancellation = targetNode.TeardownCancellationToken;
@@ -124,19 +146,66 @@ internal sealed class InMemoryMessagingClient(
         // Ignore the task in case the source is terminated before it resolves.
         deliveryTask.Ignore();
 
-        return await deliveryTask.WaitAsync(messageTimeout, sourceContext.TimeProvider, sourceCts.Token);
-
-        async Task<RapidClusterResponse> DeliverMessageAsync()
+        try
         {
-            await Task.Delay(delay, targetContext.TimeProvider, targetCancellation);
-            return network.CheckDelivery(localAddr, remoteAddr) switch
-            {
-                DeliveryStatus.Dropped => throw new SimulatedNetworkException($"Message from {localAddr} to {remoteAddr} was dropped by the network."),
-                DeliveryStatus.Partitioned => throw new SimulatedNetworkException($"Message from {localAddr} to {remoteAddr} could not be delivered due to network partition."),
-                DeliveryStatus.Success => await targetNode.HandleRequestAsync(request, targetCancellation),
-                _ => throw new InvalidOperationException("Unrecognized delivery status."),
-            };
+            return await deliveryTask.WaitAsync(messageTimeout, sourceContext.TimeProvider, sourceCts.Token);
         }
+        catch (TimeoutException)
+        {
+            return MessageDeliveryResult.Failed;
+        }
+
+        async Task<MessageDeliveryResult> DeliverMessageAsync()
+        {
+            try
+            {
+                await Task.Delay(delay, targetContext.TimeProvider, targetCancellation);
+                return network.CheckDelivery(localAddr, remoteAddr) switch
+                {
+                    DeliveryStatus.Dropped => MessageDeliveryResult.Failed,
+                    DeliveryStatus.Partitioned => MessageDeliveryResult.Failed,
+                    DeliveryStatus.Success => MessageDeliveryResult.Succeeded(await targetNode.HandleRequestAsync(request, targetCancellation)),
+                    _ => throw new InvalidOperationException("Unrecognized delivery status."),
+                };
+            }
+            catch (OperationCanceledException) when (targetCancellation.IsCancellationRequested)
+            {
+                return MessageDeliveryResult.Failed;
+            }
+        }
+    }
+
+    private Task<MessageDeliveryResult> CreateFailureTask(TimeSpan timeout, CancellationToken cancellationToken)
+    {
+#pragma warning disable CA2000 // The continuation disposes the linked source after the delay completes.
+        var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
+#pragma warning restore CA2000
+        return Task.Delay(timeout, sourceNode.Context.TimeProvider, linkedCts.Token).ContinueWith(
+            static (task, state) =>
+            {
+                ((CancellationTokenSource)state!).Dispose();
+                task.GetAwaiter().GetResult();
+                return MessageDeliveryResult.Failed;
+            },
+            linkedCts,
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            sourceNode.Context.TaskScheduler);
+    }
+
+    private static RapidClusterResponse CreateFailureResponse(RapidClusterRequest request)
+    {
+#pragma warning disable IDE0072 // Protobuf enums can contain unnamed numeric values.
+        return request.ContentCase switch
+        {
+            RapidClusterRequest.ContentOneofCase.PreJoinMessage or
+            RapidClusterRequest.ContentOneofCase.JoinMessage => new RapidClusterResponse
+            {
+                JoinResponse = new JoinResponse { StatusCode = JoinStatusCode.MembershipRejected },
+            },
+            _ => new RapidClusterResponse(),
+        };
+#pragma warning restore IDE0072
     }
 
     public ValueTask DisposeAsync()
@@ -154,12 +223,10 @@ internal sealed class InMemoryMessagingClient(
         _disposeCts.Dispose();
     }
 
-    private sealed class SimulatedNetworkException : Exception
+    private readonly record struct MessageDeliveryResult(bool Delivered, RapidClusterResponse? Response)
     {
-        public SimulatedNetworkException() { }
+        public static MessageDeliveryResult Failed => default;
 
-        public SimulatedNetworkException(string message) : base(message) { }
-
-        public SimulatedNetworkException(string message, Exception innerException) : base(message, innerException) { }
+        public static MessageDeliveryResult Succeeded(RapidClusterResponse response) => new(true, response);
     }
 }

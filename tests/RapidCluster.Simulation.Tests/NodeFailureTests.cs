@@ -117,7 +117,7 @@ public sealed class NodeFailureTests : IAsyncLifetime
         Assert.Equal(2, _harness.Nodes.Count);
 
         _harness.CrashNode(joiner1);
-        Assert.Single(_harness.Nodes);
+        _ = Assert.Single(_harness.Nodes);
     }
 
     [Fact]
@@ -169,9 +169,9 @@ public sealed class NodeFailureTests : IAsyncLifetime
         var options = new RapidClusterProtocolOptions { MaxJoinRetries = 3 };
 
         // Attempting to join through crashed seed should fail with JoinException
-        // The underlying cause is a timeout, but JoinException is the public contract for join failures
+        // The adapter returns a retryable protocol rejection, and JoinException is the public contract.
         var ex = Assert.Throws<JoinException>(() => _harness.CreateJoinerNode(seedNode, nodeId: 1, options: options));
-        Assert.Contains("Timeout", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("MembershipRejected", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

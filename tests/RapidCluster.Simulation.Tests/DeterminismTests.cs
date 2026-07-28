@@ -81,7 +81,7 @@ public sealed class DeterminismTests : IAsyncLifetime
     {
         var initialTime = _harness.TimeProvider.GetUtcNow();
 
-        _harness.RunForDuration(TimeSpan.FromMinutes(5));
+        _ = _harness.RunForDuration(TimeSpan.FromMinutes(5));
 
         var newTime = _harness.TimeProvider.GetUtcNow();
         Assert.Equal(initialTime + TimeSpan.FromMinutes(5), newTime);
@@ -111,7 +111,7 @@ public sealed class DeterminismTests : IAsyncLifetime
     [Fact]
     public void RunUntilConvergedWorks()
     {
-        _harness.CreateSeedNode();
+        _ = _harness.CreateSeedNode();
 
         // The condition should already be met since the single node is converged.
         var result = _harness.RunUntilConverged(expectedSize: 1);

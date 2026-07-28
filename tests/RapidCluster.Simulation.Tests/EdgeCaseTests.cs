@@ -137,7 +137,7 @@ public sealed class EdgeCaseTests : IAsyncLifetime
         _ = _harness.CreateSeedNode();
 
         // CreateJoinerNode requires a valid seed node
-        Assert.Throws<ArgumentNullException>(() => _harness.CreateJoinerNode(null!, nodeId: 1));
+        _ = Assert.Throws<ArgumentNullException>(() => _harness.CreateJoinerNode(null!, nodeId: 1));
     }
 
     [Fact]
@@ -160,7 +160,7 @@ public sealed class EdgeCaseTests : IAsyncLifetime
 
         // Attempting to join using an uninitialized node as seed should fail
         // because the uninitialized node doesn't have proper membership set up
-        Assert.ThrowsAny<Exception>(() => _harness.CreateJoinerNode(uninitializedNode, nodeId: 2));
+        _ = Assert.ThrowsAny<Exception>(() => _harness.CreateJoinerNode(uninitializedNode, nodeId: 2));
 
         // Cleanup
         _harness.CrashNode(uninitializedNode);
@@ -258,7 +258,7 @@ public sealed class EdgeCaseTests : IAsyncLifetime
         var random = _harness.Random;
         var emptyList = new List<int>();
 
-        Assert.Throws<ArgumentException>(() => random.Choose(emptyList));
+        _ = Assert.Throws<ArgumentException>(() => random.Choose(emptyList));
     }
 
     [Fact]

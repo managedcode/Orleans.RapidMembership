@@ -48,7 +48,7 @@ public sealed class ClusterBasicTests : IAsyncLifetime
 
         var view = seedNode.CurrentView;
         Assert.NotNull(view);
-        Assert.Single(view.Members);
+        _ = Assert.Single(view.Members);
 
         var member = view.Members[0];
         Assert.Equal(seedNode.Address.Hostname, member.Hostname);
@@ -66,7 +66,7 @@ public sealed class ClusterBasicTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SingleNodeCanLeaveCluster()
+    public void SingleNodeCanLeaveCluster()
     {
         var seedNode = _harness.CreateSeedNode();
         Assert.True(seedNode.IsInitialized);

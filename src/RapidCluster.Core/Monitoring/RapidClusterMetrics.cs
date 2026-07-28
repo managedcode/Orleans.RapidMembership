@@ -252,13 +252,13 @@ public sealed class RapidClusterMetrics
         // ========================================
         if (_cluster != null)
         {
-            _meter.CreateObservableGauge(
+            _ = _meter.CreateObservableGauge(
                 name: MetricNames.ClusterSize,
                 observeValue: () => _cluster.CurrentView.Members.Length,
                 unit: "{nodes}",
                 description: "Current number of nodes in the cluster");
 
-            _meter.CreateObservableGauge(
+            _ = _meter.CreateObservableGauge(
                 name: MetricNames.ClusterConfigurationId,
                 observeValue: () => _cluster.CurrentView.ConfigurationId.Version,
                 unit: "{id}",

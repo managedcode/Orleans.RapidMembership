@@ -205,42 +205,51 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
         // This avoids Task.Run which introduces real concurrency outside the simulation.
         // The observer's OnNext will be called synchronously during view publication,
         // which happens during simulation step execution.
-        seedNode.ViewAccessor.Updates.Subscribe(new ViewHistoryObserver(viewHistory, clusterSize), cts.Token);
+        var subscription = _harness.InvokeInSimulation(
+            seedNode,
+            () => seedNode.ViewAccessor.Updates.Subscribe(new ViewHistoryObserver(viewHistory, clusterSize)));
 
-        // Create nodes first (without starting joins)
-        var nodes = new List<RapidSimulationNode>();
-        for (var i = 1; i < clusterSize; i++)
+        try
         {
-            nodes.Add(_harness.CreateUninitializedNode(i, seedNode));
+            // Create nodes first (without starting joins)
+            var nodes = new List<RapidSimulationNode>();
+            for (var i = 1; i < clusterSize; i++)
+            {
+                nodes.Add(_harness.CreateUninitializedNode(i, seedNode));
+            }
+
+            _ = _harness.RunToCompletion(() =>
+            {
+                var joinTasks = nodes.Select(n => n.StartAsync(cts.Token));
+                return Task.WhenAll(joinTasks);
+            });
+            foreach (var node in nodes)
+            {
+                node.CompleteInitialization();
+            }
+
+            _harness.WaitForConvergence();
+
+            // Compute and log detailed view transitions
+            var transitions = ComputeViewTransitions(viewHistory);
+            LogViewTransitions("ParallelJoins", transitions);
+
+            // Verify batching occurred
+            var configChanges = transitions.Count;
+            var nodesJoined = clusterSize - 1;
+            var avgNodesPerChange = configChanges > 0 ? (double)nodesJoined / configChanges : 0;
+
+            LogBatchingSummary("ParallelJoins (detailed)", clusterSize, configChanges, nodesJoined, avgNodesPerChange);
+
+            // Should have fewer config changes than nodes (indicating batching)
+            Assert.True(configChanges < nodesJoined,
+                "Expected batching (fewer config changes than nodes joined). " +
+                string.Create(CultureInfo.InvariantCulture, $"Got {configChanges} changes for {nodesJoined} nodes joined."));
         }
-
-        _ = _harness.RunToCompletion(() =>
+        finally
         {
-            var joinTasks = nodes.Select(n => n.StartAsync(cts.Token));
-            return Task.WhenAll(joinTasks);
-        });
-        foreach (var node in nodes)
-        {
-            node.CompleteInitialization();
+            _harness.ExecuteInSimulation(seedNode, subscription.Dispose);
         }
-
-        _harness.WaitForConvergence();
-
-        // Compute and log detailed view transitions
-        var transitions = ComputeViewTransitions(viewHistory);
-        LogViewTransitions("ParallelJoins", transitions);
-
-        // Verify batching occurred
-        var configChanges = transitions.Count;
-        var nodesJoined = clusterSize - 1;
-        var avgNodesPerChange = configChanges > 0 ? (double)nodesJoined / configChanges : 0;
-
-        LogBatchingSummary("ParallelJoins (detailed)", clusterSize, configChanges, nodesJoined, avgNodesPerChange);
-
-        // Should have fewer config changes than nodes (indicating batching)
-        Assert.True(configChanges < nodesJoined,
-            "Expected batching (fewer config changes than nodes joined). " +
-            string.Create(CultureInfo.InvariantCulture, $"Got {configChanges} changes for {nodesJoined} nodes joined."));
     }
 
     /// <summary>
@@ -276,7 +285,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
         var configIds = nodes.Select(n => n.CurrentView.ConfigurationId).Distinct().ToList();
 
         // All nodes should have the same configuration ID
-        Assert.Single(configIds);
+        _ = Assert.Single(configIds);
     }
 
     /// <summary>
@@ -346,7 +355,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
 
         // All nodes should have the same view
         var configIds = joiners.Select(n => n.CurrentView.ConfigurationId).Distinct().ToList();
-        Assert.Single(configIds);
+        _ = Assert.Single(configIds);
     }
 
     /// <summary>
@@ -595,9 +604,9 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
         // Grow the cluster
         for (var i = 1; i <= 5; i++)
         {
-            _harness.CreateJoinerNode(seedNode, nodeId: i);
+            _ = _harness.CreateJoinerNode(seedNode, nodeId: i);
             _harness.WaitForConvergence();
-            configIds.Add(seedNode.CurrentView.ConfigurationId);
+            _ = configIds.Add(seedNode.CurrentView.ConfigurationId);
         }
 
         // Shrink the cluster
@@ -605,7 +614,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
         foreach (var node in nodesToRemove)
         {
             _harness.RemoveNodeGracefully(node);
-            configIds.Add(seedNode.CurrentView.ConfigurationId);
+            _ = configIds.Add(seedNode.CurrentView.ConfigurationId);
         }
 
         // Each membership change should result in a different configuration ID
@@ -626,18 +635,18 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
         string? suffix = null)
     {
         var sb = new StringBuilder();
-        sb.AppendLine();
-        sb.AppendLine(CultureInfo.InvariantCulture, $"=== {operationType} Batching Summary ===");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"  Total nodes: {totalNodes}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"  Nodes changed: {nodesChanged}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"  Configuration changes: {configChanges}");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"  Avg nodes per change: {avgNodesPerChange:F1}");
+        _ = sb.AppendLine();
+        _ = sb.AppendLine(CultureInfo.InvariantCulture, $"=== {operationType} Batching Summary ===");
+        _ = sb.AppendLine(CultureInfo.InvariantCulture, $"  Total nodes: {totalNodes}");
+        _ = sb.AppendLine(CultureInfo.InvariantCulture, $"  Nodes changed: {nodesChanged}");
+        _ = sb.AppendLine(CultureInfo.InvariantCulture, $"  Configuration changes: {configChanges}");
+        _ = sb.AppendLine(CultureInfo.InvariantCulture, $"  Avg nodes per change: {avgNodesPerChange:F1}");
         if (suffix != null)
         {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"  {suffix}");
+            _ = sb.AppendLine(CultureInfo.InvariantCulture, $"  {suffix}");
         }
 
-        sb.AppendLine("================================");
+        _ = sb.AppendLine("================================");
 
         TestContext.Current.TestOutputHelper?.WriteLine(sb.ToString());
     }
@@ -660,22 +669,22 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
     private static void LogViewTransitions(string operationType, IReadOnlyList<ViewTransition> transitions)
     {
         var sb = new StringBuilder();
-        sb.AppendLine();
-        sb.AppendLine(CultureInfo.InvariantCulture, $"=== {operationType} View Transitions ({transitions.Count} changes) ===");
+        _ = sb.AppendLine();
+        _ = sb.AppendLine(CultureInfo.InvariantCulture, $"=== {operationType} View Transitions ({transitions.Count} changes) ===");
 
         foreach (var t in transitions)
         {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"  Version {t.Version}: {t.PreviousSize} -> {t.NewSize} members");
+            _ = sb.AppendLine(CultureInfo.InvariantCulture, $"  Version {t.Version}: {t.PreviousSize} -> {t.NewSize} members");
             if (t.MembersAdded > 0)
             {
                 var moreAddedText = t.MembersAdded > 5 ? string.Create(CultureInfo.InvariantCulture, $"... (+{t.MembersAdded - 5} more)") : "";
-                sb.AppendLine(CultureInfo.InvariantCulture, $"    + Added ({t.MembersAdded}): {string.Join(", ", t.AddedMembers.Take(5))}{moreAddedText}");
+                _ = sb.AppendLine(CultureInfo.InvariantCulture, $"    + Added ({t.MembersAdded}): {string.Join(", ", t.AddedMembers.Take(5))}{moreAddedText}");
             }
 
             if (t.MembersRemoved > 0)
             {
                 var moreRemovedText = t.MembersRemoved > 5 ? string.Create(CultureInfo.InvariantCulture, $"... (+{t.MembersRemoved - 5} more)") : "";
-                sb.AppendLine(CultureInfo.InvariantCulture, $"    - Removed ({t.MembersRemoved}): {string.Join(", ", t.RemovedMembers.Take(5))}{moreRemovedText}");
+                _ = sb.AppendLine(CultureInfo.InvariantCulture, $"    - Removed ({t.MembersRemoved}): {string.Join(", ", t.RemovedMembers.Take(5))}{moreRemovedText}");
             }
         }
 
@@ -685,11 +694,11 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
         var avgAddedPerChange = transitions.Count > 0 ? (double)totalAdded / transitions.Count : 0;
         var avgRemovedPerChange = transitions.Count > 0 ? (double)totalRemoved / transitions.Count : 0;
 
-        sb.AppendLine();
-        sb.AppendLine("  Summary:");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"    Total members added: {totalAdded} (avg {avgAddedPerChange:F1} per change)");
-        sb.AppendLine(CultureInfo.InvariantCulture, $"    Total members removed: {totalRemoved} (avg {avgRemovedPerChange:F1} per change)");
-        sb.AppendLine("================================");
+        _ = sb.AppendLine();
+        _ = sb.AppendLine("  Summary:");
+        _ = sb.AppendLine(CultureInfo.InvariantCulture, $"    Total members added: {totalAdded} (avg {avgAddedPerChange:F1} per change)");
+        _ = sb.AppendLine(CultureInfo.InvariantCulture, $"    Total members removed: {totalRemoved} (avg {avgRemovedPerChange:F1} per change)");
+        _ = sb.AppendLine("================================");
 
         TestContext.Current.TestOutputHelper?.WriteLine(sb.ToString());
     }

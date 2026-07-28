@@ -187,7 +187,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
 
         Assert.True(_harness.TaskQueue.HasItems);
 
-        _harness.TaskQueue.RunUntilIdle();
+        _ = _harness.TaskQueue.RunUntilIdle();
 
         Assert.False(_harness.TaskQueue.HasItems);
     }
@@ -206,7 +206,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
         seedNode.Suspend();
 
         // Try to run the simulation - task should not execute because node is suspended
-        _harness.RunUntil(() => false, maxIterations: 10);
+        _ = _harness.RunUntil(() => false, maxIterations: 10);
 
         Assert.False(executed);
         Assert.True(seedNode.IsSuspended);
@@ -250,7 +250,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
         Assert.True(seedNode.IsSuspended);
 
         // Run until idle - should advance time and resume the node
-        _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromSeconds(2));
+        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromSeconds(2));
 
         Assert.False(seedNode.IsSuspended);
         Assert.True(executed);
@@ -263,7 +263,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
         var context = _harness.GetNodeContext(seedNode);
 
         // Run until idle first to clear any startup tasks from CreateSeedNode
-        _harness.RunUntilIdle();
+        _ = _harness.RunUntilIdle();
 
         var executionCount = 0;
 
@@ -285,7 +285,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
         var seedNode = _harness.CreateSeedNode();
 
         // Step with no pending tasks (seed node might have some, so run until idle first)
-        _harness.RunUntilIdle();
+        _ = _harness.RunUntilIdle();
 
         var result = seedNode.Step();
 
@@ -421,9 +421,9 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     [Fact]
     public void NetworkHealAllPartitionsWorks()
     {
-        _harness.CreateSeedNode(0);
-        _harness.CreateSeedNode(1);
-        _harness.CreateSeedNode(2);
+        _ = _harness.CreateSeedNode(0);
+        _ = _harness.CreateSeedNode(1);
+        _ = _harness.CreateSeedNode(2);
 
         // Create multiple partitions
         _harness.Network.CreatePartition("node:0", "node:1");
@@ -446,13 +446,13 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
         Assert.Empty(_harness.Nodes);
 
         var node1 = _harness.CreateSeedNode(0);
-        Assert.Single(_harness.Nodes);
+        _ = Assert.Single(_harness.Nodes);
 
         var node2 = _harness.CreateSeedNode(1);
         Assert.Equal(2, _harness.Nodes.Count);
 
         _harness.CrashNode(node1);
-        Assert.Single(_harness.Nodes);
+        _ = Assert.Single(_harness.Nodes);
         Assert.Contains(node2, _harness.Nodes);
     }
 
@@ -464,7 +464,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
         // Waiting for size 5 when only 1 node exists should timeout
         // Using WaitForNodeSize since parameterless WaitForConvergence would succeed
         // with a single node (active count = 1, node sees 1)
-        Assert.Throws<TimeoutException>(() => _harness.WaitForNodeSize(seedNode, expectedSize: 5, maxIterations: 100));
+        _ = Assert.Throws<TimeoutException>(() => _harness.WaitForNodeSize(seedNode, expectedSize: 5, maxIterations: 100));
     }
 
     [Fact]
@@ -473,6 +473,6 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
         var seedNode = _harness.CreateSeedNode();
 
         // Waiting for size 5 when only 1 node exists should timeout
-        Assert.Throws<TimeoutException>(() => _harness.WaitForNodeSize(seedNode, expectedSize: 5, maxIterations: 100));
+        _ = Assert.Throws<TimeoutException>(() => _harness.WaitForNodeSize(seedNode, expectedSize: 5, maxIterations: 100));
     }
 }

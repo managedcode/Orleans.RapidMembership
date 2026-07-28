@@ -18,13 +18,11 @@ namespace RapidCluster.Grpc;
 /// Implements IHostedService to ensure proper shutdown ordering.
 /// </summary>
 internal sealed partial class GrpcClient(
-    IOptions<RapidClusterProtocolOptions> protocolOptions,
     IOptions<RapidClusterGrpcOptions> grpcOptions,
     SharedResources sharedResources,
     RapidClusterMetrics metrics,
     ILogger<GrpcClient> logger) : IMessagingClient, IHostedService
 {
-    private readonly RapidClusterProtocolOptions _protocolOptions = protocolOptions.Value;
     private readonly RapidClusterGrpcOptions _grpcOptions = grpcOptions.Value;
     private readonly SharedResources _sharedResources = sharedResources;
     private readonly RapidClusterMetrics _metrics = metrics;
@@ -135,7 +133,7 @@ internal sealed partial class GrpcClient(
     {
         var taskId = Interlocked.Increment(ref _taskIdCounter);
         var task = SendOneWayMessageInternalAsync(remote, request, rank, taskId, onDeliveryFailure, cancellationToken);
-        _pendingTasks.TryAdd(taskId, task);
+        _ = _pendingTasks.TryAdd(taskId, task);
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "One-way messages ignore failures but may invoke callback")]
@@ -149,7 +147,7 @@ internal sealed partial class GrpcClient(
 
         try
         {
-            await client.SendRequestAsync(request, cancellationToken: cts.Token).ResponseAsync
+            _ = await client.SendRequestAsync(request, cancellationToken: cts.Token).ResponseAsync
                 .WaitAsync(_grpcOptions.Timeout, _sharedResources.TimeProvider, cts.Token);
             stopwatch.Stop();
             LogOneWayDeliverySucceeded(new LoggableEndpoint(remote));
@@ -193,7 +191,7 @@ internal sealed partial class GrpcClient(
         }
         finally
         {
-            _pendingTasks.TryRemove(taskId, out _);
+            _ = _pendingTasks.TryRemove(taskId, out _);
         }
     }
 

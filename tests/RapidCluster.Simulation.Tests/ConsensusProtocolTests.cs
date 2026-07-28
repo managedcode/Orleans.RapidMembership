@@ -127,7 +127,7 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
 
         // Advance time to trigger failure detection, but don't wait for convergence
         // since it won't happen (no quorum possible)
-        _harness.RunForDuration(TimeSpan.FromSeconds(10));
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(10));
 
         // The remaining nodes should still see 5 members (they detected failures but
         // couldn't reach consensus to update the view)
@@ -184,7 +184,7 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
 
             // Each membership change should produce a unique configuration ID
             Assert.DoesNotContain(newConfigId, configIds);
-            configIds.Add(newConfigId);
+            _ = configIds.Add(newConfigId);
         }
 
         // We should have 4 unique configuration IDs (initial + 3 joins)
@@ -415,7 +415,7 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
         var configAfterJoins = seedNode.CurrentView.ConfigurationId;
 
         // Add more time to ensure any delayed messages are processed
-        _harness.RunForDuration(TimeSpan.FromSeconds(5));
+        _ = _harness.RunForDuration(TimeSpan.FromSeconds(5));
 
         // Configuration should not have changed (no duplicate consensus)
         Assert.Equal(configAfterJoins, seedNode.CurrentView.ConfigurationId);

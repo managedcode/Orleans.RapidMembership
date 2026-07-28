@@ -25,9 +25,11 @@ public static class DirectBclAcceptanceFixture
         int tickCountBefore = Environment.TickCount;
         long tickCount64Before = Environment.TickCount64;
 
+#pragma warning disable CA5394 // These call sites verify deterministic Random instrumentation.
         var unseededRandom = new Random();
         int unseededRandomValue = unseededRandom.Next();
         int sharedRandomValue = Random.Shared.Next();
+#pragma warning restore CA5394
 
         int taskRunThreadId = 0;
         Task<int> taskRun = Task.Run(() =>

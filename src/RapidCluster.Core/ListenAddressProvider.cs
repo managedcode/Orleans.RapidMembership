@@ -21,14 +21,9 @@ internal sealed class ListenAddressProvider(IListenAddressProvider inner)
     {
         get
         {
-            var address = _inner.ListenAddress;
-            if (address is null)
-            {
-                throw new InvalidOperationException(
+            var address = _inner.ListenAddress ?? throw new InvalidOperationException(
                     $"The listen address provider ({_inner.GetType().Name}) returned null. " +
                     "Ensure the provider is configured correctly and the server has started before accessing the listen address.");
-            }
-
             return address;
         }
     }
