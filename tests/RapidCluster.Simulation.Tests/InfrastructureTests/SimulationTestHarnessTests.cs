@@ -152,6 +152,33 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
     public void SeedIsAccessible() => Assert.Equal(12345, _harness.Seed);
 
     [Fact]
+    public async Task DefaultStartTimeIsDeterministic()
+    {
+        await using var first = new RapidSimulationCluster(seed: 42);
+        await using var second = new RapidSimulationCluster(seed: 42);
+
+        Assert.Equal(RapidSimulationCluster.DefaultStartTime, first.StartDateTime);
+        Assert.Equal(first.StartDateTime, second.StartDateTime);
+        Assert.Equal(first.TimeProvider.GetUtcNow(), second.TimeProvider.GetUtcNow());
+
+        var firstTimerFiredAt = CaptureTimerFireTime(first);
+        var secondTimerFiredAt = CaptureTimerFireTime(second);
+
+        Assert.Equal(firstTimerFiredAt, secondTimerFiredAt);
+        Assert.Equal(RapidSimulationCluster.DefaultStartTime + TimeSpan.FromSeconds(1), firstTimerFiredAt);
+    }
+
+    [Fact]
+    public async Task ExplicitStartTimeIsHonored()
+    {
+        var startTime = new DateTimeOffset(2045, 6, 7, 8, 9, 10, TimeSpan.Zero);
+        await using var harness = new RapidSimulationCluster(seed: 42, startTime);
+
+        Assert.Equal(startTime, harness.StartDateTime);
+        Assert.Equal(startTime, harness.TimeProvider.GetUtcNow());
+    }
+
+    [Fact]
     public void SubscribeToViewChangesReceivesNotifications()
     {
         var viewChanges = new List<MembershipView>();
@@ -181,5 +208,17 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
         public void OnError(Exception error) => throw error;
 
         public void OnNext(MembershipView value) => onNext(value);
+    }
+
+    private static DateTimeOffset CaptureTimerFireTime(RapidSimulationCluster harness)
+    {
+        DateTimeOffset? firedAt = null;
+        harness.TaskQueue.EnqueueAfter(
+            () => firedAt = harness.TimeProvider.GetUtcNow(),
+            TimeSpan.FromSeconds(1));
+
+        _ = harness.RunUntilIdle();
+
+        return Assert.IsType<DateTimeOffset>(firedAt);
     }
 }

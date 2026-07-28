@@ -155,7 +155,7 @@ public sealed class ClusterReplayAcceptanceTests
                     {
                         _harness = new RapidSimulationCluster(
                             seed: 42117,
-                            startDateTime: new DateTimeOffset(2041, 5, 6, 7, 8, 9, TimeSpan.Zero));
+                            startTime: new DateTimeOffset(2041, 5, 6, 7, 8, 9, TimeSpan.Zero));
                         _nodes = _harness.CreateCluster(size: 3);
                         _harness.WaitForConvergence();
                         Ensure(

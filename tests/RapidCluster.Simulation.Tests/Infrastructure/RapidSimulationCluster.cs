@@ -29,6 +29,8 @@ namespace RapidCluster.Simulation.Tests.Infrastructure;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSimulationNode>
 {
+    internal static readonly DateTimeOffset DefaultStartTime = DateTimeOffset.UnixEpoch;
+
     private readonly SimulationLogManager _logManager;
     private readonly ILogger<RapidSimulationCluster> _logger;
     private readonly SimulationHarnessLogger _log;
@@ -40,17 +42,12 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// Logs are written to a unique file per simulation and attached to the test context.
     /// </summary>
     /// <param name="seed">The seed for deterministic random number generation.</param>
-    public RapidSimulationCluster(int seed)
-        : this(seed, DateTimeOffset.UtcNow)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="RapidSimulationCluster"/> class
-    /// with an explicit virtual-time origin.
-    /// </summary>
-    internal RapidSimulationCluster(int seed, DateTimeOffset startDateTime)
-        : base(seed, startDateTime, cancellationToken: TestContext.Current.CancellationToken)
+    /// <param name="startTime">
+    /// Optional virtual-time origin. Defaults to <see cref="DateTimeOffset.UnixEpoch"/>
+    /// so identical seeds start from identical time.
+    /// </param>
+    public RapidSimulationCluster(int seed, DateTimeOffset? startTime = null)
+        : base(seed, startTime ?? DefaultStartTime, cancellationToken: TestContext.Current.CancellationToken)
     {
         Network = new SimulationNetwork(
             this,
