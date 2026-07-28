@@ -264,9 +264,16 @@ internal sealed class InvariantChecker(RapidSimulationCluster harness)
             return false;
         }
 
-        var outcome = _harness.RunUntil(
-            () => _harness.Nodes.Sum(static node => node.Context.TaskQueue.ScheduledItems.Count) < initialNodeWork,
-            maxSteps);
+        var initialItems = _harness.Nodes
+            .SelectMany(node => node.Context.TaskQueue.ScheduledItems.Select(item => (node.NetworkAddress, item.SequenceNumber)))
+            .ToHashSet();
+        var outcome = _harness.RunUntil(() =>
+        {
+            var currentItems = _harness.Nodes
+                .SelectMany(node => node.Context.TaskQueue.ScheduledItems.Select(item => (node.NetworkAddress, item.SequenceNumber)))
+                .ToHashSet();
+            return !currentItems.SetEquals(initialItems);
+        }, maxSteps);
         if (outcome.ConditionMet)
         {
             return true;

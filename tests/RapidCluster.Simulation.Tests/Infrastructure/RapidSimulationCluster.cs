@@ -203,7 +203,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
 
     /// <summary>
     /// Creates and joins a new node to the cluster with raw seed addresses.
-    /// Useful for testing duplicate seed handling and other edge cases.
+    /// Useful for validating raw seed lists and other edge cases.
     /// </summary>
     public RapidSimulationNode JoinNode(
         int nodeId,
