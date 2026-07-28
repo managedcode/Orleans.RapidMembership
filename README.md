@@ -29,6 +29,17 @@ RapidCluster is a .NET implementation of the [Rapid](https://github.com/lalithsu
 
 - .NET 10.0 or later
 
+## Building from Source
+
+```bash
+# Clone the repository and its Clockwork dependency
+git clone --recurse-submodules https://github.com/ReubenBond/RapidCluster.git
+cd RapidCluster
+
+# Build
+dotnet build RapidCluster.slnx
+```
+
 ## Installation
 
 ```bash
