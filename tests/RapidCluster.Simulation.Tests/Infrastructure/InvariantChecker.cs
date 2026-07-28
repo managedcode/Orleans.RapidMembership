@@ -13,6 +13,7 @@ internal sealed class InvariantChecker(RapidSimulationCluster harness)
 {
     private readonly RapidSimulationCluster _harness = harness ?? throw new ArgumentNullException(nameof(harness));
     private readonly List<InvariantViolation> _violations = [];
+    private readonly Dictionary<string, long> _configurationVersions = new(StringComparer.Ordinal);
     private readonly Lock _lock = new();
 
     /// <summary>
@@ -50,7 +51,7 @@ internal sealed class InvariantChecker(RapidSimulationCluster harness)
     {
         var passed = true;
 
-        passed &= CheckMembershipConsistency();
+        passed &= CheckAtMostTwoTransitionalMembershipSizes();
         passed &= CheckNoSplitBrain();
         passed &= CheckConfigurationIdMonotonicity();
         passed &= CheckNodeIdValidity();
@@ -61,10 +62,9 @@ internal sealed class InvariantChecker(RapidSimulationCluster harness)
     }
 
     /// <summary>
-    /// Checks that all nodes have consistent membership views.
-    /// In a stable cluster, all nodes should see the same members (though possibly at different configuration IDs).
+    /// Checks that an in-progress transition exposes at most two distinct membership sizes.
     /// </summary>
-    public bool CheckMembershipConsistency()
+    public bool CheckAtMostTwoTransitionalMembershipSizes()
     {
         var nodes = _harness.Nodes;
         if (nodes.Count < 2)
@@ -80,7 +80,7 @@ internal sealed class InvariantChecker(RapidSimulationCluster harness)
         if (sizes.Count > 2)
         {
             RecordViolation(
-                InvariantType.MembershipConsistency,
+                InvariantType.TransitionalMembershipSizeBound,
                 $"More than 2 distinct membership sizes: [{string.Join(", ", sizes)}]");
             return false;
         }
@@ -133,30 +133,36 @@ internal sealed class InvariantChecker(RapidSimulationCluster harness)
     }
 
     /// <summary>
-    /// Checks that configuration IDs are monotonically increasing.
-    /// A node should never go back to a lower configuration ID.
-    /// Note: Configuration IDs are computed from membership hashes and can be any long value (including negative).
+    /// Checks that each node's observed configuration version never decreases.
     /// </summary>
     public bool CheckConfigurationIdMonotonicity()
     {
-        // This check requires tracking historical configuration IDs
-        // Configuration IDs are computed from membership hashes and can be any long value,
-        // including negative values. The only invalid state is if we have no view at all.
+        var passed = true;
         foreach (var node in _harness.Nodes)
         {
             if (!node.IsInitialized) continue;
 
-            var view = node.CurrentView;
-            if (view == null)
+            var address = RapidClusterUtils.Loggable(node.Address);
+            var version = node.CurrentView.ConfigurationId.Version;
+            lock (_lock)
             {
-                RecordViolation(
-                    InvariantType.ConfigurationIdMonotonicity,
-                    $"Node {RapidClusterUtils.Loggable(node.Address)} has no membership view");
-                return false;
+                if (_configurationVersions.TryGetValue(address, out var previousVersion) &&
+                    version < previousVersion)
+                {
+                    _violations.Add(new InvariantViolation(
+                        _harness.TimeProvider.GetUtcNow(),
+                        InvariantType.ConfigurationIdMonotonicity,
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Node {address} configuration version decreased from {previousVersion} to {version}.")));
+                    passed = false;
+                }
+
+                _configurationVersions[address] = version;
             }
         }
 
-        return true;
+        return passed;
     }
 
     /// <summary>
@@ -248,27 +254,36 @@ internal sealed class InvariantChecker(RapidSimulationCluster harness)
     /// </summary>
     public bool CheckLiveness(int maxSteps = 1000)
     {
-        // Try to make progress
-        for (var i = 0; i < maxSteps; i++)
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxSteps);
+        var initialNodeWork = _harness.Nodes.Sum(static node => node.Context.TaskQueue.ScheduledItems.Count);
+        if (initialNodeWork == 0)
         {
-            if (_harness.TaskQueue.RunOnce())
-            {
-                return true; // Made progress
-            }
-
-            // Advance time to trigger any pending timers and run simulation until idle
-            _ = _harness.RunForDuration(TimeSpan.FromMilliseconds(10));
+            RecordViolation(
+                InvariantType.Liveness,
+                "No node work was pending, so node progress could not be demonstrated.");
+            return false;
         }
 
-        // Check if any tasks are pending now
-        if (_harness.TaskQueue.HasItems)
+        var initialItems = _harness.Nodes
+            .SelectMany(node => node.Context.TaskQueue.ScheduledItems.Select(item => (node.NetworkAddress, item.SequenceNumber)))
+            .ToHashSet();
+        var outcome = _harness.RunUntil(() =>
+        {
+            var currentItems = _harness.Nodes
+                .SelectMany(node => node.Context.TaskQueue.ScheduledItems.Select(item => (node.NetworkAddress, item.SequenceNumber)))
+                .ToHashSet();
+            return !currentItems.SetEquals(initialItems);
+        }, maxSteps);
+        if (outcome.ConditionMet)
         {
             return true;
         }
 
         RecordViolation(
             InvariantType.Liveness,
-            string.Create(CultureInfo.InvariantCulture, $"No progress made in {maxSteps} steps"));
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"No node-queue progress was made from {initialNodeWork} pending items.{Environment.NewLine}{outcome.ToDetailedString()}"));
         return false;
     }
 
@@ -280,6 +295,7 @@ internal sealed class InvariantChecker(RapidSimulationCluster harness)
         lock (_lock)
         {
             _violations.Clear();
+            _configurationVersions.Clear();
         }
     }
 
@@ -314,7 +330,7 @@ internal sealed class InvariantChecker(RapidSimulationCluster harness)
 /// </summary>
 internal enum InvariantType
 {
-    MembershipConsistency,
+    TransitionalMembershipSizeBound,
     NoSplitBrain,
     ConfigurationIdMonotonicity,
     Liveness,

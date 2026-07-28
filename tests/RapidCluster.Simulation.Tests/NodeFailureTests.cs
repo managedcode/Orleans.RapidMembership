@@ -27,9 +27,9 @@ public sealed class NodeFailureTests : IAsyncLifetime
     {
         // Use 3-node cluster so quorum can be reached after one node crashes
         // (2 out of 3 nodes can reach consensus, but 1 out of 2 cannot)
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -47,8 +47,8 @@ public sealed class NodeFailureTests : IAsyncLifetime
     [Fact]
     public void CrashedNodeCannotReceiveMessages()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         // Crash the joiner
         _harness.CrashNode(joiner);
@@ -60,9 +60,9 @@ public sealed class NodeFailureTests : IAsyncLifetime
     [Fact]
     public void ClusterContinuesAfterSingleNodeCrash()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -77,7 +77,7 @@ public sealed class NodeFailureTests : IAsyncLifetime
     [Fact]
     public void CrashDuringIdleStateHandledGracefully()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Crash immediately - should not throw
         _harness.CrashNode(seedNode);
@@ -106,9 +106,9 @@ public sealed class NodeFailureTests : IAsyncLifetime
     [Fact]
     public void SequentialFailuresHandled()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -123,10 +123,10 @@ public sealed class NodeFailureTests : IAsyncLifetime
     [Fact]
     public void SimultaneousFailuresHandled()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
-        var joiner3 = _harness.CreateJoinerNode(seedNode, nodeId: 3);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -142,9 +142,9 @@ public sealed class NodeFailureTests : IAsyncLifetime
     [Fact]
     public void SeedNodeCrashDoesNotAffectExistingCluster()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -160,7 +160,7 @@ public sealed class NodeFailureTests : IAsyncLifetime
     [Fact]
     public void JoinThroughCrashedSeedFails()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Suspend the seed (simulates crash but keeps node in harness so we can attempt to contact it)
         seedNode.Suspend();
@@ -170,7 +170,7 @@ public sealed class NodeFailureTests : IAsyncLifetime
 
         // Attempting to join through crashed seed should fail with JoinException
         // The adapter returns a retryable protocol rejection, and JoinException is the public contract.
-        var ex = Assert.Throws<JoinException>(() => _harness.CreateJoinerNode(seedNode, nodeId: 1, options: options));
+        var ex = Assert.Throws<JoinException>(() => _harness.JoinNode(nodeId: 1, seed: seedNode, options: options));
         Assert.Contains("MembershipRejected", ex.Message, StringComparison.Ordinal);
     }
 
@@ -179,9 +179,9 @@ public sealed class NodeFailureTests : IAsyncLifetime
     {
         // Need a 3-node cluster so that after crashing one node,
         // the remaining 2 nodes can still reach quorum for consensus
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        _ = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -198,7 +198,7 @@ public sealed class NodeFailureTests : IAsyncLifetime
         _harness.WaitForConvergence();
 
         // Join through one of the remaining joiners (which are still part of the cluster)
-        var joiner3 = _harness.CreateJoinerNode(joiner1, nodeId: 3);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: joiner1);
 
         Assert.True(joiner3.IsInitialized);
         _harness.WaitForConvergence();
@@ -208,8 +208,8 @@ public sealed class NodeFailureTests : IAsyncLifetime
     [Fact]
     public void NodeCrashDuringLeave()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 

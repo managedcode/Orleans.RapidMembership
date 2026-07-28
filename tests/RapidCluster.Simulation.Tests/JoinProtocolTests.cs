@@ -30,8 +30,8 @@ public sealed class JoinProtocolTests : IAsyncLifetime
     [Fact]
     public void BasicJoinSucceeds()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         Assert.True(joiner.IsInitialized);
         Assert.Equal(2, joiner.MembershipSize);
@@ -43,8 +43,8 @@ public sealed class JoinProtocolTests : IAsyncLifetime
     [Fact]
     public void JoinReturnCorrectMembership()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -66,8 +66,8 @@ public sealed class JoinProtocolTests : IAsyncLifetime
     [Fact]
     public void JoinSetsConfigurationId()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -89,8 +89,8 @@ public sealed class JoinProtocolTests : IAsyncLifetime
         // Enable random message drops (10% drop rate)
         _harness.Network.MessageDropRate = 0.1;
 
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         Assert.True(joiner.IsInitialized);
         _harness.WaitForConvergence();
@@ -108,10 +108,10 @@ public sealed class JoinProtocolTests : IAsyncLifetime
         // Enable random message drops (20% drop rate)
         _harness.Network.MessageDropRate = 0.2;
 
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Join should still succeed due to retry logic
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         Assert.True(joiner.IsInitialized);
         _harness.WaitForConvergence();
@@ -126,9 +126,9 @@ public sealed class JoinProtocolTests : IAsyncLifetime
         // Enable random message drops (10% drop rate)
         _harness.Network.MessageDropRate = 0.1;
 
-        var seedNode = _harness.CreateSeedNode();
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        _ = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
     }
@@ -140,13 +140,13 @@ public sealed class JoinProtocolTests : IAsyncLifetime
     [Fact]
     public void JoinDuringAnotherJoinSucceeds()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Start first join
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         // Immediately start second join (config may have changed)
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -161,9 +161,9 @@ public sealed class JoinProtocolTests : IAsyncLifetime
     [Fact]
     public void JoinAfterLeaveSucceeds()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -172,7 +172,7 @@ public sealed class JoinProtocolTests : IAsyncLifetime
         _harness.WaitForConvergence();
 
         // New join after config change should succeed
-        var joiner3 = _harness.CreateJoinerNode(seedNode, nodeId: 3);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -186,9 +186,9 @@ public sealed class JoinProtocolTests : IAsyncLifetime
     [Fact]
     public void JoinAfterNodeFailureSucceeds()
     {
-        var seedNode = _harness.CreateSeedNode();
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -197,7 +197,7 @@ public sealed class JoinProtocolTests : IAsyncLifetime
         _harness.WaitForConvergence();
 
         // New join after failure should succeed
-        var joiner3 = _harness.CreateJoinerNode(seedNode, nodeId: 3);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -210,13 +210,13 @@ public sealed class JoinProtocolTests : IAsyncLifetime
     [Fact]
     public void JoinThroughNonSeedNodeSucceeds()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
         // Join through joiner1 instead of seed
-        var joiner2 = _harness.CreateJoinerNode(joiner1, nodeId: 2);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: joiner1);
 
         _harness.WaitForConvergence();
 
@@ -230,20 +230,20 @@ public sealed class JoinProtocolTests : IAsyncLifetime
     [Fact]
     public void JoinThroughDifferentMembersSucceeds()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
         // Join through different members
-        var joiner3 = _harness.CreateJoinerNode(joiner1, nodeId: 3);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: joiner1);
         _harness.WaitForConvergence();
 
-        var joiner4 = _harness.CreateJoinerNode(joiner2, nodeId: 4);
+        var joiner4 = _harness.JoinNode(nodeId: 4, seed: joiner2);
         _harness.WaitForConvergence();
 
-        var joiner5 = _harness.CreateJoinerNode(joiner3, nodeId: 5);
+        var joiner5 = _harness.JoinNode(nodeId: 5, seed: joiner3);
         _harness.WaitForConvergence();
 
         Assert.All(_harness.Nodes, n => Assert.Equal(6, n.MembershipSize));
@@ -258,8 +258,8 @@ public sealed class JoinProtocolTests : IAsyncLifetime
     [Fact]
     public void JoinFailsWhenConsensusImpossibleDueToIsolation()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -280,7 +280,7 @@ public sealed class JoinProtocolTests : IAsyncLifetime
         {
             MaxJoinRetries = 3,
         };
-        var joiningNode = _harness.CreateUninitializedNode(nodeId: 2, seedNode, limitedRetryOptions);
+        var joiningNode = _harness.AddUnstartedNode(nodeId: 2, seedNode, limitedRetryOptions);
         _ = Assert.Throws<JoinException>(() => _harness.RunToCompletion(
             () => joiningNode.StartAsync(TestContext.Current.CancellationToken)));
     }
@@ -291,12 +291,12 @@ public sealed class JoinProtocolTests : IAsyncLifetime
     [Fact]
     public void RapidConsecutiveJoinsSucceed()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Rapid consecutive joins
         for (var i = 1; i <= 5; i++)
         {
-            var joiner = _harness.CreateJoinerNode(seedNode, nodeId: i);
+            var joiner = _harness.JoinNode(nodeId: i, seed: seedNode);
             Assert.True(joiner.IsInitialized);
         }
 
@@ -316,8 +316,8 @@ public sealed class JoinProtocolTests : IAsyncLifetime
         _harness.Network.BaseMessageDelay = TimeSpan.FromMilliseconds(10);
         _harness.Network.MaxJitter = TimeSpan.FromMilliseconds(20);
 
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -337,8 +337,8 @@ public sealed class JoinProtocolTests : IAsyncLifetime
         _harness.Network.MaxJitter = TimeSpan.FromMilliseconds(10);
         _harness.Network.MessageDropRate = 0.05; // 5% drop rate
 
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -351,8 +351,8 @@ public sealed class JoinProtocolTests : IAsyncLifetime
     [Fact]
     public void JoinAfterPartitionHealSucceeds()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -361,7 +361,7 @@ public sealed class JoinProtocolTests : IAsyncLifetime
         _harness.HealPartition(seedNode, joiner1);
 
         // Join after partition heal should succeed
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -396,13 +396,13 @@ public sealed class JoinProtocolTests : IAsyncLifetime
         // Give failure detection time to detect the partition.
         // With a larger cluster, the partition may or may not cause node removal
         // depending on how many observers report the failure.
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(5));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(5));
 
         // Heal the partition to restore connectivity
         _harness.HealPartition(seedNode, partitionedNode);
 
         // Wait briefly for the cluster to stabilize after healing
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(2));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(2));
 
         // Get remaining nodes to find one we can join through
         var aliveNodes = _harness.Nodes.Where(n => n.IsInitialized && n.MembershipSize > 0).ToList();
@@ -411,7 +411,7 @@ public sealed class JoinProtocolTests : IAsyncLifetime
         var joinPoint = aliveNodes[0];
 
         // Now join through a surviving node - the cluster should be stable
-        var joiner = _harness.CreateJoinerNode(joinPoint, nodeId: 10);
+        var joiner = _harness.JoinNode(nodeId: 10, seed: joinPoint);
 
         // The join should succeed - joiner should be initialized
         Assert.True(joiner.IsInitialized);
@@ -426,10 +426,10 @@ public sealed class JoinProtocolTests : IAsyncLifetime
     [Fact]
     public void JoinImmediatelyAfterClusterInit()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Join immediately - no waiting
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         Assert.True(joiner.IsInitialized);
         Assert.Equal(2, joiner.MembershipSize);
@@ -441,26 +441,26 @@ public sealed class JoinProtocolTests : IAsyncLifetime
     [Fact]
     public void JoinAfterMultipleConfigurationChanges()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Create multiple configuration changes
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
         _harness.WaitForConvergence();
 
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
         _harness.WaitForConvergence();
 
         _harness.RemoveNodeGracefully(joiner2);
         _harness.WaitForConvergence();
 
-        var joiner3 = _harness.CreateJoinerNode(seedNode, nodeId: 3);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: seedNode);
         _harness.WaitForConvergence();
 
         _harness.RemoveNodeGracefully(joiner1);
         _harness.WaitForConvergence();
 
         // Join after multiple configuration changes
-        var joiner4 = _harness.CreateJoinerNode(seedNode, nodeId: 4);
+        var joiner4 = _harness.JoinNode(nodeId: 4, seed: seedNode);
         _harness.WaitForConvergence();
 
         Assert.True(joiner4.IsInitialized);

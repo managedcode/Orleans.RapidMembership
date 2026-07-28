@@ -37,6 +37,8 @@ internal sealed class InMemoryMessagingClient(
     /// </summary>
     private static readonly TimeSpan JoinTimeout = TimeSpan.FromSeconds(5);
 
+    internal TimeSpan ProbeTimeout => _failureDetectorOptions.ProbeTimeout;
+
     private TimeSpan GetTimeout(RapidClusterRequest request)
     {
 #pragma warning disable IDE0072 // Protobuf enums can contain unnamed numeric values.
@@ -115,7 +117,7 @@ internal sealed class InMemoryMessagingClient(
 
         var localAddr = RapidClusterUtils.Loggable(localEndpoint);
         var remoteAddr = RapidClusterUtils.Loggable(remote);
-        var targetNode = harness.GetNode(remoteAddr);
+        var targetNode = harness.FindNode(remoteAddr);
         var messageTimeout = GetTimeout(request);
         if (targetNode is null ||
             harness.Network.CheckDelivery(localAddr, remoteAddr) is not DeliveryStatus.Success)

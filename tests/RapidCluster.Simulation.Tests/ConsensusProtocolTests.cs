@@ -25,8 +25,8 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
     [Fact]
     public void SingleProposalAcceptedInTwoNodeCluster()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -41,11 +41,11 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
     [Fact]
     public void ConflictingProposalsResolvedInSequentialJoins()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Sequential joins (not truly concurrent in sync mode)
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         // Wait for full convergence
         _harness.WaitForConvergence();
@@ -59,10 +59,10 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
     [Fact]
     public void ConsensusCompletesWithinTimeout()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var startTime = DateTime.UtcNow;
 
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         var elapsed = DateTime.UtcNow - startTime;
 
@@ -75,9 +75,9 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
     [Fact]
     public void DecisionPropagatedToAllNodes()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -102,7 +102,7 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
         _harness.CrashNode(nodes[4]);
 
         // Add a new node - consensus should still work with 4 healthy nodes
-        var newJoiner = _harness.CreateJoinerNode(nodes[0], nodeId: 5);
+        var newJoiner = _harness.JoinNode(nodeId: 5, seed: nodes[0]);
 
         Assert.True(newJoiner.IsInitialized);
     }
@@ -127,7 +127,7 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
 
         // Advance time to trigger failure detection, but don't wait for convergence
         // since it won't happen (no quorum possible)
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(10));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(10));
 
         // The remaining nodes should still see 5 members (they detected failures but
         // couldn't reach consensus to update the view)
@@ -138,8 +138,8 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
     [Fact]
     public void NodeFailureDuringMembershipChangeHandled()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -153,12 +153,12 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
     [Fact]
     public void MultipleSimultaneousProposalsEventuallyResolve()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Sequential joins in sync mode
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
-        var joiner3 = _harness.CreateJoinerNode(seedNode, nodeId: 3);
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: seedNode);
 
         // Wait for convergence
         _harness.WaitForConvergence();
@@ -170,15 +170,15 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
     [Fact]
     public void ConfigurationIdChangesWithEachMembershipChange()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var configIds = new HashSet<ConfigurationId> { seedNode.CurrentView.ConfigurationId };
 
         // Join 3 nodes, tracking config ID changes
         for (var i = 1; i <= 3; i++)
         {
-            _ = _harness.CreateJoinerNode(seedNode, nodeId: i);
+            _ = _harness.JoinNode(nodeId: i, seed: seedNode);
 
-            _harness.WaitForNodeSize(seedNode, expectedSize: i + 1);
+            _harness.WaitForMembershipSize(expectedSize: i + 1, nodes: [seedNode]);
 
             var newConfigId = seedNode.CurrentView.ConfigurationId;
 
@@ -194,12 +194,12 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
     [Fact]
     public void ConcurrentConfigChangesEventuallySerialize()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Sequential joins in sync mode
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
-        var joiner3 = _harness.CreateJoinerNode(seedNode, nodeId: 3);
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
+        var joiner3 = _harness.JoinNode(nodeId: 3, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -217,8 +217,8 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
         _harness.Network.BaseMessageDelay = TimeSpan.FromMilliseconds(10);
         _harness.Network.MaxJitter = TimeSpan.FromMilliseconds(20);
 
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         Assert.True(joiner.IsInitialized);
         Assert.Equal(2, joiner.MembershipSize);
@@ -230,10 +230,10 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
         // Enable 5% message loss - this tests the retry logic in join protocol
         _harness.Network.MessageDropRate = 0.05;
 
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // The join should succeed despite message loss due to retry logic
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         Assert.True(joiner.IsInitialized, "Joiner should be initialized after join with retries");
 
@@ -405,9 +405,9 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
     {
         // Test that once a decision is made, additional Phase1b messages
         // don't cause duplicate consensus (the cval guard)
-        var seedNode = _harness.CreateSeedNode();
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
-        _ = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var seedNode = _harness.StartCluster();
+        _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
+        _ = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -415,7 +415,7 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
         var configAfterJoins = seedNode.CurrentView.ConfigurationId;
 
         // Add more time to ensure any delayed messages are processed
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(5));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(5));
 
         // Configuration should not have changed (no duplicate consensus)
         Assert.Equal(configAfterJoins, seedNode.CurrentView.ConfigurationId);

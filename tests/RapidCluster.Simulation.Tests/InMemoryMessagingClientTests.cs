@@ -12,12 +12,12 @@ public sealed class InMemoryMessagingClientTests
     public async Task SendOneWayMessage_UnavailableTarget_ReportsDeliveryFailure()
     {
         await using var harness = new RapidSimulationCluster(seed: 7341);
-        var source = harness.CreateSeedNode(
+        var source = harness.StartCluster(
             failureDetectorOptions: new PingPongFailureDetectorOptions { ProbeTimeout = TimeSpan.FromSeconds(1) });
         var unavailable = RapidClusterUtils.HostFromParts("node", 999);
         var failureReported = false;
 
-        harness.ExecuteInSimulation(
+        harness.RunOnNode(
             source,
             () => source.MessagingClient.SendOneWayMessage(
                 unavailable,
@@ -26,7 +26,7 @@ public sealed class InMemoryMessagingClientTests
                 (_, _) => failureReported = true,
                 TestContext.Current.CancellationToken));
 
-        _ = harness.RunForDuration(TimeSpan.FromSeconds(2));
+        _ = harness.RunFor(TimeSpan.FromSeconds(2));
 
         Assert.True(failureReported);
     }
@@ -35,14 +35,14 @@ public sealed class InMemoryMessagingClientTests
     public async Task SendOneWayMessage_CanceledSend_DoesNotReportDeliveryFailure()
     {
         await using var harness = new RapidSimulationCluster(seed: 7342);
-        var source = harness.CreateSeedNode(
+        var source = harness.StartCluster(
             failureDetectorOptions: new PingPongFailureDetectorOptions { ProbeTimeout = TimeSpan.FromSeconds(1) });
         var unavailable = RapidClusterUtils.HostFromParts("node", 999);
         var failureReported = false;
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        harness.ExecuteInSimulation(
+        harness.RunOnNode(
             source,
             () => source.MessagingClient.SendOneWayMessage(
                 unavailable,
@@ -51,7 +51,7 @@ public sealed class InMemoryMessagingClientTests
                 (_, _) => failureReported = true,
                 cancellation.Token));
 
-        _ = harness.RunForDuration(TimeSpan.FromSeconds(2));
+        _ = harness.RunFor(TimeSpan.FromSeconds(2));
 
         Assert.False(failureReported);
     }

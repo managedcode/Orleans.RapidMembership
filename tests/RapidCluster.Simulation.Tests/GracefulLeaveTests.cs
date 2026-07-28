@@ -49,7 +49,7 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
     {
         foreach (var (node, collector) in _collectors)
         {
-            _harness.ExecuteInSimulation(node, collector.Dispose);
+            _harness.RunOnNode(node, collector.Dispose);
         }
 
         _collectors.Clear();
@@ -62,7 +62,7 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
     /// </summary>
     private ObservableCollector<MembershipView> CreateViewCollector(RapidSimulationNode node)
     {
-        var collector = _harness.InvokeInSimulation(
+        var collector = _harness.RunOnNode(
             node,
             () => new ObservableCollector<MembershipView>(node.ViewAccessor.Updates));
         _collectors.Add((node, collector));
@@ -465,7 +465,7 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
         _harness.HealPartition(nodes[4], nodes[1]);
 
         // Wait for convergence
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(2));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(2));
 
         // Assert: Cluster should eventually converge (leaving node removed)
         Assert.DoesNotContain(leavingNode, _harness.Nodes);
@@ -482,7 +482,7 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
         _harness.RemoveNodeGracefully(nodes[3]);
         _harness.WaitForConvergence();
 
-        var newNode = _harness.CreateJoinerNode(nodes[0], nodeId: 10);
+        var newNode = _harness.JoinNode(nodeId: 10, seed: nodes[0]);
         _harness.WaitForConvergence();
 
         // Assert: New configuration is correct
@@ -500,7 +500,7 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
         _harness.WaitForConvergence();
 
         // Act: Join then leave
-        var newNode = _harness.CreateJoinerNode(nodes[0], nodeId: 10);
+        var newNode = _harness.JoinNode(nodeId: 10, seed: nodes[0]);
         _harness.WaitForConvergence();
 
         _harness.RemoveNodeGracefully(nodes[2]);
@@ -524,13 +524,13 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
         _harness.RemoveNodeGracefully(nodes[4]);
         _harness.WaitForConvergence();
 
-        var newNode1 = _harness.CreateJoinerNode(nodes[0], nodeId: 10);
+        var newNode1 = _harness.JoinNode(nodeId: 10, seed: nodes[0]);
         _harness.WaitForConvergence();
 
         _harness.RemoveNodeGracefully(nodes[3]);
         _harness.WaitForConvergence();
 
-        var newNode2 = _harness.CreateJoinerNode(nodes[1], nodeId: 11);
+        var newNode2 = _harness.JoinNode(nodeId: 11, seed: nodes[1]);
         _harness.WaitForConvergence();
 
         // Assert: Final state correct
@@ -712,7 +712,7 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
         _harness.WaitForConvergence();
 
         // Advance time to trigger failure detection cycles
-        _ = _harness.RunForDuration(TimeSpan.FromSeconds(10));
+        _ = _harness.RunFor(TimeSpan.FromSeconds(10));
         _ = _harness.RunUntilIdle();
 
         // Assert: Remaining nodes are still monitored (cluster stable)

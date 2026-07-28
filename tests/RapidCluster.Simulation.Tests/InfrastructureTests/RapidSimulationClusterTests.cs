@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Clockwork;
+using RapidCluster.Monitoring;
 using RapidCluster.Simulation.Tests.Infrastructure;
 
 namespace RapidCluster.Simulation.Tests.InfrastructureTests;
@@ -8,7 +9,7 @@ namespace RapidCluster.Simulation.Tests.InfrastructureTests;
 /// Tests for the simulation harness.
 /// </summary>
 [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Test objects are managed by simulation harness")]
-public sealed class SimulationHarnessTests : IAsyncLifetime
+public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
 {
     private RapidSimulationCluster _harness = null!;
 
@@ -21,9 +22,9 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     public async ValueTask DisposeAsync() => await _harness.DisposeAsync();
 
     [Fact]
-    public void CreateSeedNodeWorksWithDeterministicHarness()
+    public void StartClusterWorksWithDeterministicHarness()
     {
-        var node = _harness.CreateSeedNode();
+        var node = _harness.StartCluster();
 
         Assert.NotNull(node);
         Assert.True(node.IsInitialized);
@@ -63,7 +64,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
 
         var result = _harness.RunUntil(() => conditionMet);
 
-        Assert.True(result);
+        Assert.True(result.ConditionMet, result.ToDetailedString());
         Assert.True(conditionMet);
     }
 
@@ -72,7 +73,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     {
         var result = _harness.RunUntil(() => false, maxIterations: 10);
 
-        Assert.False(result);
+        Assert.False(result.ConditionMet);
     }
 
     [Fact]
@@ -81,8 +82,8 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     [Fact]
     public void IsolateNodeDoesNotThrow()
     {
-        var seed = _harness.CreateSeedNode(0);
-        var joiner = _harness.CreateJoinerNode(seed, nodeId: 1);
+        var seed = _harness.StartCluster(0);
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seed);
         _harness.WaitForConvergence();
 
         // Just test that the method doesn't throw
@@ -95,8 +96,8 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     [Fact]
     public void ReconnectNodeDoesNotThrow()
     {
-        var seed = _harness.CreateSeedNode(0);
-        var joiner = _harness.CreateJoinerNode(seed, nodeId: 1);
+        var seed = _harness.StartCluster(0);
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seed);
         _harness.WaitForConvergence();
 
         _harness.IsolateNode(joiner);
@@ -109,7 +110,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     [Fact]
     public void CrashNodeRemovesNodeFromHarness()
     {
-        var seed = _harness.CreateSeedNode(0);
+        var seed = _harness.StartCluster(0);
         _harness.CrashNode(seed);
 
         // Verify node is removed from harness
@@ -119,8 +120,8 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     [Fact]
     public void RunUntilIdleReturnsZeroWhenNoTasks()
     {
-        var iterations = _harness.RunUntilIdle();
-        Assert.Equal(0, iterations);
+        var result = _harness.RunUntilIdle();
+        Assert.Equal(0, result.StepsExecuted);
     }
 
     [Fact]
@@ -135,9 +136,9 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
             task.Start(scheduler);
         }
 
-        var iterations = _harness.RunUntilIdle();
+        var result = _harness.RunUntilIdle();
 
-        Assert.Equal(5, iterations);
+        Assert.Equal(5, result.StepsExecuted);
         Assert.Equal(5, executionCount);
     }
 
@@ -151,10 +152,10 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
         _harness.TaskQueue.EnqueueAfter(() => executed = true, TimeSpan.FromMinutes(1));
 
         const int maxIterations = 100000;
-        var iterations = _harness.RunUntilIdle(maxIterations: maxIterations);
+        var result = _harness.RunUntilIdle(maxIterations: maxIterations);
 
         // Should reach idle (iterations < maxIterations)
-        Assert.True(iterations < maxIterations);
+        Assert.True(result.Iterations < maxIterations);
         Assert.True(executed);
         Assert.True(_harness.TimeProvider.GetUtcNow() >= initialTime + TimeSpan.FromMinutes(1));
     }
@@ -168,10 +169,10 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
         _harness.TaskQueue.EnqueueAfter(() => { }, TimeSpan.FromMinutes(10));
 
         // Limit to 5 minutes - task won't execute because it's beyond the time limit
-        var iterations = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromMinutes(5));
+        var result = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(5));
 
         // No tasks were executed (task is scheduled beyond the time limit)
-        Assert.Equal(0, iterations);
+        Assert.Equal(0, result.StepsExecuted);
 
         // Time should not have advanced beyond 5 minutes
         Assert.True(_harness.TimeProvider.GetUtcNow() < initialTime + TimeSpan.FromMinutes(10));
@@ -195,7 +196,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     [Fact]
     public void SuspendNodePreventsTaskExecution()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var context = _harness.GetNodeContext(seedNode);
         var executed = false;
 
@@ -215,7 +216,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     [Fact]
     public void ResumeNodeAllowsTaskExecution()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var context = _harness.GetNodeContext(seedNode);
         var executed = false;
 
@@ -229,7 +230,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
         // Step should now execute the task
         var result = _harness.RunUntil(() => executed, maxIterations: 10);
 
-        Assert.True(result);
+        Assert.True(result.ConditionMet, result.ToDetailedString());
         Assert.True(executed);
         Assert.False(seedNode.IsSuspended);
     }
@@ -237,7 +238,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     [Fact]
     public void SuspendNodeForResumesAutomatically()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var context = _harness.GetNodeContext(seedNode);
         var executed = false;
 
@@ -250,7 +251,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
         Assert.True(seedNode.IsSuspended);
 
         // Run until idle - should advance time and resume the node
-        _ = _harness.RunUntilIdle(maxSimulatedTime: TimeSpan.FromSeconds(2));
+        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromSeconds(2));
 
         Assert.False(seedNode.IsSuspended);
         Assert.True(executed);
@@ -259,10 +260,10 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     [Fact]
     public void StepNodeExecutesSingleTask()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var context = _harness.GetNodeContext(seedNode);
 
-        // Run until idle first to clear any startup tasks from CreateSeedNode
+        // Run until idle first to clear any startup tasks from StartCluster
         _ = _harness.RunUntilIdle();
 
         var executionCount = 0;
@@ -282,7 +283,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     [Fact]
     public void StepNodeReturnsFalseWhenNoTasks()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Step with no pending tasks (seed node might have some, so run until idle first)
         _ = _harness.RunUntilIdle();
@@ -295,7 +296,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     [Fact]
     public void StepNodeReturnsFalseWhenSuspended()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var context = _harness.GetNodeContext(seedNode);
 
         // Queue a task
@@ -313,7 +314,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     [Fact]
     public void IsSuspendedReturnsCorrectState()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Initially not suspended
         Assert.False(seedNode.IsSuspended);
@@ -330,7 +331,7 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     [Fact]
     public void GetNodeContextReturnsValidContext()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var context = _harness.GetNodeContext(seedNode);
 
         Assert.NotNull(context);
@@ -345,8 +346,8 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     public void SuspendedNodeQueuesMessagesForLater()
     {
         // Create a 2-node cluster
-        var seed = _harness.CreateSeedNode(0);
-        var joiner = _harness.CreateJoinerNode(seed, nodeId: 1);
+        var seed = _harness.StartCluster(0);
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seed);
 
         _harness.WaitForConvergence();
 
@@ -371,9 +372,9 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     public void MultipleNodesCanBeSuspendedIndependently()
     {
         // Create a 3-node cluster
-        var seed = _harness.CreateSeedNode(0);
-        var joiner1 = _harness.CreateJoinerNode(seed, nodeId: 1);
-        var joiner2 = _harness.CreateJoinerNode(seed, nodeId: 2);
+        var seed = _harness.StartCluster(0);
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seed);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seed);
 
         _harness.WaitForConvergence();
 
@@ -400,8 +401,8 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     [Fact]
     public void NetworkSimulationBasics()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         var seedAddr = RapidClusterUtils.Loggable(seedNode.Address);
         var joinerAddr = RapidClusterUtils.Loggable(joiner.Address);
@@ -421,9 +422,9 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     [Fact]
     public void NetworkHealAllPartitionsWorks()
     {
-        _ = _harness.CreateSeedNode(0);
-        _ = _harness.CreateSeedNode(1);
-        _ = _harness.CreateSeedNode(2);
+        _ = _harness.StartCluster(0);
+        _ = _harness.StartCluster(1);
+        _ = _harness.StartCluster(2);
 
         // Create multiple partitions
         _harness.Network.CreatePartition("node:0", "node:1");
@@ -445,10 +446,10 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     {
         Assert.Empty(_harness.Nodes);
 
-        var node1 = _harness.CreateSeedNode(0);
+        var node1 = _harness.StartCluster(0);
         _ = Assert.Single(_harness.Nodes);
 
-        var node2 = _harness.CreateSeedNode(1);
+        var node2 = _harness.StartCluster(1);
         Assert.Equal(2, _harness.Nodes.Count);
 
         _harness.CrashNode(node1);
@@ -457,22 +458,62 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     }
 
     [Fact]
-    public void WaitForConvergenceTimesOutCorrectly()
+    public void WaitForMembershipSizeTimesOutWithDetailedOutcome()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
+        var budget = new AdaptiveExecutionBudget(
+            initialMaxIterations: 100,
+            maxTotalIterations: 100);
 
-        // Waiting for size 5 when only 1 node exists should timeout
-        // Using WaitForNodeSize since parameterless WaitForConvergence would succeed
-        // with a single node (active count = 1, node sees 1)
-        _ = Assert.Throws<TimeoutException>(() => _harness.WaitForNodeSize(seedNode, expectedSize: 5, maxIterations: 100));
+        var exception = Assert.Throws<TimeoutException>(
+            () => _harness.WaitForMembershipSize(expectedSize: 5, nodes: [seedNode], budget: budget));
+
+        Assert.Contains("membership size 5", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("node:0=size:1", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Reason:", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void CreateClusterInBatchesRejectsInvalidBatchSize(int batchSize)
+    {
+        _ = Assert.Throws<ArgumentOutOfRangeException>(
+            () => _harness.CreateClusterInBatches(size: 3, batchSize: batchSize));
     }
 
     [Fact]
-    public void WaitForNodeSizeTimesOutCorrectly()
+    public void CreateClusterInBatchesDefaultsToOneBatch()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var nodes = _harness.CreateClusterInBatches(size: 4);
 
-        // Waiting for size 5 when only 1 node exists should timeout
-        _ = Assert.Throws<TimeoutException>(() => _harness.WaitForNodeSize(seedNode, expectedSize: 5, maxIterations: 100));
+        Assert.All(nodes, node => Assert.Equal(4, node.MembershipSize));
+        Assert.Equal(1, nodes[0].CurrentView.ConfigurationId.Version);
+    }
+
+    [Fact]
+    public void CreateClusterInBatchesHonorsExplicitBatches()
+    {
+        var nodes = _harness.CreateClusterInBatches(size: 5, batchSize: 2);
+
+        Assert.All(nodes, node => Assert.Equal(5, node.MembershipSize));
+        Assert.Equal(3, nodes[0].CurrentView.ConfigurationId.Version);
+    }
+
+    [Fact]
+    public void CreateClusterInBatchesForwardsFailureDetectorOptions()
+    {
+        var failureDetectorOptions = new PingPongFailureDetectorOptions
+        {
+            ProbeTimeout = TimeSpan.FromMilliseconds(321),
+        };
+
+        var nodes = _harness.CreateClusterInBatches(
+            size: 3,
+            failureDetectorOptions: failureDetectorOptions);
+
+        Assert.All(
+            nodes,
+            node => Assert.Equal(failureDetectorOptions.ProbeTimeout, node.MessagingClient.ProbeTimeout));
     }
 }

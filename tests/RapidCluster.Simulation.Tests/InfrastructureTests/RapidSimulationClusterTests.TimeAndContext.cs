@@ -1,4 +1,5 @@
 using Clockwork;
+using Clockwork.Runtime.Execution;
 using RapidCluster.Simulation.Tests.Infrastructure;
 
 namespace RapidCluster.Simulation.Tests.InfrastructureTests;
@@ -6,19 +7,8 @@ namespace RapidCluster.Simulation.Tests.InfrastructureTests;
 /// <summary>
 /// Tests for the simulation test harness.
 /// </summary>
-public sealed class SimulationTestHarnessTests : IAsyncLifetime
+public sealed partial class RapidSimulationClusterTests
 {
-    private RapidSimulationCluster _harness = null!;
-
-    public ValueTask InitializeAsync()
-    {
-        // Use a fixed seed for reproducibility
-        _harness = new RapidSimulationCluster(seed: 12345);
-        return ValueTask.CompletedTask;
-    }
-
-    public async ValueTask DisposeAsync() => await _harness.DisposeAsync();
-
     [Fact]
     public void SimulationRandomWithSameSeedProducesSameSequence()
     {
@@ -49,20 +39,10 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
     }
 
     [Fact]
-    public void CreateSeedNodeInitializesWithOneNode()
-    {
-        var seedNode = _harness.CreateSeedNode();
-
-        Assert.NotNull(seedNode);
-        Assert.True(seedNode.IsInitialized);
-        Assert.Equal(1, seedNode.MembershipSize);
-    }
-
-    [Fact]
     public void JoinNodeIncreasesMembershipSize()
     {
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         Assert.NotNull(joiner);
         Assert.True(joiner.IsInitialized);
@@ -87,7 +67,7 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
     [Fact]
     public void NetworkPartitionBlocksMessages()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Isolate the node
         _harness.IsolateNode(seedNode);
@@ -99,8 +79,8 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
     [Fact]
     public void SimulationEnvironmentCreatesDerivedRandom()
     {
-        var derived1 = _harness.CreateDerivedRandom();
-        var derived2 = _harness.CreateDerivedRandom();
+        var derived1 = _harness.ForkRandom();
+        var derived2 = _harness.ForkRandom();
 
         // Different derived randoms should produce different sequences
 #pragma warning disable CA5394 // Do not use insecure randomness
@@ -119,9 +99,9 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
         await using var firstHarness = new RapidSimulationCluster(seed: 24680);
         await using var reorderedHarness = new RapidSimulationCluster(seed: 24680);
 
-        var firstNode = firstHarness.CreateUninitializedNode(nodeId: 7);
-        _ = reorderedHarness.CreateUninitializedNode(nodeId: 99);
-        var reorderedNode = reorderedHarness.CreateUninitializedNode(nodeId: 7);
+        var firstNode = firstHarness.AddUnstartedNode(nodeId: 7);
+        _ = reorderedHarness.AddUnstartedNode(nodeId: 99);
+        var reorderedNode = reorderedHarness.AddUnstartedNode(nodeId: 7);
 
 #pragma warning disable CA5394 // Do not use insecure randomness
         var firstSequence = Enumerable.Range(0, 10).Select(_ => firstNode.Context.Random.Next()).ToList();
@@ -149,27 +129,67 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
     }
 
     [Fact]
-    public void SeedIsAccessible() => Assert.Equal(12345, _harness.Seed);
+    public async Task DefaultStartTimeIsDeterministic()
+    {
+        await using var first = new RapidSimulationCluster(seed: 42);
+        await using var second = new RapidSimulationCluster(seed: 42);
+
+        Assert.Equal(RapidSimulationCluster.DefaultStartTime, first.StartDateTime);
+        Assert.Equal(first.StartDateTime, second.StartDateTime);
+        Assert.Equal(first.TimeProvider.GetUtcNow(), second.TimeProvider.GetUtcNow());
+
+        var firstTimerFiredAt = CaptureTimerFireTime(first);
+        var secondTimerFiredAt = CaptureTimerFireTime(second);
+
+        Assert.Equal(firstTimerFiredAt, secondTimerFiredAt);
+        Assert.Equal(RapidSimulationCluster.DefaultStartTime + TimeSpan.FromSeconds(1), firstTimerFiredAt);
+    }
+
+    [Fact]
+    public async Task ExplicitStartTimeIsHonored()
+    {
+        var startTime = new DateTimeOffset(2045, 6, 7, 8, 9, 10, TimeSpan.Zero);
+        await using var harness = new RapidSimulationCluster(seed: 42, startTime);
+
+        Assert.Equal(startTime, harness.StartDateTime);
+        Assert.Equal(startTime, harness.TimeProvider.GetUtcNow());
+    }
 
     [Fact]
     public void SubscribeToViewChangesReceivesNotifications()
     {
         var viewChanges = new List<MembershipView>();
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
+        SimulationExecutionSnapshot? subscriptionContext = null;
 
-        var subscription = _harness.InvokeInSimulation(
+        var subscription = _harness.RunOnNode(
             seedNode,
-            () => seedNode.ViewAccessor.Updates.Subscribe(new ViewObserver(viewChanges.Add)));
+            () =>
+            {
+                subscriptionContext = SimulationExecutionContext.Current;
+                return seedNode.ViewAccessor.Updates.Subscribe(new ViewObserver(viewChanges.Add));
+            });
 
         try
         {
-            _ = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+            _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
             Assert.Contains(viewChanges, view => view.Size == 2);
+            AssertNodeContext(subscriptionContext, seedNode);
         }
         finally
         {
-            _harness.ExecuteInSimulation(seedNode, subscription.Dispose);
+            SimulationExecutionSnapshot? disposalContext = null;
+            _harness.RunOnNode(
+                seedNode,
+                () =>
+                {
+                    disposalContext = SimulationExecutionContext.Current;
+                    subscription.Dispose();
+                });
+            AssertNodeContext(disposalContext, seedNode);
         }
+
+        Assert.Null(SimulationExecutionContext.Current);
     }
 
     private sealed class ViewObserver(Action<MembershipView> onNext) : IObserver<MembershipView>
@@ -181,5 +201,26 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
         public void OnError(Exception error) => throw error;
 
         public void OnNext(MembershipView value) => onNext(value);
+    }
+
+    private static DateTimeOffset CaptureTimerFireTime(RapidSimulationCluster harness)
+    {
+        DateTimeOffset? firedAt = null;
+        harness.TaskQueue.EnqueueAfter(
+            () => firedAt = harness.TimeProvider.GetUtcNow(),
+            TimeSpan.FromSeconds(1));
+
+        _ = harness.RunUntilIdle();
+
+        return Assert.IsType<DateTimeOffset>(firedAt);
+    }
+
+    private static void AssertNodeContext(
+        SimulationExecutionSnapshot? context,
+        RapidSimulationNode node)
+    {
+        var actual = Assert.IsType<SimulationExecutionSnapshot>(context);
+        Assert.Equal(node.NetworkAddress, Assert.IsType<SimulationNodeIdentity>(actual.Node).Address);
+        Assert.Equal(54321, actual.Runtime.Seed);
     }
 }

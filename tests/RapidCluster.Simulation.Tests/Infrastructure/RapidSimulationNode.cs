@@ -106,13 +106,13 @@ internal sealed class RapidSimulationNode : SimulationNode
     internal RapidSimulationNode(
         RapidSimulationCluster harness,
         Endpoint address,
-        IList<Endpoint>? seedAddresses,
+        IReadOnlyList<Endpoint>? seedAddresses,
         Metadata? metadata,
         RapidClusterProtocolOptions? protocolOptions,
         PingPongFailureDetectorOptions? failureDetectorOptions,
         ILoggerFactory? loggerFactory)
     {
-        using var runtimeScope = harness.EnterSimulationNodeRuntime(address);
+        using var runtimeScope = harness.EnterNodeContext(address);
         using var guardScope = harness.Guard.Enter();
         _harness = harness;
         Address = address;
@@ -128,13 +128,10 @@ internal sealed class RapidSimulationNode : SimulationNode
         var contextLogger = _nodeLoggerFactory.CreateLogger<SimulationNodeContext>();
         var nodeRandom = new SimulationRandom(
             harness.SeedAuthority.GetSiteSeed(SimulationSeedDomain.Application, RapidClusterUtils.Loggable(address)));
-        Context = new SimulationNodeContext(
-            harness.Clock,
-            harness.Guard,
+        Context = harness.CreateSimulationNodeContext(
+            address,
             nodeRandom,
-            harness.TaskQueue,
-            contextLogger,
-            harness.CreateRapidNodeAmbientContext(address));
+            contextLogger);
 
         _log = new RapidSimulationNodeLogger(_nodeLoggerFactory.CreateLogger<RapidSimulationNode>());
 
@@ -191,7 +188,7 @@ internal sealed class RapidSimulationNode : SimulationNode
     /// Initializes the membership service (completes the join or cluster start).
     /// </summary>
     internal Task StartAsync(CancellationToken cancellationToken = default)
-        => _harness.StartInSimulationNode(Address, () => _lifecycle.StartAsync(cancellationToken));
+        => _harness.RunInNodeContext(Address, () => _lifecycle.StartAsync(cancellationToken));
 
     internal void CompleteInitialization()
     {
@@ -224,7 +221,7 @@ internal sealed class RapidSimulationNode : SimulationNode
 
         // Graceful stop: notify observers and wait for background tasks
         // Keep MessagingClient alive so we can still participate in consensus
-        return _harness.StartInSimulationNode(Address, () => _lifecycle.StopAsync(cancellationToken));
+        return _harness.RunInNodeContext(Address, () => _lifecycle.StopAsync(cancellationToken));
     }
 
     internal void CompleteStop() => _log.NodeLeftGracefully(RapidClusterUtils.Loggable(Address));
@@ -247,7 +244,7 @@ internal sealed class RapidSimulationNode : SimulationNode
                 var node = (RapidSimulationNode)state!;
                 try
                 {
-                    var providerDisposal = node._harness.StartInSimulationNode(
+                    var providerDisposal = node._harness.RunInNodeContext(
                         node.Address,
                         node._serviceProvider.DisposeAsync);
 

@@ -68,8 +68,8 @@ public sealed class MessageDeliveryTests : IAsyncLifetime
         _harness.Network.BaseMessageDelay = TimeSpan.FromMilliseconds(5);
         _harness.Network.MaxJitter = TimeSpan.FromMilliseconds(5);
 
-        var seedNode = _harness.CreateSeedNode();
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         Assert.True(joiner.IsInitialized);
         Assert.Equal(2, joiner.MembershipSize);
@@ -143,11 +143,11 @@ public sealed class MessageDeliveryTests : IAsyncLifetime
         // Enable moderate message loss (10% - lower than original 30% to be more reliable)
         _harness.Network.MessageDropRate = 0.1;
 
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
 
         // Join should eventually succeed despite message loss
         // The join protocol has retry logic with exponential backoff
-        var joiner = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -166,13 +166,13 @@ public sealed class MessageDeliveryTests : IAsyncLifetime
         // Enable low message loss (2% - conservative rate to ensure reliability)
         _harness.Network.MessageDropRate = 0.02;
 
-        var seedNode = _harness.CreateSeedNode();
-        var joiner1 = _harness.CreateJoinerNode(seedNode, nodeId: 1);
+        var seedNode = _harness.StartCluster();
+        var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         _harness.WaitForConvergence();
 
         // Add another node with message loss active
-        var joiner2 = _harness.CreateJoinerNode(seedNode, nodeId: 2);
+        var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
         _harness.WaitForConvergence();
 
@@ -182,7 +182,7 @@ public sealed class MessageDeliveryTests : IAsyncLifetime
     [Fact]
     public void UnavailableEndpointReturnsRetryableJoinFailure()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var unavailable = RapidClusterUtils.HostFromParts("missing", 99);
         var request = new PreJoinMessage { Sender = seedNode.Address }.ToRapidClusterRequest();
 
@@ -198,7 +198,7 @@ public sealed class MessageDeliveryTests : IAsyncLifetime
     [Fact]
     public void NullEndpointIsRejectedSynchronously()
     {
-        var seedNode = _harness.CreateSeedNode();
+        var seedNode = _harness.StartCluster();
         var request = new PreJoinMessage { Sender = seedNode.Address }.ToRapidClusterRequest();
 
         _ = Assert.Throws<ArgumentNullException>(

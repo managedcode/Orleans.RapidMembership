@@ -29,8 +29,9 @@ namespace RapidCluster.Simulation.Tests.Infrastructure;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSimulationNode>
 {
+    internal static readonly DateTimeOffset DefaultStartTime = DateTimeOffset.UnixEpoch;
+
     private readonly SimulationLogManager _logManager;
-    private readonly ILogger<RapidSimulationCluster> _logger;
     private readonly SimulationHarnessLogger _log;
     private bool _disposed;
 
@@ -40,17 +41,12 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// Logs are written to a unique file per simulation and attached to the test context.
     /// </summary>
     /// <param name="seed">The seed for deterministic random number generation.</param>
-    public RapidSimulationCluster(int seed)
-        : this(seed, DateTimeOffset.UtcNow)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="RapidSimulationCluster"/> class
-    /// with an explicit virtual-time origin.
-    /// </summary>
-    internal RapidSimulationCluster(int seed, DateTimeOffset startDateTime)
-        : base(seed, startDateTime, cancellationToken: TestContext.Current.CancellationToken)
+    /// <param name="startTime">
+    /// Optional virtual-time origin. Defaults to <see cref="DateTimeOffset.UnixEpoch"/>
+    /// so identical seeds start from identical time.
+    /// </param>
+    public RapidSimulationCluster(int seed, DateTimeOffset? startTime = null)
+        : base(seed, startTime ?? DefaultStartTime, cancellationToken: TestContext.Current.CancellationToken)
     {
         Network = new SimulationNetwork(
             this,
@@ -60,8 +56,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         _logManager = new SimulationLogManager(TimeProvider, seed);
         LoggerFactory = _logManager.LoggerFactory;
 
-        _logger = LoggerFactory.CreateLogger<RapidSimulationCluster>();
-        _log = new SimulationHarnessLogger(_logger);
+        _log = new SimulationHarnessLogger(LoggerFactory.CreateLogger<RapidSimulationCluster>());
         Network.SetLogger(LoggerFactory.CreateLogger<SimulationNetwork>());
 
         _log.HarnessCreated(seed);
@@ -82,38 +77,35 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// </summary>
     public SimulationNetwork Network { get; }
 
-    internal IDisposable EnterSimulationRuntime()
+    internal IDisposable EnterNodeContext(Endpoint address) =>
+        EnterNodeContext(RapidClusterUtils.Loggable(address));
+
+    internal SimulationNodeContext CreateSimulationNodeContext(
+        Endpoint address,
+        SimulationRandom random,
+        ILogger<SimulationNodeContext> logger)
     {
-        var ambient = CreateNodeAmbientContext("rapidcluster-harness");
-        return SimulationExecutionContext.EnterRuntime(ambient.ActivationToken, ambient.Runtime);
+        var ambient = CreateNodeAmbientContext(RapidClusterUtils.Loggable(address));
+        return new SimulationNodeContext(Clock, Guard, random, TaskQueue, logger, ambient);
     }
 
-    internal SimulationAmbientContextConfiguration CreateRapidNodeAmbientContext(Endpoint address) =>
-        CreateNodeAmbientContext(RapidClusterUtils.Loggable(address));
-
-    internal IDisposable EnterSimulationNodeRuntime(Endpoint address)
+    internal T RunInNodeContext<T>(Endpoint address, Func<T> action)
     {
-        var ambient = CreateRapidNodeAmbientContext(address);
-        var runtimeScope = SimulationExecutionContext.EnterRuntime(ambient.ActivationToken, ambient.Runtime);
-        var nodeScope = SimulationExecutionContext.EnterNode(ambient.Node!);
-        return new SimulationRuntimeScope(nodeScope, runtimeScope);
-    }
-
-    internal T StartInSimulationNode<T>(Endpoint address, Func<T> action)
-    {
-        using var _ = EnterSimulationNodeRuntime(address);
+        ArgumentNullException.ThrowIfNull(action);
+        using var _ = EnterNodeContext(address);
+        using var guardScope = Guard.Enter();
         return action();
     }
 
     /// <summary>
     /// Executes a synchronous boundary call within the specified node's simulation runtime.
     /// </summary>
-    public void ExecuteInSimulation(RapidSimulationNode node, Action action)
+    public void RunOnNode(RapidSimulationNode node, Action action)
     {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(action);
-        _ = InvokeInSimulation(
-            node,
+        _ = RunInNodeContext(
+            node.Address,
             () =>
             {
                 action();
@@ -124,48 +116,46 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// <summary>
     /// Invokes a synchronous boundary call within the specified node's simulation runtime.
     /// </summary>
-    public T InvokeInSimulation<T>(RapidSimulationNode node, Func<T> action)
+    public T RunOnNode<T>(RapidSimulationNode node, Func<T> action)
     {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(action);
-        using var runtimeScope = EnterSimulationNodeRuntime(node.Address);
-        using var guardScope = Guard.Enter();
-        return action();
+        return RunInNodeContext(node.Address, action);
     }
 
     /// <summary>
-    /// Gets a node by its network address.
+    /// Finds a node by its network address.
     /// </summary>
     /// <param name="address">The network address of the node.</param>
     /// <returns>The node with the specified address, or null if not found.</returns>
-    public new RapidSimulationNode? GetNode(string address) => base.GetNode(address);
+    public RapidSimulationNode? FindNode(string address) => base.GetNode(address);
 
     /// <summary>
-    /// Creates a node without initializing it (for testing edge cases).
+    /// Adds a node without starting it (for testing edge cases).
     /// The node is registered but not started or joined to any cluster.
     /// </summary>
     /// <param name="nodeId">The node ID.</param>
-    /// <param name="seedNode">Optional seed node for joining. If null, the node will start its own cluster when initialized.</param>
+    /// <param name="seed">Optional seed node for joining. If null, the node will start its own cluster when initialized.</param>
     /// <param name="options">Optional protocol options.</param>
-    public RapidSimulationNode CreateUninitializedNode(int nodeId, RapidSimulationNode? seedNode = null, RapidClusterProtocolOptions? options = null)
+    public RapidSimulationNode AddUnstartedNode(int nodeId, RapidSimulationNode? seed = null, RapidClusterProtocolOptions? options = null)
     {
         var address = RapidClusterUtils.HostFromParts("node", nodeId);
-        var node = new RapidSimulationNode(this, address, seedNode?.Address, metadata: null, options, failureDetectorOptions: null, LoggerFactory);
+        var node = new RapidSimulationNode(this, address, seed?.Address, metadata: null, options, failureDetectorOptions: null, LoggerFactory);
         RegisterNode(node);
         _log.UninitializedNodeCreated(nodeId);
         return node;
     }
 
     /// <summary>
-    /// Creates and starts a new seed node.
+    /// Starts a new cluster with a seed node.
     /// </summary>
-    public RapidSimulationNode CreateSeedNode(int nodeId = 0, RapidClusterProtocolOptions? options = null, PingPongFailureDetectorOptions? failureDetectorOptions = null)
+    public RapidSimulationNode StartCluster(int nodeId = 0, RapidClusterProtocolOptions? options = null, PingPongFailureDetectorOptions? failureDetectorOptions = null)
     {
         var address = RapidClusterUtils.HostFromParts("node", nodeId);
         var node = new RapidSimulationNode(this, address, seedAddress: null, metadata: null, options, failureDetectorOptions, LoggerFactory);
         RegisterNode(node);
 
-        _ = RunToCompletion(() => node.StartAsync(TestContext.Current.CancellationToken));
+        RunToCompletion(() => node.StartAsync(TestContext.Current.CancellationToken));
         node.CompleteInitialization();
 
         _log.SeedNodeCreated(nodeId);
@@ -176,14 +166,14 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// Creates and joins a new node to the cluster through the specified seed.
     /// Drives the simulation to complete the join.
     /// </summary>
-    public RapidSimulationNode CreateJoinerNode(
-        RapidSimulationNode seedNode,
+    public RapidSimulationNode JoinNode(
         int nodeId,
+        RapidSimulationNode seed,
         RapidClusterProtocolOptions? options = null,
         PingPongFailureDetectorOptions? failureDetectorOptions = null)
     {
-        ArgumentNullException.ThrowIfNull(seedNode);
-        return CreateJoinerNodeWithMultipleSeeds([seedNode], nodeId, options, failureDetectorOptions);
+        ArgumentNullException.ThrowIfNull(seed);
+        return JoinNode(nodeId, [seed], options, failureDetectorOptions);
     }
 
     /// <summary>
@@ -191,36 +181,45 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// The node will try seeds in round-robin order until join succeeds.
     /// Drives the simulation to complete the join.
     /// </summary>
-    public RapidSimulationNode CreateJoinerNodeWithMultipleSeeds(
-        IReadOnlyList<RapidSimulationNode> seedNodes,
+    public RapidSimulationNode JoinNode(
         int nodeId,
+        IReadOnlyList<RapidSimulationNode> seeds,
         RapidClusterProtocolOptions? options = null,
         PingPongFailureDetectorOptions? failureDetectorOptions = null)
     {
-        ArgumentNullException.ThrowIfNull(seedNodes);
-        if (seedNodes.Count == 0)
+        ArgumentNullException.ThrowIfNull(seeds);
+        if (seeds.Count == 0)
         {
-            throw new ArgumentException("At least one seed node is required", nameof(seedNodes));
+            throw new ArgumentException("At least one seed node is required.", nameof(seeds));
         }
 
-        var seedAddresses = seedNodes.Select(n => n.Address).ToList();
-        return CreateJoinerNodeWithSeedAddresses(seedAddresses, nodeId, options, failureDetectorOptions);
+        if (seeds.Select(static seed => RapidClusterUtils.Loggable(seed.Address)).Distinct(StringComparer.Ordinal).Count() != seeds.Count)
+        {
+            throw new ArgumentException("Seed nodes must be unique.", nameof(seeds));
+        }
+
+        return JoinNode(nodeId, seeds.Select(static seed => seed.Address).ToList(), options, failureDetectorOptions);
     }
 
     /// <summary>
     /// Creates and joins a new node to the cluster with raw seed addresses.
-    /// Useful for testing duplicate seed handling and other edge cases.
+    /// Useful for validating raw seed lists and other edge cases.
     /// </summary>
-    public RapidSimulationNode CreateJoinerNodeWithSeedAddresses(
-        IList<Endpoint> seedAddresses,
+    public RapidSimulationNode JoinNode(
         int nodeId,
+        IReadOnlyList<Endpoint> seedAddresses,
         RapidClusterProtocolOptions? options = null,
         PingPongFailureDetectorOptions? failureDetectorOptions = null)
     {
         ArgumentNullException.ThrowIfNull(seedAddresses);
         if (seedAddresses.Count == 0)
         {
-            throw new ArgumentException("At least one seed address is required", nameof(seedAddresses));
+            throw new ArgumentException("At least one seed address is required.", nameof(seedAddresses));
+        }
+
+        if (seedAddresses.Select(static seed => RapidClusterUtils.Loggable(seed)).Distinct(StringComparer.Ordinal).Count() != seedAddresses.Count)
+        {
+            throw new ArgumentException("Seed addresses must be unique.", nameof(seedAddresses));
         }
 
         var address = RapidClusterUtils.HostFromParts("node", nodeId);
@@ -229,7 +228,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
 
         _log.NodeJoining(nodeId);
 
-        _ = RunToCompletion(() => node.StartAsync(TestContext.Current.CancellationToken));
+        RunToCompletion(() => node.StartAsync(TestContext.Current.CancellationToken));
         node.CompleteInitialization();
 
         _log.NodeJoined(nodeId);
@@ -242,7 +241,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// This results in O(N) consensus rounds but guarantees deterministic behavior.
     /// </summary>
     /// <remarks>
-    /// For large clusters (50+ nodes), consider using <see cref="CreateClusterParallel"/>
+    /// For large clusters (50+ nodes), consider using <see cref="CreateClusterInBatches"/>
     /// which batches joins together for O(log N) consensus rounds.
     /// </remarks>
     public IReadOnlyList<RapidSimulationNode> CreateCluster(int size, RapidClusterProtocolOptions? options = null, PingPongFailureDetectorOptions? failureDetectorOptions = null)
@@ -255,13 +254,13 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         var result = new List<RapidSimulationNode>(size);
 
         // Create seed node
-        var seedNode = CreateSeedNode(0, options, failureDetectorOptions);
+        var seedNode = StartCluster(0, options, failureDetectorOptions);
         result.Add(seedNode);
 
         // Create joiner nodes
         for (var i = 1; i < size; i++)
         {
-            var joiner = CreateJoinerNode(seedNode, i, options, failureDetectorOptions);
+            var joiner = JoinNode(i, seedNode, options, failureDetectorOptions);
             result.Add(joiner);
 
             // Ensure the cluster catches up between sequential joins.
@@ -274,7 +273,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     }
 
     /// <summary>
-    /// Creates a cluster of the specified size using parallel joins.
+    /// Creates a cluster of the specified size using concurrent joins in stable batches.
     /// Multiple nodes join concurrently, allowing the multi-node cut detection
     /// to batch them into fewer consensus rounds (O(log N) instead of O(N)).
     /// </summary>
@@ -291,15 +290,17 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// </remarks>
     /// <param name="size">The number of nodes in the cluster.</param>
     /// <param name="options">Optional protocol options.</param>
+    /// <param name="failureDetectorOptions">Optional failure detector options applied to every node.</param>
     /// <param name="batchSize">
-    /// Number of nodes to initiate joining simultaneously. Default is 0 which means all nodes.
+    /// Number of nodes to initiate joining simultaneously. The default joins all remaining nodes at once.
     /// Smaller batch sizes provide more control over join ordering while still enabling batching.
     /// </param>
     /// <returns>List of all nodes in the cluster.</returns>
-    public IReadOnlyList<RapidSimulationNode> CreateClusterParallel(
+    public IReadOnlyList<RapidSimulationNode> CreateClusterInBatches(
         int size,
         RapidClusterProtocolOptions? options = null,
-        int batchSize = 0)
+        PingPongFailureDetectorOptions? failureDetectorOptions = null,
+        int? batchSize = null)
     {
         if (size < 1)
         {
@@ -309,7 +310,12 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         var result = new List<RapidSimulationNode>(size);
 
         // Create seed node first
-        var seedNode = CreateSeedNode(0, options);
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than zero when specified.");
+        }
+
+        var seedNode = StartCluster(0, options, failureDetectorOptions);
         result.Add(seedNode);
 
         if (size == 1)
@@ -317,8 +323,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
             return result;
         }
 
-        // Use all remaining nodes as batch size if not specified or invalid
-        var effectiveBatchSize = batchSize <= 0 ? size - 1 : batchSize;
+        var effectiveBatchSize = batchSize ?? size - 1;
 
         // Process nodes in batches
         var remainingNodes = size - 1;
@@ -333,7 +338,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
             for (var i = 0; i < currentBatchSize; i++)
             {
                 var address = RapidClusterUtils.HostFromParts("node", nodeId++);
-                var node = new RapidSimulationNode(this, address, seedNode.Address, metadata: null, options, failureDetectorOptions: null, LoggerFactory);
+                var node = new RapidSimulationNode(this, address, seedNode.Address, metadata: null, options, failureDetectorOptions, LoggerFactory);
                 RegisterNode(node);
 
                 _log.NodeJoiningParallel(RapidClusterUtils.Loggable(node.Address));
@@ -341,7 +346,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
                 batchNodes.Add(node);
             }
 
-            _ = RunToCompletion(
+            RunToCompletion(
                 () => Task.WhenAll(batchNodes.Select(node => node.StartAsync(TestContext.Current.CancellationToken))));
 
             // Log completion
@@ -356,14 +361,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
 
             // Complete the current view change before handing the stable membership to the next batch.
             var expectedSize = result.Count;
-            var convergence = RunUntilConverged(result, expectedSize);
-            if (!convergence.ConditionMet)
-            {
-                throw new TimeoutException(
-                    string.Create(CultureInfo.InvariantCulture, $"Batch convergence failed. Expected size: {expectedSize}, ") +
-                    $"Actual sizes: [{string.Join(", ", result.Select(n => n.MembershipSize))}].{Environment.NewLine}" +
-                    convergence.ToDetailedString());
-            }
+            WaitForMembershipSize(expectedSize, result);
         }
 
         return result;
@@ -380,7 +378,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
 
         // Dispose the node while it is still registered so the simulation can drive its task queue.
         // This cancels in-flight tasks and releases resources.
-        _ = RunToCompletion(() => node.DisposeAsync().AsTask());
+        RunToCompletion(() => node.DisposeAsync().AsTask());
 
         // Unregister after disposal - no new messages will be delivered
         UnregisterNode(node);
@@ -398,29 +396,20 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         ArgumentNullException.ThrowIfNull(node);
         _log.NodeLeaving();
 
-        var remainingNodes = Nodes.Where(n => n != node).ToList();
-        var targetSize = remainingNodes.Count;
+        var remainingNodes = Nodes.Where(candidate => candidate != node).ToList();
 
         // Drive the stop operation to completion (sends LeaveMessages to observers)
         // Node can still receive messages after this
-        _ = RunToCompletion(() => node.StopAsync(TestContext.Current.CancellationToken));
+        RunToCompletion(() => node.StopAsync(TestContext.Current.CancellationToken));
         node.CompleteStop();
 
         // The leaving node must remain active to participate in consensus.
-        // Run the simulation until all remaining nodes converge to the new size.
-        var convergence = RunUntilConverged(remainingNodes, targetSize);
-
-        if (!convergence.ConditionMet)
-        {
-            var sizes = string.Join(", ", remainingNodes.Select(n => n.MembershipSize));
-            _logger.LogWarning(
-                "RemoveNodeGracefully: remaining nodes did not converge to size {TargetSize}. Current sizes: [{Sizes}]. Outcome: {Outcome}",
-                targetSize, sizes, convergence.ToDetailedString());
-        }
+        // Run the simulation until active remaining nodes agree that this node left.
+        WaitForStableMembership(remainingNodes, [node.Address]);
 
         // Dispose the node's resources while it's still registered.
         // This ensures the simulation can drive the node's task queue during disposal.
-        _ = RunToCompletion(() => node.DisposeAsync().AsTask());
+        RunToCompletion(() => node.DisposeAsync().AsTask());
 
         // Unregister the node from the network (no more messages will be delivered)
         UnregisterNode(node);
@@ -452,8 +441,6 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         // Get the starting configuration version to measure changes
         var remainingNodes = Nodes.Where(n => !nodesToRemove.Contains(n)).ToList();
         var startingConfigVersion = remainingNodes[0].CurrentView.ConfigurationId.Version;
-        var targetSize = remainingNodes.Count;
-
         _log.NodesLeavingParallel(nodesToRemove.Count);
 
         foreach (var node in nodesToRemove)
@@ -461,7 +448,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
             _log.NodeLeavingParallel(RapidClusterUtils.Loggable(node.Address));
         }
 
-        _ = RunToCompletion(() =>
+        RunToCompletion(() =>
         {
             var leaveTasks = nodesToRemove.Select(node => node.StopAsync(TestContext.Current.CancellationToken));
             return Task.WhenAll(leaveTasks);
@@ -471,19 +458,13 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
             node.CompleteStop();
         }
 
-        var convergence = RunUntilConverged(remainingNodes, targetSize);
-
-        if (!convergence.ConditionMet)
-        {
-            var sizes = string.Join(", ", remainingNodes.Select(n => n.MembershipSize));
-            _logger.LogWarning(
-                "RemoveNodesGracefullyParallel: remaining nodes did not converge to size {TargetSize}. Current sizes: [{Sizes}]. Outcome: {Outcome}",
-                targetSize, sizes, convergence.ToDetailedString());
-        }
+        WaitForStableMembership(
+            remainingNodes,
+            nodesToRemove.Select(static node => node.Address).ToList());
 
         // Dispose all leaving nodes' resources while they're still registered.
         // This ensures the simulation can drive each node's task queue during disposal.
-        _ = RunToCompletion(() =>
+        RunToCompletion(() =>
         {
             var disposeTasks = nodesToRemove.Select(node => node.DisposeAsync().AsTask());
             return Task.WhenAll(disposeTasks);
@@ -555,75 +536,37 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     }
 
     /// <summary>
-    /// Runs until all non-suspended nodes have the expected membership size.
-    /// Suspended nodes are excluded from the check since they cannot process messages.
+    /// Waits until the selected nodes have the expected membership size.
+    /// When <paramref name="nodes"/> is omitted, suspended and departed nodes are excluded.
     /// </summary>
-    public SimulationExecutionResult RunUntilConverged(int expectedSize, SimulationAdaptiveBudget? budget = null) =>
-        RunUntilConverged(() => ActiveNodes.All(n => n.MembershipSize == expectedSize), budget);
-
-    /// <summary>
-    /// Runs until the specified nodes have the expected membership size.
-    /// Use this overload when some nodes (e.g., isolated/partitioned nodes) should be excluded from the check.
-    /// </summary>
-    public SimulationExecutionResult RunUntilConverged(
-        IEnumerable<RapidSimulationNode> nodes,
+    public void WaitForMembershipSize(
         int expectedSize,
-        SimulationAdaptiveBudget? budget = null)
+        IEnumerable<RapidSimulationNode>? nodes = null,
+        AdaptiveExecutionBudget? budget = null)
     {
-        ArgumentNullException.ThrowIfNull(nodes);
-        var nodeList = nodes.ToList();
-        return RunUntilConverged(() => nodeList.TrueForAll(n => n.MembershipSize == expectedSize), budget);
-    }
-
-    /// <summary>
-    /// Starts a task normally and adaptively drives the simulation until it completes.
-    /// </summary>
-    public SimulationExecutionResult RunToCompletion(
-        Func<Task> taskFactory,
-        SimulationAdaptiveBudget? budget = null)
-    {
-        ArgumentNullException.ThrowIfNull(taskFactory);
-        Task task;
-        using (EnterSimulationRuntime())
-        using (Guard.Enter())
-        {
-            task = taskFactory();
-        }
-
-        var outcome = RunUntilConverged(() => task.IsCompleted, budget);
+        ArgumentOutOfRangeException.ThrowIfNegative(expectedSize);
+        var candidates = nodes?.ToList() ?? Nodes.ToList();
+        var participants = candidates
+            .Where(static node => !node.IsSuspended && node.CurrentView.IsHostPresent(node.Address))
+            .ToList();
+        var outcome = RunUntil(
+            () => participants.Count > 0 &&
+                participants.TrueForAll(node => node.MembershipSize == expectedSize),
+            budget ?? AdaptiveExecutionBudget.Default);
         if (!outcome.ConditionMet)
         {
+            var nodeDetails = participants.Count == 0
+                ? "<none>"
+                : string.Join(
+                    ", ",
+                    participants.Select(node => string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{RapidClusterUtils.Loggable(node.Address)}=size:{node.MembershipSize},suspended:{node.IsSuspended},present:{node.CurrentView.IsHostPresent(node.Address)}")));
             throw new TimeoutException(
-                $"Task did not complete.{Environment.NewLine}{outcome.ToDetailedString()}");
+                string.Create(CultureInfo.InvariantCulture, $"Nodes did not reach membership size {expectedSize}. Participants: [{nodeDetails}].") +
+                Environment.NewLine +
+                outcome.ToDetailedString());
         }
-
-        task.GetAwaiter().GetResult();
-        return outcome;
-    }
-
-    /// <summary>
-    /// Starts a result-producing task normally and adaptively drives the simulation until it completes.
-    /// </summary>
-    public T RunToCompletion<T>(
-        Func<Task<T>> taskFactory,
-        SimulationAdaptiveBudget? budget = null)
-    {
-        ArgumentNullException.ThrowIfNull(taskFactory);
-        Task<T> task;
-        using (EnterSimulationRuntime())
-        using (Guard.Enter())
-        {
-            task = taskFactory();
-        }
-
-        var outcome = RunUntilConverged(() => task.IsCompleted, budget);
-        if (!outcome.ConditionMet)
-        {
-            throw new TimeoutException(
-                $"Task did not complete.{Environment.NewLine}{outcome.ToDetailedString()}");
-        }
-
-        return task.GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -633,7 +576,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// </summary>
     public void WaitForConvergence()
     {
-        var outcome = RunUntilConverged(() =>
+        var outcome = RunUntil(() =>
         {
             var participants = ActiveNodes.Where(n => n.CurrentView.IsHostPresent(n.Address)).ToList();
             return participants.Count > 0 && participants.TrueForAll(n => n.MembershipSize == participants.Count);
@@ -650,42 +593,34 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         }
     }
 
-    /// <summary>
-    /// Waits for a specific node to reach the expected membership size.
-    /// </summary>
-    public void WaitForNodeSize(RapidSimulationNode node, int expectedSize)
+    private void WaitForStableMembership(
+        IEnumerable<RapidSimulationNode> nodes,
+        IReadOnlyList<Endpoint> departedNodes)
     {
-        ArgumentNullException.ThrowIfNull(node);
-        var outcome = RunUntilConverged(() => node.MembershipSize == expectedSize);
+        var candidates = nodes.ToList();
+        var outcome = RunUntil(() =>
+        {
+            var participants = candidates
+                .Where(static node => !node.IsSuspended && node.CurrentView.IsHostPresent(node.Address))
+                .ToList();
+            if (participants.Count == 0)
+            {
+                return false;
+            }
+
+            var membershipSize = participants[0].MembershipSize;
+            return participants.TrueForAll(node =>
+                node.MembershipSize == membershipSize &&
+                departedNodes.All(departed => !node.CurrentView.IsHostPresent(departed)));
+        });
+
         if (!outcome.ConditionMet)
         {
             throw new TimeoutException(
-                string.Create(CultureInfo.InvariantCulture, $"Node did not reach size {expectedSize}. Current size: {node.MembershipSize}.") +
-                Environment.NewLine +
+                $"Active remaining nodes did not reach a stable membership after departure.{Environment.NewLine}" +
                 outcome.ToDetailedString());
         }
     }
-
-    /// <summary>
-    /// Waits for a specific node to reach the expected membership size within an explicit test boundary.
-    /// </summary>
-    public void WaitForNodeSize(RapidSimulationNode node, int expectedSize, int maxIterations)
-    {
-        ArgumentNullException.ThrowIfNull(node);
-        var outcome = RunUntilDetailed(() => node.MembershipSize == expectedSize, maxIterations);
-        if (!outcome.ConditionMet)
-        {
-            throw new TimeoutException(
-                string.Create(CultureInfo.InvariantCulture, $"Node did not reach size {expectedSize}. Current size: {node.MembershipSize}.") +
-                Environment.NewLine +
-                outcome.ToDetailedString());
-        }
-    }
-
-    /// <summary>
-    /// Logs the seed to the test output for reproduction.
-    /// </summary>
-    public void LogSeedForReproduction() => _logger.LogInformation("[SEED FOR REPRODUCTION] {Seed}", Seed);
 
     /// <summary>
     /// Asserts that no log entries at Warning level or above were recorded.
@@ -766,6 +701,14 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         }
     }
 
+    private SimulationRuntimeScope EnterNodeContext(string nodeAddress)
+    {
+        var ambient = CreateNodeAmbientContext(nodeAddress);
+        var runtimeScope = SimulationExecutionContext.EnterRuntime(ambient.ActivationToken, ambient.Runtime);
+        var nodeScope = SimulationExecutionContext.EnterNode(ambient.Node!);
+        return new SimulationRuntimeScope(nodeScope, runtimeScope);
+    }
+
     private sealed class SimulationRuntimeScope(IDisposable nodeScope, IDisposable runtimeScope) : IDisposable
     {
         public void Dispose()
@@ -803,7 +746,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
                 }
             }
 
-            _ = RunToCompletion(() => Task.WhenAll(nodes.Select(node => node.DisposeAsync().AsTask())));
+            RunToCompletion(() => Task.WhenAll(nodes.Select(node => node.DisposeAsync().AsTask())));
 
             foreach (var node in nodes)
             {
