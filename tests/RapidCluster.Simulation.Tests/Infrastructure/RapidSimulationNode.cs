@@ -3,10 +3,12 @@ using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Metrics;
 using System.Globalization;
 using Clockwork;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using RapidCluster.Discovery;
 using RapidCluster.Messaging;
 using RapidCluster.Monitoring;
 using RapidCluster.Pb;
@@ -24,20 +26,12 @@ namespace RapidCluster.Simulation.Tests.Infrastructure;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 internal sealed class RapidSimulationNode : SimulationNode
 {
-    private readonly RapidClusterProtocolOptions _protocolOptions;
-    private readonly PingPongFailureDetectorOptions _failureDetectorOptions;
-    private readonly ILoggerFactory _loggerFactory;
     private readonly RapidSimulationNodeLogger _log;
     private readonly MembershipService _membershipService;
-    private readonly SharedResources _sharedResources;
-    private readonly PingPongFailureDetectorFactory _failureDetectorFactory;
-    private readonly IConsensusCoordinatorFactory _consensusCoordinatorFactory;
-    private readonly ILogger<CutDetector> _cutDetectorLogger;
-    private readonly MembershipViewAccessor _viewAccessor;
-    private readonly ILogger<MembershipService> _membershipServiceLogger;
+    private readonly IMembershipViewAccessor _viewAccessor;
+    private readonly IRapidClusterLifecycle _lifecycle;
+    private readonly ServiceProvider _serviceProvider;
     private readonly CancellationTokenSource _disposeCts = new();
-    private readonly TestMeterFactory _meterFactory;
-    private readonly RapidClusterMetrics _metrics;
     private bool _disposed;
     private bool _isInitialized;
 
@@ -120,88 +114,65 @@ internal sealed class RapidSimulationNode : SimulationNode
         // Wrap the logger factory to prepend the node name to all log messages
         var baseLoggerFactory = loggerFactory ?? harness.LoggerFactory;
         var nodeName = string.Create(CultureInfo.InvariantCulture, $"{address.Hostname.ToStringUtf8()}:{address.Port}");
-        _loggerFactory = baseLoggerFactory != null
+        ILoggerFactory nodeLoggerFactory = baseLoggerFactory != null
             ? new NodePrefixedLoggerFactory(baseLoggerFactory, nodeName)
             : NullLoggerFactory.Instance;
 
         // Create logger for the context (suspend/resume logging happens there)
-        var contextLogger = _loggerFactory.CreateLogger<SimulationNodeContext>();
+        var contextLogger = nodeLoggerFactory.CreateLogger<SimulationNodeContext>();
         Context = new SimulationNodeContext(harness.Clock, harness.Guard, harness.CreateDerivedRandom(), harness.TaskQueue, contextLogger);
 
-        _log = new RapidSimulationNodeLogger(_loggerFactory.CreateLogger<RapidSimulationNode>());
-        _membershipServiceLogger = _loggerFactory.CreateLogger<MembershipService>();
+        _log = new RapidSimulationNodeLogger(nodeLoggerFactory.CreateLogger<RapidSimulationNode>());
 
-        // Create protocol options
-        _protocolOptions = protocolOptions ?? new RapidClusterProtocolOptions();
-        _failureDetectorOptions = failureDetectorOptions ?? new PingPongFailureDetectorOptions();
-
-        // Create shared resources with the node's time provider, task scheduler, and harness teardown token
-        _sharedResources = new SharedResources(
+        var configuredProtocolOptions = protocolOptions ?? new RapidClusterProtocolOptions();
+        var configuredFailureDetectorOptions = failureDetectorOptions ?? new PingPongFailureDetectorOptions();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<ILoggerFactory>(_ => nodeLoggerFactory);
+        services.AddSingleton<IMeterFactory>(_ => new TestMeterFactory());
+        services.AddSingleton<IHostApplicationLifetime>(
+            _ => new SimulationHostApplicationLifetime(harness.TeardownCancellationToken));
+        services.AddSingleton(new SharedResources(
             Context.TimeProvider,
             Context.TaskScheduler,
             Context.Random,
             Context.Random.NextGuid,
-            harness.TeardownCancellationToken);
+            harness.TeardownCancellationToken));
+        services.AddSingleton<IMessagingClient>(sp => new InMemoryMessagingClient(
+            harness,
+            this,
+            address,
+            sp.GetRequiredService<IOptions<RapidClusterProtocolOptions>>().Value,
+            sp.GetRequiredService<IOptions<PingPongFailureDetectorOptions>>().Value));
+        services.AddSingleton(sp => new RapidClusterMetrics(sp.GetRequiredService<IMeterFactory>(), cluster: null));
 
-        // Create in-memory messaging client using timeouts from options.
-        // For tests with suspended nodes requiring Classic Paxos fallback,
-        // a longer timeout (e.g., 30 seconds) may be needed to allow
-        // for the random jitter delay before Classic Paxos starts.
-        MessagingClient = new InMemoryMessagingClient(harness, this, address, _protocolOptions, _failureDetectorOptions);
+        services
+            .AddRapidClusterManual(
+                options =>
+                {
+                    options.SeedAddresses = seedAddresses?.Select(s => s.ToEndPointPreferIP()).ToList();
+                    options.Metadata = metadata?.Metadata_.ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => kvp.Value.ToByteArray(),
+                        StringComparer.Ordinal) ?? [];
+                },
+                Context.TimeProvider)
+            .UseListenAddress(address.ToEndPointPreferIP())
+            .ConfigureProtocol(options => CopyOptions(configuredProtocolOptions, options))
+            .ConfigureFailureDetector(options => CopyOptions(configuredFailureDetectorOptions, options));
 
-        // Create view accessor
-        _viewAccessor = new MembershipViewAccessor();
+        // Preserve simulation coverage for protocol edge cases which production validation rejects.
+        services.RemoveAll<IValidateOptions<RapidClusterProtocolOptions>>();
 
-        // Create metrics for observability
-        _meterFactory = new TestMeterFactory();
-        _metrics = new RapidClusterMetrics(_meterFactory, cluster: null);
-
-        // Create failure detector factory
-        var listenAddressProvider = new StaticListenAddressProvider(address.ToEndPointPreferIP());
-        var failureDetectorLogger = _loggerFactory.CreateLogger<PingPongFailureDetector>();
-        _failureDetectorFactory = new PingPongFailureDetectorFactory(
-            listenAddressProvider,
-            MessagingClient,
-            _sharedResources,
-            Options.Create(_failureDetectorOptions),
-            _metrics,
-            failureDetectorLogger);
-
-        // Create consensus coordinator factory
-        var consensusCoordinatorLogger = _loggerFactory.CreateLogger<ConsensusCoordinator>();
-        _consensusCoordinatorFactory = new ConsensusCoordinatorFactory(
-            MessagingClient,
-            _viewAccessor,
-            Options.Create(_protocolOptions),
-            _sharedResources,
-            _metrics,
-            consensusCoordinatorLogger);
-
-        // Create cut detector logger
-        _cutDetectorLogger = _loggerFactory.CreateLogger<CutDetector>();
-
-        // Create the MembershipService (but don't initialize it yet)
-        var rapidClusterOptions = new RapidClusterOptions
+        _serviceProvider = services.BuildServiceProvider(new ServiceProviderOptions
         {
-            SeedAddresses = seedAddresses?.Select(s => s.ToEndPointPreferIP()).ToList(),
-            Metadata = metadata?.Metadata_.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToByteArray(), StringComparer.Ordinal) ?? [],
-        };
-        var broadcasterFactory = new UnicastToAllBroadcasterFactory(MessagingClient);
-        var seedProvider = new ConfigurationSeedProvider(new TestOptionsMonitor<RapidClusterOptions>(rapidClusterOptions));
-        _membershipService = new MembershipService(
-            Options.Create(rapidClusterOptions),
-            Options.Create(_protocolOptions),
-            listenAddressProvider,
-            MessagingClient,
-            broadcasterFactory,
-            _failureDetectorFactory,
-            _consensusCoordinatorFactory,
-            _viewAccessor,
-            _sharedResources,
-            _metrics,
-            seedProvider,
-            _membershipServiceLogger,
-            _cutDetectorLogger);
+            ValidateOnBuild = true,
+            ValidateScopes = true,
+        });
+        _membershipService = _serviceProvider.GetRequiredService<MembershipService>();
+        _viewAccessor = _serviceProvider.GetRequiredService<IMembershipViewAccessor>();
+        _lifecycle = _serviceProvider.GetRequiredService<IRapidClusterLifecycle>();
+        MessagingClient = (InMemoryMessagingClient)_serviceProvider.GetRequiredService<IMessagingClient>();
     }
 
     /// <summary>
@@ -209,7 +180,7 @@ internal sealed class RapidSimulationNode : SimulationNode
     /// </summary>
     internal async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        await _membershipService.InitializeAsync(cancellationToken);
+        await _lifecycle.StartAsync(cancellationToken);
         _isInitialized = true;
 
         _log.NodeInitialized(RapidClusterUtils.Loggable(Address), CurrentView.Size, CurrentView.ConfigurationId.Version);
@@ -241,7 +212,7 @@ internal sealed class RapidSimulationNode : SimulationNode
 
         // Graceful stop: notify observers and wait for background tasks
         // Keep MessagingClient alive so we can still participate in consensus
-        await _membershipService.StopAsync(cancellationToken);
+        await _lifecycle.StopAsync(cancellationToken);
 
         _log.NodeLeftGracefully(RapidClusterUtils.Loggable(Address));
     }
@@ -257,21 +228,35 @@ internal sealed class RapidSimulationNode : SimulationNode
         // Cancel any in-flight requests first so they complete promptly
         _disposeCts.SafeCancel(_log.Logger);
 
-        await _membershipService.DisposeAsync();
-        await MessagingClient.DisposeAsync();
-
-        _meterFactory.Dispose();
+        await _serviceProvider.DisposeAsync();
         _disposeCts.Dispose();
     }
 
     private string DebuggerDisplay => string.Create(CultureInfo.InvariantCulture, $"{RapidClusterUtils.Loggable(Address)} Size={MembershipSize} {(IsSuspended ? "Suspended" : "Running")}");
 
-    /// <summary>
-    /// Simple broadcaster factory that creates UnicastToAllBroadcaster instances.
-    /// </summary>
-    private sealed class UnicastToAllBroadcasterFactory(IMessagingClient messagingClient) : IBroadcasterFactory
+    private static void CopyOptions(RapidClusterProtocolOptions source, RapidClusterProtocolOptions destination)
     {
-        public IBroadcaster Create() => new UnicastToAllBroadcaster(messagingClient);
+        destination.BatchingWindow = source.BatchingWindow;
+        destination.ConsensusFallbackTimeoutBaseDelay = source.ConsensusFallbackTimeoutBaseDelay;
+        destination.LeaveMessageTimeout = source.LeaveMessageTimeout;
+        destination.ObserversPerSubject = source.ObserversPerSubject;
+        destination.HighWatermark = source.HighWatermark;
+        destination.LowWatermark = source.LowWatermark;
+        destination.MaxJoinRetries = source.MaxJoinRetries;
+        destination.JoinRetryBaseDelay = source.JoinRetryBaseDelay;
+        destination.JoinRetryMaxDelay = source.JoinRetryMaxDelay;
+        destination.JoinRetryBackoffMultiplier = source.JoinRetryBackoffMultiplier;
+        destination.RejoinBackoffBase = source.RejoinBackoffBase;
+        destination.RejoinBackoffMax = source.RejoinBackoffMax;
+        destination.StaleViewRefreshInterval = source.StaleViewRefreshInterval;
+        destination.UnstableModeTimeout = source.UnstableModeTimeout;
+    }
+
+    private static void CopyOptions(PingPongFailureDetectorOptions source, PingPongFailureDetectorOptions destination)
+    {
+        destination.Interval = source.Interval;
+        destination.ProbeTimeout = source.ProbeTimeout;
+        destination.ConsecutiveFailuresThreshold = source.ConsecutiveFailuresThreshold;
     }
 
     /// <summary>
@@ -299,15 +284,16 @@ internal sealed class RapidSimulationNode : SimulationNode
         }
     }
 
-    /// <summary>
-    /// Simple options monitor for tests that returns a fixed value.
-    /// </summary>
-    private sealed class TestOptionsMonitor<T>(T value) : IOptionsMonitor<T>
+    private sealed class SimulationHostApplicationLifetime(CancellationToken applicationStopping) : IHostApplicationLifetime
     {
-        public T CurrentValue => value;
+        public CancellationToken ApplicationStarted => default;
 
-        public T Get(string? name) => value;
+        public CancellationToken ApplicationStopping => applicationStopping;
 
-        public IDisposable? OnChange(Action<T, string?> listener) => null;
+        public CancellationToken ApplicationStopped => applicationStopping;
+
+        public void StopApplication()
+        {
+        }
     }
 }

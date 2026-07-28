@@ -154,11 +154,9 @@ public static class RapidClusterServiceCollectionExtensions
         services.Configure(configure);
 
         // Configure default protocol options (can be overridden via builder)
-        services.TryAddSingleton(_ => Microsoft.Extensions.Options.Options.Create(new RapidClusterProtocolOptions()));
         services.Configure<RapidClusterProtocolOptions>(_ => { });
 
         // Configure default failure detector options (can be overridden via builder)
-        services.TryAddSingleton(_ => Microsoft.Extensions.Options.Options.Create(new PingPongFailureDetectorOptions()));
         services.Configure<PingPongFailureDetectorOptions>(_ => { });
 
         // Add validation
