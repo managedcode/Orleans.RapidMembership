@@ -9,7 +9,7 @@ namespace RapidCluster.Simulation.Tests.InfrastructureTests;
 /// Tests for the simulation harness.
 /// </summary>
 [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Test objects are managed by simulation harness")]
-public sealed class SimulationHarnessTests : IAsyncLifetime
+public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
 {
     private RapidSimulationCluster _harness = null!;
 

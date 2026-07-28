@@ -117,7 +117,7 @@ internal sealed class InMemoryMessagingClient(
 
         var localAddr = RapidClusterUtils.Loggable(localEndpoint);
         var remoteAddr = RapidClusterUtils.Loggable(remote);
-        var targetNode = harness.GetNode(remoteAddr);
+        var targetNode = harness.FindNode(remoteAddr);
         var messageTimeout = GetTimeout(request);
         if (targetNode is null ||
             harness.Network.CheckDelivery(localAddr, remoteAddr) is not DeliveryStatus.Success)

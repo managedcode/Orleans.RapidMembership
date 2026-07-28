@@ -118,14 +118,14 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     }
 
     [Fact]
-    public void MembershipConsistencyWithNoNodes()
+    public void TransitionalMembershipSizeBoundWithNoNodes()
     {
         var result = _checker.CheckAtMostTwoTransitionalMembershipSizes();
         Assert.True(result);
     }
 
     [Fact]
-    public void MembershipConsistencyWithSingleNode()
+    public void TransitionalMembershipSizeBoundWithSingleNode()
     {
         _ = _harness.StartCluster();
 
@@ -134,7 +134,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     }
 
     [Fact]
-    public void MembershipConsistencyWithConvergedCluster()
+    public void TransitionalMembershipSizeBoundWithConvergedCluster()
     {
         var seedNode = _harness.StartCluster();
         _ = _harness.JoinNode(nodeId: 1, seed: seedNode);

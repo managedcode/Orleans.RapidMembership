@@ -32,7 +32,6 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     internal static readonly DateTimeOffset DefaultStartTime = DateTimeOffset.UnixEpoch;
 
     private readonly SimulationLogManager _logManager;
-    private readonly ILogger<RapidSimulationCluster> _logger;
     private readonly SimulationHarnessLogger _log;
     private bool _disposed;
 
@@ -57,8 +56,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         _logManager = new SimulationLogManager(TimeProvider, seed);
         LoggerFactory = _logManager.LoggerFactory;
 
-        _logger = LoggerFactory.CreateLogger<RapidSimulationCluster>();
-        _log = new SimulationHarnessLogger(_logger);
+        _log = new SimulationHarnessLogger(LoggerFactory.CreateLogger<RapidSimulationCluster>());
         Network.SetLogger(LoggerFactory.CreateLogger<SimulationNetwork>());
 
         _log.HarnessCreated(seed);
@@ -126,11 +124,11 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     }
 
     /// <summary>
-    /// Gets a node by its network address.
+    /// Finds a node by its network address.
     /// </summary>
     /// <param name="address">The network address of the node.</param>
     /// <returns>The node with the specified address, or null if not found.</returns>
-    public new RapidSimulationNode? GetNode(string address) => base.GetNode(address);
+    public RapidSimulationNode? FindNode(string address) => base.GetNode(address);
 
     /// <summary>
     /// Adds a node without starting it (for testing edge cases).
@@ -643,11 +641,6 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
                 outcome.ToDetailedString());
         }
     }
-
-    /// <summary>
-    /// Logs the seed to the test output for reproduction.
-    /// </summary>
-    public void LogSeedForReproduction() => _logger.LogInformation("[SEED FOR REPRODUCTION] {Seed}", Seed);
 
     /// <summary>
     /// Asserts that no log entries at Warning level or above were recorded.

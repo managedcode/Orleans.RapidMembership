@@ -244,10 +244,7 @@ private static Gen<(int[], int[], long[])> GenUniqueNodes(int minCount, int maxC
    - Fast (no real I/O delays)
    - Comprehensive (can test edge cases like partitions)
 
-3. **Use meaningful seeds** and log them for reproduction:
-   ```csharp
-   _harness.LogSeedForReproduction();
-   ```
+3. **Use fixed, meaningful seeds** so failures reproduce directly from the test source.
 
 4. **Test naming**: Use underscores in test names for readability (e.g., `Property_CompareTo_Is_Transitive`).
 

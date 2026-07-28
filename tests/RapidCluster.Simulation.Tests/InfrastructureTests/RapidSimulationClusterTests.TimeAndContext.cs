@@ -7,19 +7,8 @@ namespace RapidCluster.Simulation.Tests.InfrastructureTests;
 /// <summary>
 /// Tests for the simulation test harness.
 /// </summary>
-public sealed class SimulationTestHarnessTests : IAsyncLifetime
+public sealed partial class RapidSimulationClusterTests
 {
-    private RapidSimulationCluster _harness = null!;
-
-    public ValueTask InitializeAsync()
-    {
-        // Use a fixed seed for reproducibility
-        _harness = new RapidSimulationCluster(seed: 12345);
-        return ValueTask.CompletedTask;
-    }
-
-    public async ValueTask DisposeAsync() => await _harness.DisposeAsync();
-
     [Fact]
     public void SimulationRandomWithSameSeedProducesSameSequence()
     {
@@ -47,16 +36,6 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
         random2.Shuffle(list2);
 
         Assert.Equal(list1, list2);
-    }
-
-    [Fact]
-    public void StartClusterInitializesWithOneNode()
-    {
-        var seedNode = _harness.StartCluster();
-
-        Assert.NotNull(seedNode);
-        Assert.True(seedNode.IsInitialized);
-        Assert.Equal(1, seedNode.MembershipSize);
     }
 
     [Fact]
@@ -148,9 +127,6 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
         Assert.Equal(TimeSpan.FromMilliseconds(10), _harness.Network.BaseMessageDelay);
         Assert.Equal(TimeSpan.FromMilliseconds(20), _harness.Network.MaxJitter);
     }
-
-    [Fact]
-    public void SeedIsAccessible() => Assert.Equal(12345, _harness.Seed);
 
     [Fact]
     public async Task DefaultStartTimeIsDeterministic()
@@ -245,6 +221,6 @@ public sealed class SimulationTestHarnessTests : IAsyncLifetime
     {
         var actual = Assert.IsType<SimulationExecutionSnapshot>(context);
         Assert.Equal(node.NetworkAddress, Assert.IsType<SimulationNodeIdentity>(actual.Node).Address);
-        Assert.Equal(12345, actual.Runtime.Seed);
+        Assert.Equal(54321, actual.Runtime.Seed);
     }
 }
