@@ -46,7 +46,7 @@ public sealed class FastRoundConsensusCoordinatorTests
         var threshold = membershipSize - (int)Math.Floor((membershipSize - 1) / 4.0);
         for (var i = 0; i < threshold; i++)
         {
-            coordinator.HandleMessages(new RapidClusterRequest
+            _ = coordinator.HandleMessages(new RapidClusterRequest
             {
                 Phase2BMessage = new Phase2bMessage
                 {
@@ -100,7 +100,7 @@ public sealed class FastRoundConsensusCoordinatorTests
 
         for (var i = 0; i < externalVotesBeforeThreshold; i++)
         {
-            coordinator.HandleMessages(new RapidClusterRequest
+            _ = coordinator.HandleMessages(new RapidClusterRequest
             {
                 Phase2BMessage = new Phase2bMessage
                 {
@@ -162,7 +162,7 @@ public sealed class FastRoundConsensusCoordinatorTests
 
         for (var i = 0; i < externalVotesBeforeThreshold; i++)
         {
-            coordinator.HandleMessages(new RapidClusterRequest
+            _ = coordinator.HandleMessages(new RapidClusterRequest
             {
                 Phase2BMessage = new Phase2bMessage
                 {
@@ -183,7 +183,7 @@ public sealed class FastRoundConsensusCoordinatorTests
         }
 
         // Send the final vote that should push us to the threshold
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase2BMessage = new Phase2bMessage
             {

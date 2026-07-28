@@ -36,7 +36,7 @@ public class CutDetectorSimpleModeTests
         {
             var node = Utils.HostFromParts("127.0.0." + (i + 1).ToString(CultureInfo.InvariantCulture), 1000 + i);
             node.NodeId = Utils.GetNextNodeId();
-            builder.RingAdd(node);
+            _ = builder.RingAdd(node);
         }
 
         return builder.Build();
@@ -91,7 +91,7 @@ public class CutDetectorSimpleModeTests
     [Fact]
     public void Constructor_NullView_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() =>
+        _ = Assert.Throws<ArgumentNullException>(() =>
         {
             var detector = new CutDetector(1, 1, 1);
             detector.UpdateView(null!);
@@ -108,7 +108,7 @@ public class CutDetectorSimpleModeTests
 
         var result = detector.AggregateForProposal(CreateAlertMessage(src, dst, EdgeStatus.Up, DefaultConfigId, 0));
 
-        Assert.Single(result);
+        _ = Assert.Single(result);
         Assert.Equal(dst, result[0]);
         Assert.Equal(1, detector.GetNumProposals());
     }
@@ -124,7 +124,7 @@ public class CutDetectorSimpleModeTests
         var result1 = detector.AggregateForProposal(CreateAlertMessage(src, dst, EdgeStatus.Up, DefaultConfigId, 0));
         var result2 = detector.AggregateForProposal(CreateAlertMessage(src, dst, EdgeStatus.Up, DefaultConfigId, 0));
 
-        Assert.Single(result1);
+        _ = Assert.Single(result1);
         Assert.Empty(result2);
         Assert.Equal(1, detector.GetNumProposals());
     }
@@ -141,8 +141,8 @@ public class CutDetectorSimpleModeTests
         var result1 = detector.AggregateForProposal(CreateAlertMessage(src, dst1, EdgeStatus.Up, DefaultConfigId, 0));
         var result2 = detector.AggregateForProposal(CreateAlertMessage(src, dst2, EdgeStatus.Up, DefaultConfigId, 0));
 
-        Assert.Single(result1);
-        Assert.Single(result2);
+        _ = Assert.Single(result1);
+        _ = Assert.Single(result2);
         Assert.Equal(2, detector.GetNumProposals());
     }
 
@@ -173,7 +173,7 @@ public class CutDetectorSimpleModeTests
         var result2 = detector.AggregateForProposal(CreateAlertMessage(src2, dst, EdgeStatus.Up, DefaultConfigId, 1));
 
         Assert.Empty(result1);
-        Assert.Single(result2);
+        _ = Assert.Single(result2);
         Assert.Equal(dst, result2[0]);
         Assert.Equal(1, detector.GetNumProposals());
     }
@@ -207,14 +207,14 @@ public class CutDetectorSimpleModeTests
         var dst2 = Utils.HostFromParts("127.0.0.3", 3);
 
         // One vote for dst1
-        detector.AggregateForProposal(CreateAlertMessage(src1, dst1, EdgeStatus.Up, DefaultConfigId, 0));
+        _ = detector.AggregateForProposal(CreateAlertMessage(src1, dst1, EdgeStatus.Up, DefaultConfigId, 0));
         Assert.Equal(0, detector.GetNumProposals());
 
         // Two votes for dst2
-        detector.AggregateForProposal(CreateAlertMessage(src1, dst2, EdgeStatus.Up, DefaultConfigId, 0));
+        _ = detector.AggregateForProposal(CreateAlertMessage(src1, dst2, EdgeStatus.Up, DefaultConfigId, 0));
         var result = detector.AggregateForProposal(CreateAlertMessage(src2, dst2, EdgeStatus.Up, DefaultConfigId, 1));
 
-        Assert.Single(result);
+        _ = Assert.Single(result);
         Assert.Equal(dst2, result[0]);
         Assert.Equal(1, detector.GetNumProposals());
     }
@@ -230,7 +230,7 @@ public class CutDetectorSimpleModeTests
         var src = Utils.HostFromParts("127.0.0.1", 1);
         var dst = Utils.HostFromParts("127.0.0.2", 2);
 
-        detector1.AggregateForProposal(CreateAlertMessage(src, dst, EdgeStatus.Up, DefaultConfigId, 0));
+        _ = detector1.AggregateForProposal(CreateAlertMessage(src, dst, EdgeStatus.Up, DefaultConfigId, 0));
         Assert.Equal(1, detector1.GetNumProposals());
 
         // Create new detector (simulating view change)
@@ -246,14 +246,14 @@ public class CutDetectorSimpleModeTests
         var src = Utils.HostFromParts("127.0.0.1", 1);
         var dst = Utils.HostFromParts("127.0.0.2", 2);
 
-        detector1.AggregateForProposal(CreateAlertMessage(src, dst, EdgeStatus.Up, DefaultConfigId, 0));
+        _ = detector1.AggregateForProposal(CreateAlertMessage(src, dst, EdgeStatus.Up, DefaultConfigId, 0));
 
         // Create new detector (simulating view change)
         var detector2 = CreateDetector(view);
 
         // Same message should trigger proposal again on new detector
         var result = detector2.AggregateForProposal(CreateAlertMessage(src, dst, EdgeStatus.Up, DefaultConfigId, 0));
-        Assert.Single(result);
+        _ = Assert.Single(result);
         Assert.Equal(1, detector2.GetNumProposals());
     }
 
@@ -269,8 +269,8 @@ public class CutDetectorSimpleModeTests
         var resultUp = detector.AggregateForProposal(CreateAlertMessage(src, dst1, EdgeStatus.Up, DefaultConfigId, 0));
         var resultDown = detector.AggregateForProposal(CreateAlertMessage(src, dst2, EdgeStatus.Down, DefaultConfigId, 0));
 
-        Assert.Single(resultUp);
-        Assert.Single(resultDown);
+        _ = Assert.Single(resultUp);
+        _ = Assert.Single(resultDown);
         Assert.Equal(2, detector.GetNumProposals());
     }
 
@@ -295,7 +295,7 @@ public class CutDetectorSimpleModeTests
 
         var result = detector.AggregateForProposal(msg);
 
-        Assert.Single(result);
+        _ = Assert.Single(result);
         Assert.Equal(1, detector.GetNumProposals());
     }
 
@@ -308,7 +308,7 @@ public class CutDetectorSimpleModeTests
         var dst = Utils.HostFromParts("127.0.0.2", 2);
 
         // Ring number 5 is larger than K=1, should throw
-        Assert.Throws<ArgumentException>(() =>
+        _ = Assert.Throws<ArgumentException>(() =>
             detector.AggregateForProposal(CreateAlertMessage(src, dst, EdgeStatus.Up, DefaultConfigId, 5)));
     }
 
@@ -320,7 +320,7 @@ public class CutDetectorSimpleModeTests
         var src = Utils.HostFromParts("127.0.0.1", 1);
         var dst = Utils.HostFromParts("127.0.0.2", 2);
 
-        Assert.Throws<ArgumentException>(() =>
+        _ = Assert.Throws<ArgumentException>(() =>
             detector.AggregateForProposal(CreateAlertMessage(src, dst, EdgeStatus.Up, DefaultConfigId, -1)));
     }
 
@@ -350,7 +350,7 @@ public class CutDetectorSimpleModeTests
         var result2 = detector.AggregateForProposal(CreateAlertMessage(src, dst, EdgeStatus.Up, DefaultConfigId, 1));
 
         Assert.Empty(result1);
-        Assert.Single(result2); // Second vote triggers proposal
+        _ = Assert.Single(result2); // Second vote triggers proposal
     }
 
     [Fact]
@@ -359,7 +359,7 @@ public class CutDetectorSimpleModeTests
         var view = CreateTestView(2, 1);
         var detector = CreateDetector(view);
 
-        Assert.Throws<ArgumentNullException>(() => detector.AggregateForProposal(null!));
+        _ = Assert.Throws<ArgumentNullException>(() => detector.AggregateForProposal(null!));
     }
 
     [Fact]
@@ -372,7 +372,7 @@ public class CutDetectorSimpleModeTests
         var dst = Utils.HostFromParts("127.0.0.2", 2);
 
         // Only UP events, no DOWN
-        detector.AggregateForProposal(CreateAlertMessage(src, dst, EdgeStatus.Up, DefaultConfigId, 0));
+        _ = detector.AggregateForProposal(CreateAlertMessage(src, dst, EdgeStatus.Up, DefaultConfigId, 0));
 
         var result = detector.InvalidateFailingEdges();
 
@@ -415,7 +415,7 @@ public class CutDetectorSimpleModeTests
                 var builder = new MembershipViewBuilder(observersPerSubject);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -458,7 +458,7 @@ public class CutDetectorSimpleModeTests
                 var builder = new MembershipViewBuilder(observersPerSubject);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -499,7 +499,7 @@ public class CutDetectorSimpleModeTests
         var dst = Utils.HostFromParts("127.0.0.2", 2);
 
         // Add 1 report (pending, needs 2)
-        detector.AggregateForProposal(CreateAlertMessage(
+        _ = detector.AggregateForProposal(CreateAlertMessage(
             Utils.HostFromParts("127.0.0.1", 1), dst, EdgeStatus.Up, DefaultConfigId, 0));
 
         Assert.True(detector.HasNodesInUnstableMode());
@@ -513,7 +513,7 @@ public class CutDetectorSimpleModeTests
         var dst = Utils.HostFromParts("127.0.0.2", 2);
 
         // Add 1 report (pending, needs 2)
-        detector.AggregateForProposal(CreateAlertMessage(
+        _ = detector.AggregateForProposal(CreateAlertMessage(
             Utils.HostFromParts("127.0.0.1", 1), dst, EdgeStatus.Up, DefaultConfigId, 0));
 
         Assert.True(detector.HasNodesInUnstableMode());
@@ -522,7 +522,7 @@ public class CutDetectorSimpleModeTests
         // Force promote
         var result = detector.ForcePromoteUnstableNodes();
 
-        Assert.Single(result);
+        _ = Assert.Single(result);
         Assert.Equal(dst, result[0]);
         Assert.False(detector.HasNodesInUnstableMode());
         Assert.Equal(1, detector.GetNumProposals());

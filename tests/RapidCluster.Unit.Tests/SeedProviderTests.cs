@@ -93,7 +93,7 @@ public class SeedProviderTests
         var provider = new ConfigurationSeedProvider(optionsMonitor);
 
         var result1 = await provider.GetSeedsAsync(TestContext.Current.CancellationToken);
-        Assert.Single(result1);
+        _ = Assert.Single(result1);
 
         // Update the options
         optionsMonitor.CurrentValue = new RapidClusterOptions { SeedAddresses = seeds2 };
@@ -113,7 +113,7 @@ public class SeedProviderTests
 
         var result = await provider.GetSeedsAsync(TestContext.Current.CancellationToken);
 
-        Assert.Single(result);
+        _ = Assert.Single(result);
     }
 
     [Fact]

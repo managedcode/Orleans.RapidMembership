@@ -96,7 +96,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
 
         // Decision should be cancelled
         Assert.True(coordinator.Decided.IsCompleted);
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => coordinator.Decided);
+        _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => coordinator.Decided);
     }
 
     [Fact]
@@ -246,7 +246,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
         // Empty request with no content set
         var request = new RapidClusterRequest();
 
-        Assert.Throws<ArgumentException>(() => coordinator.HandleMessages(request, TestContext.Current.CancellationToken));
+        _ = Assert.Throws<ArgumentException>(() => coordinator.HandleMessages(request, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -271,7 +271,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
                     Proposal = proposal,
                 },
             };
-            coordinator.HandleMessages(request, TestContext.Current.CancellationToken);
+            _ = coordinator.HandleMessages(request, TestContext.Current.CancellationToken);
         }
 
         // Note: Full decision testing is done in simulation tests where we can
@@ -301,7 +301,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
                     Proposal = proposal,
                 },
             };
-            coordinator.HandleMessages(request, TestContext.Current.CancellationToken);
+            _ = coordinator.HandleMessages(request, TestContext.Current.CancellationToken);
         }
 
         // Should not decide due to wrong config ID (decision still pending)
@@ -322,7 +322,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
 
         // Decision should be cancelled
         Assert.True(coordinator.Decided.IsCompleted);
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => coordinator.Decided);
+        _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => coordinator.Decided);
     }
 
     [Fact]
@@ -348,7 +348,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
 
         // Decision should be cancelled
         Assert.True(coordinator.Decided.IsCompleted);
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => coordinator.Decided);
+        _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => coordinator.Decided);
     }
 
     [Fact]
@@ -373,7 +373,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
                     Proposal = proposal,
                 },
             };
-            coordinator.HandleMessages(request, TestContext.Current.CancellationToken);
+            _ = coordinator.HandleMessages(request, TestContext.Current.CancellationToken);
         }, TestContext.Current.CancellationToken)).ToArray();
 
         // Should not throw
@@ -404,7 +404,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
         var decidedProposal = CreateProposal(Utils.HostFromParts("10.0.0.2", 5002));
         var rnd = new Rank { Round = phase1aRank.Round, NodeIndex = phase1aRank.NodeIndex };
 
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase2BMessage = new Phase2bMessage
             {
@@ -415,7 +415,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
             },
         }, TestContext.Current.CancellationToken);
 
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase2BMessage = new Phase2bMessage
             {
@@ -454,7 +454,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
         }
 
         // A single NACK should not restart classic Paxos immediately.
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase2BMessage = new Phase2bMessage
             {
@@ -472,7 +472,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
 
         // Once quorum is impossible (N=3, 2 unique negative voters), a new round is scheduled
         // and should restart after backoff.
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase2BMessage = new Phase2bMessage
             {
@@ -583,7 +583,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
 
         // Vote 1 for A (from ourselves, via Propose)
         // Vote 2 for A
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase2BMessage = new Phase2bMessage
             {
@@ -595,7 +595,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
         }, TestContext.Current.CancellationToken);
 
         // Vote 1 for B
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase2BMessage = new Phase2bMessage
             {
@@ -610,7 +610,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
         // - A has 2 votes, B has 2 votes, 1 remaining voter
         // - A can get at most 3 votes, B can get at most 3 votes
         // - Neither can reach threshold of 4, should abandon IMMEDIATELY
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase2BMessage = new Phase2bMessage
             {
@@ -660,7 +660,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
 
         // Vote 1 for A (from ourselves)
         // Vote 2 for A
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase2BMessage = new Phase2bMessage
             {
@@ -672,7 +672,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
         }, TestContext.Current.CancellationToken);
 
         // Vote 3 for A
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase2BMessage = new Phase2bMessage
             {
@@ -687,7 +687,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
         // - A has 3 votes, B has 1 vote, 1 remaining voter
         // - A can reach 4 votes if remaining voter votes for A
         // - Should NOT abandon
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase2BMessage = new Phase2bMessage
             {
@@ -739,7 +739,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
 
         // Vote 1 for A (from ourselves, delivery failure already reported)
         // Vote 2 for A
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase2BMessage = new Phase2bMessage
             {
@@ -756,7 +756,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
         // - 1 remaining voter
         // - A can get at most 3 votes, B can get at most 2
         // - Neither can reach threshold of 4, should abandon IMMEDIATELY
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase2BMessage = new Phase2bMessage
             {
@@ -795,7 +795,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
 
         // Vote 1 (from ourselves, already counted via Propose)
         // Vote 2
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase2BMessage = new Phase2bMessage
             {
@@ -807,7 +807,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
         }, TestContext.Current.CancellationToken);
 
         // Vote 3 - threshold is 3 for N=3, should decide
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase2BMessage = new Phase2bMessage
             {
@@ -853,7 +853,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
         coordinator.Propose(proposalA);
 
         // Votes 1-2 for A (ourselves + one more)
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase2BMessage = new Phase2bMessage
             {
@@ -865,7 +865,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
         }, TestContext.Current.CancellationToken);
 
         // Vote 3 for A
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase2BMessage = new Phase2bMessage
             {
@@ -879,7 +879,7 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
         // Votes 1-3 for B
         for (var i = 0; i < 3; i++)
         {
-            coordinator.HandleMessages(new RapidClusterRequest
+            _ = coordinator.HandleMessages(new RapidClusterRequest
             {
                 Phase2BMessage = new Phase2bMessage
                 {

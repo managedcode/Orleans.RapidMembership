@@ -100,7 +100,7 @@ public class ServerAddressResolverTests
     {
         using var server = CreateMockServer("not-a-valid-uri");
 
-        Assert.Throws<InvalidOperationException>(() => ServerAddressResolver.GetAdvertisedEndpoint(server));
+        _ = Assert.Throws<InvalidOperationException>(() => ServerAddressResolver.GetAdvertisedEndpoint(server));
     }
 
     [Fact]

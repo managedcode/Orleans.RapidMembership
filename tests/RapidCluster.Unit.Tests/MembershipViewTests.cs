@@ -22,14 +22,14 @@ public class MembershipViewTests
         var builder = new MembershipViewBuilder(K);
         var addr = Utils.HostFromParts("127.0.0.1", 123, Utils.GetNextNodeId());
 
-        builder.RingAdd(addr);
+        _ = builder.RingAdd(addr);
         var view = builder.Build();
 
         // With 1 node and K=10, actual ring count is clamped to 1
         for (var k = 0; k < view.RingCount; k++)
         {
             var list = view.GetRing(k);
-            Assert.Single(list);
+            _ = Assert.Single(list);
             foreach (var address in list)
             {
                 Assert.Equal(address, addr);
@@ -48,7 +48,7 @@ public class MembershipViewTests
 
         for (var i = 0; i < numNodes; i++)
         {
-            builder.RingAdd(Utils.HostFromParts("127.0.0.1", i, Utils.GetNextNodeId()));
+            _ = builder.RingAdd(Utils.HostFromParts("127.0.0.1", i, Utils.GetNextNodeId()));
         }
 
         var view = builder.Build();
@@ -73,7 +73,7 @@ public class MembershipViewTests
 
         for (var i = 0; i < numNodes; i++)
         {
-            builder.RingAdd(Utils.HostFromParts("127.0.0.1", startPort + i, Utils.GetNextNodeId()));
+            _ = builder.RingAdd(Utils.HostFromParts("127.0.0.1", startPort + i, Utils.GetNextNodeId()));
         }
 
         for (var k = 0; k < K; k++)
@@ -87,7 +87,7 @@ public class MembershipViewTests
         {
             try
             {
-                builder.RingAdd(Utils.HostFromParts("127.0.0.1", startPort + i, Utils.GetNextNodeId()));
+                _ = builder.RingAdd(Utils.HostFromParts("127.0.0.1", startPort + i, Utils.GetNextNodeId()));
             }
             catch (NodeAlreadyInRingException)
             {
@@ -112,7 +112,7 @@ public class MembershipViewTests
         {
             try
             {
-                builder.RingDelete(Utils.HostFromParts("127.0.0.1", i));
+                _ = builder.RingDelete(Utils.HostFromParts("127.0.0.1", i));
             }
             catch (NodeNotInRingException)
             {
@@ -134,12 +134,12 @@ public class MembershipViewTests
 
         for (var i = 0; i < numNodes; i++)
         {
-            builder.RingAdd(Utils.HostFromParts("127.0.0.1", i, Utils.GetNextNodeId()));
+            _ = builder.RingAdd(Utils.HostFromParts("127.0.0.1", i, Utils.GetNextNodeId()));
         }
 
         for (var i = 0; i < numNodes; i++)
         {
-            builder.RingDelete(Utils.HostFromParts("127.0.0.1", i));
+            _ = builder.RingDelete(Utils.HostFromParts("127.0.0.1", i));
         }
 
         var view = builder.Build();
@@ -161,7 +161,7 @@ public class MembershipViewTests
         var builder = new MembershipViewBuilder(K);
         var n1 = Utils.HostFromParts("127.0.0.1", 1, Utils.GetNextNodeId());
 
-        builder.RingAdd(n1);
+        _ = builder.RingAdd(n1);
         var view = builder.Build();
 
         Assert.Empty(view.GetSubjectsOf(n1));
@@ -169,8 +169,8 @@ public class MembershipViewTests
 
         var n2 = Utils.HostFromParts("127.0.0.1", 2);
 
-        Assert.Throws<NodeNotInRingException>(() => view.GetSubjectsOf(n2));
-        Assert.Throws<NodeNotInRingException>(() => view.GetObserversOf(n2));
+        _ = Assert.Throws<NodeNotInRingException>(() => view.GetSubjectsOf(n2));
+        _ = Assert.Throws<NodeNotInRingException>(() => view.GetObserversOf(n2));
     }
 
     /// <summary>
@@ -182,8 +182,8 @@ public class MembershipViewTests
         var view = new MembershipViewBuilder(K).Build();
         var n = Utils.HostFromParts("127.0.0.1", 1);
 
-        Assert.Throws<NodeNotInRingException>(() => view.GetSubjectsOf(n));
-        Assert.Throws<NodeNotInRingException>(() => view.GetObserversOf(n));
+        _ = Assert.Throws<NodeNotInRingException>(() => view.GetSubjectsOf(n));
+        _ = Assert.Throws<NodeNotInRingException>(() => view.GetObserversOf(n));
     }
 
     /// <summary>
@@ -196,15 +196,15 @@ public class MembershipViewTests
         var n1 = Utils.HostFromParts("127.0.0.1", 1, Utils.GetNextNodeId());
         var n2 = Utils.HostFromParts("127.0.0.1", 2, Utils.GetNextNodeId());
 
-        builder.RingAdd(n1);
-        builder.RingAdd(n2);
+        _ = builder.RingAdd(n1);
+        _ = builder.RingAdd(n2);
         var view = builder.Build();
 
         // With 2 nodes, actual ring count is clamped to 1
         Assert.Equal(view.RingCount, view.GetSubjectsOf(n1).Length);
         Assert.Equal(view.RingCount, view.GetObserversOf(n1).Length);
-        Assert.Single(view.GetSubjectsOf(n1).ToHashSet());
-        Assert.Single(view.GetObserversOf(n1).ToHashSet());
+        _ = Assert.Single(view.GetSubjectsOf(n1).ToHashSet());
+        _ = Assert.Single(view.GetObserversOf(n1).ToHashSet());
     }
 
     /// <summary>
@@ -218,9 +218,9 @@ public class MembershipViewTests
         var n2 = Utils.HostFromParts("127.0.0.1", 2, Utils.GetNextNodeId());
         var n3 = Utils.HostFromParts("127.0.0.1", 3, Utils.GetNextNodeId());
 
-        builder.RingAdd(n1);
-        builder.RingAdd(n2);
-        builder.RingAdd(n3);
+        _ = builder.RingAdd(n1);
+        _ = builder.RingAdd(n2);
+        _ = builder.RingAdd(n3);
         var view = builder.Build();
 
         // With 3 nodes and max K=10, actual ring count is clamped to 2
@@ -234,14 +234,14 @@ public class MembershipViewTests
 
         // Create new view without n2
         var builder2 = view.ToBuilder();
-        builder2.RingDelete(n2);
+        _ = builder2.RingDelete(n2);
         var view2 = builder2.Build();
 
         // With 2 nodes and K=10 (from previous view), actual ring count is clamped to 1
         Assert.Equal(view2.RingCount, view2.GetSubjectsOf(n1).Length);
         Assert.Equal(view2.RingCount, view2.GetObserversOf(n1).Length);
-        Assert.Single(view2.GetSubjectsOf(n1).ToHashSet());
-        Assert.Single(view2.GetObserversOf(n1).ToHashSet());
+        _ = Assert.Single(view2.GetSubjectsOf(n1).ToHashSet());
+        _ = Assert.Single(view2.GetObserversOf(n1).ToHashSet());
     }
 
     [Fact]
@@ -254,7 +254,7 @@ public class MembershipViewTests
         for (var nodeId = 0; nodeId < nodes.Length; nodeId++)
         {
             nodes[nodeId] = Utils.HostFromParts("node", nodeId, Utils.GetNextNodeId());
-            builder.RingAdd(nodes[nodeId]);
+            _ = builder.RingAdd(nodes[nodeId]);
         }
 
         var view = builder.Build();
@@ -284,7 +284,7 @@ public class MembershipViewTests
         for (var i = 0; i < numNodes; i++)
         {
             nodes[i] = Utils.HostFromParts("node", i, Utils.GetNextNodeId());
-            builder.RingAdd(nodes[i]);
+            _ = builder.RingAdd(nodes[i]);
         }
 
         var view = builder.Build();
@@ -329,7 +329,7 @@ public class MembershipViewTests
 
         var builder2 = view1.ToBuilder();
         var n1 = Utils.HostFromParts("127.0.0.1", 1, Utils.GetNextNodeId());
-        builder2.RingAdd(n1);
+        _ = builder2.RingAdd(n1);
         var view2 = builder2.Build(view1.ConfigurationId);
 
         var configAfterAdd = view2.ConfigurationId;
@@ -338,7 +338,7 @@ public class MembershipViewTests
 
         var builder3 = view2.ToBuilder();
         var n2 = Utils.HostFromParts("127.0.0.1", 2, Utils.GetNextNodeId());
-        builder3.RingAdd(n2);
+        _ = builder3.RingAdd(n2);
         var view3 = builder3.Build(view2.ConfigurationId);
 
         var configAfterSecondAdd = view3.ConfigurationId;
@@ -346,7 +346,7 @@ public class MembershipViewTests
         Assert.Equal(configAfterAdd.Version + 1, configAfterSecondAdd.Version);
 
         var builder4 = view3.ToBuilder();
-        builder4.RingDelete(n1);
+        _ = builder4.RingDelete(n1);
         var view4 = builder4.Build(view3.ConfigurationId);
 
         var configAfterDelete = view4.ConfigurationId;
@@ -364,17 +364,17 @@ public class MembershipViewTests
         Assert.Equal(0, builder.GetMembershipSize());
 
         var n1 = Utils.HostFromParts("127.0.0.1", 1, Utils.GetNextNodeId());
-        builder.RingAdd(n1);
+        _ = builder.RingAdd(n1);
         Assert.Equal(1, builder.GetMembershipSize());
 
         var n2 = Utils.HostFromParts("127.0.0.1", 2, Utils.GetNextNodeId());
-        builder.RingAdd(n2);
+        _ = builder.RingAdd(n2);
         Assert.Equal(2, builder.GetMembershipSize());
 
-        builder.RingDelete(n1);
+        _ = builder.RingDelete(n1);
         Assert.Equal(1, builder.GetMembershipSize());
 
-        builder.RingDelete(n2);
+        _ = builder.RingDelete(n2);
         Assert.Equal(0, builder.GetMembershipSize());
     }
 
@@ -389,11 +389,11 @@ public class MembershipViewTests
 
         Assert.False(builder.IsHostPresent(n1));
 
-        builder.RingAdd(n1);
+        _ = builder.RingAdd(n1);
 
         Assert.True(builder.IsHostPresent(n1));
 
-        builder.RingDelete(n1);
+        _ = builder.RingDelete(n1);
 
         Assert.False(builder.IsHostPresent(n1));
     }
@@ -411,7 +411,7 @@ public class MembershipViewTests
         // Empty view is always safe to join
         Assert.Equal(JoinStatusCode.SafeToJoin, builder.IsSafeToJoin(n1));
 
-        builder.RingAdd(n1);
+        _ = builder.RingAdd(n1);
 
         // Different node should be safe
         Assert.Equal(JoinStatusCode.SafeToJoin, builder.IsSafeToJoin(n2));
@@ -434,7 +434,7 @@ public class MembershipViewTests
         {
             var n = Utils.HostFromParts("127.0.0.1", i, Utils.GetNextNodeId());
             list.Add(n);
-            builder.RingAdd(n);
+            _ = builder.RingAdd(n);
         }
 
         var view = builder.Build();
@@ -457,7 +457,7 @@ public class MembershipViewTests
         var builder = new MembershipViewBuilder(K);
         const int serverPort = 1234;
         var n = Utils.HostFromParts("127.0.0.1", serverPort, Utils.GetNextNodeId());
-        builder.RingAdd(n);
+        _ = builder.RingAdd(n);
         var view = builder.Build();
 
         var joiningNode = Utils.HostFromParts("127.0.0.1", serverPort + 1);
@@ -465,7 +465,7 @@ public class MembershipViewTests
 
         // With 1 node, actual ring count is clamped to 1
         Assert.Equal(view.RingCount, expectedObservers.Length);
-        Assert.Single(expectedObservers.Distinct());
+        _ = Assert.Single(expectedObservers.Distinct());
         Assert.Equal(n, expectedObservers[0]);
     }
 
@@ -484,7 +484,7 @@ public class MembershipViewTests
         for (var i = 0; i < numNodes; i++)
         {
             var n = Utils.HostFromParts("127.0.0.1", serverPortBase + i, Utils.GetNextNodeId());
-            builder.RingAdd(n);
+            _ = builder.RingAdd(n);
 
             var view = builder.Build();
             var numObserversActual = view.GetExpectedObserversOf(joiningNode).Length;
@@ -510,14 +510,14 @@ public class MembershipViewTests
     {
         var builder = new MembershipViewBuilder(K);
         var n1 = Utils.HostFromParts("127.0.0.1", 1, Utils.GetNextNodeId());
-        builder.RingAdd(n1);
+        _ = builder.RingAdd(n1);
 
         // Same host with different ID should throw NodeAlreadyInRingException
         var n2 = Utils.HostFromParts("127.0.0.1", 1, Utils.GetNextNodeId());
-        Assert.Throws<NodeAlreadyInRingException>(() => builder.RingAdd(n2));
+        _ = Assert.Throws<NodeAlreadyInRingException>(() => builder.RingAdd(n2));
 
         // Only n1 should have been added
-        Assert.Single(builder.GetRing(0));
+        _ = Assert.Single(builder.GetRing(0));
     }
 
     /// <summary>
@@ -535,9 +535,9 @@ public class MembershipViewTests
         for (var i = 0; i < numNodes; i++)
         {
             var n = Utils.HostFromParts("127.0.0.1", i, Utils.GetNextNodeId());
-            builder.RingAdd(n);
+            _ = builder.RingAdd(n);
             var view = builder.Build(previousConfigId);
-            set.Add(view.ConfigurationId.Version);
+            _ = set.Add(view.ConfigurationId.Version);
             previousConfigId = view.ConfigurationId;
             builder = view.ToBuilder();
         }
@@ -564,7 +564,7 @@ public class MembershipViewTests
         for (var i = 0; i < numNodes; i++)
         {
             var n = Utils.HostFromParts("127.0.0.1", i, Utils.GetNextNodeId());
-            builder1.RingAdd(n);
+            _ = builder1.RingAdd(n);
             var view1 = builder1.Build(previousConfigId1);
             list1.Add(view1.ConfigurationId.Version);
             previousConfigId1 = view1.ConfigurationId;
@@ -574,7 +574,7 @@ public class MembershipViewTests
         for (var i = numNodes - 1; i >= 0; i--)
         {
             var n = Utils.HostFromParts("127.0.0.1", i, Utils.GetNextNodeId());
-            builder2.RingAdd(n);
+            _ = builder2.RingAdd(n);
             var view2 = builder2.Build(previousConfigId2);
             list2.Add(view2.ConfigurationId.Version);
             previousConfigId2 = view2.ConfigurationId;
@@ -601,23 +601,23 @@ public class MembershipViewTests
     {
         var builder = new MembershipViewBuilder(K);
         var n1 = Utils.HostFromParts("127.0.0.1", 1, Utils.GetNextNodeId());
-        builder.RingAdd(n1);
+        _ = builder.RingAdd(n1);
         var view = builder.Build();
 
         // Verify the view has correct values
         // With 1 node and K=10, actual ring count is clamped to 1
         Assert.Equal(1, view.RingCount);
-        Assert.Single(view.Members);
+        _ = Assert.Single(view.Members);
         Assert.Equal(n1, view.Members[0]);
 
         // Create a new builder from the view and add another node
         var builder2 = view.ToBuilder();
         var n2 = Utils.HostFromParts("127.0.0.1", 2, Utils.GetNextNodeId());
-        builder2.RingAdd(n2);
+        _ = builder2.RingAdd(n2);
         var view2 = builder2.Build(view.ConfigurationId);
 
         // The original view should still show the old state
-        Assert.Single(view.Members);
+        _ = Assert.Single(view.Members);
         Assert.NotEqual(view.ConfigurationId.Version, view2.ConfigurationId.Version);
         Assert.Equal(view.ConfigurationId.Version + 1, view2.ConfigurationId.Version);
 
@@ -633,20 +633,20 @@ public class MembershipViewTests
     {
         var builder = new MembershipViewBuilder(K);
         var n1 = Utils.HostFromParts("127.0.0.1", 1, Utils.GetNextNodeId());
-        builder.RingAdd(n1);
+        _ = builder.RingAdd(n1);
 
         var view = builder.Build();
         Assert.NotNull(view);
 
         // Builder should be sealed now - all operations should throw
-        Assert.Throws<InvalidOperationException>(() => builder.RingAdd(Utils.HostFromParts("127.0.0.1", 2, Utils.GetNextNodeId())));
-        Assert.Throws<InvalidOperationException>(() => builder.RingDelete(n1));
-        Assert.Throws<InvalidOperationException>(() => builder.GetRing(0));
-        Assert.Throws<InvalidOperationException>(() => builder.GetMembershipSize());
-        Assert.Throws<InvalidOperationException>(() => builder.IsHostPresent(n1));
-        Assert.Throws<InvalidOperationException>(() => builder.IsSafeToJoin(n1));
-        Assert.Throws<InvalidOperationException>(builder.Build);
-        Assert.Throws<InvalidOperationException>(() => _ = builder.MaxRingCount);
+        _ = Assert.Throws<InvalidOperationException>(() => builder.RingAdd(Utils.HostFromParts("127.0.0.1", 2, Utils.GetNextNodeId())));
+        _ = Assert.Throws<InvalidOperationException>(() => builder.RingDelete(n1));
+        _ = Assert.Throws<InvalidOperationException>(() => builder.GetRing(0));
+        _ = Assert.Throws<InvalidOperationException>(() => builder.GetMembershipSize());
+        _ = Assert.Throws<InvalidOperationException>(() => builder.IsHostPresent(n1));
+        _ = Assert.Throws<InvalidOperationException>(() => builder.IsSafeToJoin(n1));
+        _ = Assert.Throws<InvalidOperationException>(builder.Build);
+        _ = Assert.Throws<InvalidOperationException>(() => _ = builder.MaxRingCount);
     }
 
     /// <summary>
@@ -689,7 +689,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -709,7 +709,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -727,7 +727,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -753,7 +753,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -772,7 +772,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -794,7 +794,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -816,7 +816,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -843,7 +843,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -865,7 +865,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -888,7 +888,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -917,7 +917,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -937,7 +937,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -958,7 +958,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -978,7 +978,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -998,7 +998,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view1 = builder.Build();
@@ -1006,7 +1006,7 @@ public class MembershipViewTests
                 // Create a new builder and modify it
                 var builder2 = view1.ToBuilder();
                 var newEndpoint = new Endpoint { Hostname = ByteString.CopyFromUtf8("10.0.0.1"), Port = 9999, NodeId = 999999 };
-                builder2.RingAdd(newEndpoint);
+                _ = builder2.RingAdd(newEndpoint);
                 var view2 = builder2.Build(view1.ConfigurationId);
 
                 // Original view should be unchanged
@@ -1023,7 +1023,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view1 = builder.Build();
@@ -1031,7 +1031,7 @@ public class MembershipViewTests
                 // Delete a node
                 var builder2 = view1.ToBuilder();
                 var nodeToDelete = nodes[0];
-                builder2.RingDelete(nodeToDelete);
+                _ = builder2.RingDelete(nodeToDelete);
                 var view2 = builder2.Build(view1.ConfigurationId);
 
                 // Node should no longer be a member
@@ -1050,7 +1050,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -1077,7 +1077,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -1109,11 +1109,11 @@ public class MembershipViewTests
             .Sample((k, nodes) =>
             {
                 var builder = new MembershipViewBuilder(k);
-                builder.RingAdd(nodes[0]);
+                _ = builder.RingAdd(nodes[0]);
                 var view1 = builder.Build();
 
                 var builder2 = view1.ToBuilder();
-                builder2.RingAdd(nodes[1]);
+                _ = builder2.RingAdd(nodes[1]);
                 var view2 = builder2.Build(view1.ConfigurationId);
 
                 return view2.ConfigurationId.Version == view1.ConfigurationId.Version + 1;
@@ -1129,19 +1129,19 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
 
                 // Negative index should throw
                 var threwForNegative = false;
-                try { view.GetRing(-1); }
+                try { _ = view.GetRing(-1); }
                 catch (ArgumentOutOfRangeException) { threwForNegative = true; }
 
                 // Index >= RingCount should throw
                 var threwForTooLarge = false;
-                try { view.GetRing(view.RingCount); }
+                try { _ = view.GetRing(view.RingCount); }
                 catch (ArgumentOutOfRangeException) { threwForTooLarge = true; }
 
                 return threwForNegative && threwForTooLarge;
@@ -1157,7 +1157,7 @@ public class MembershipViewTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();

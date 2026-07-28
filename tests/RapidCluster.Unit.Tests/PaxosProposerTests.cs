@@ -50,7 +50,7 @@ public sealed class ClassicProposerConsensusCoordinatorTests
 
         while (broadcasted.TryDequeue(out _)) { }
 
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase1BMessage = new Phase1bMessage
             {
@@ -101,7 +101,7 @@ public sealed class ClassicProposerConsensusCoordinatorTests
         while (broadcasted.TryDequeue(out _)) { }
 
         // A Phase1b with a lower round should be ignored.
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase1BMessage = new Phase1bMessage
             {
@@ -152,29 +152,29 @@ public sealed class ClassicProposerConsensusCoordinatorTests
 
         var proposal = CreateProposal(configId, Utils.HostFromParts("10.0.0.2", 5002));
 
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase1BMessage = CreatePhase1b(configId, senderPort: 2000, phase1aRank, vrnd: new Rank { Round = 1, NodeIndex = 10 }, proposal),
         }, TestContext.Current.CancellationToken);
 
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase1BMessage = CreatePhase1b(configId, senderPort: 2001, phase1aRank, vrnd: new Rank { Round = 1, NodeIndex = 10 }, proposal),
         }, TestContext.Current.CancellationToken);
 
         await WaitUntilAsync(() => broadcasted.Any(r => r.ContentCase == RapidClusterRequest.ContentOneofCase.Phase2AMessage), TimeSpan.FromSeconds(2));
         var phase2aMessages = broadcasted.Where(r => r.ContentCase == RapidClusterRequest.ContentOneofCase.Phase2AMessage).ToList();
-        Assert.Single(phase2aMessages);
+        _ = Assert.Single(phase2aMessages);
 
         // Additional Phase1b messages should not cause rebroadcast.
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase1BMessage = CreatePhase1b(configId, senderPort: 2002, phase1aRank, vrnd: new Rank { Round = 1, NodeIndex = 10 }, proposal),
         }, TestContext.Current.CancellationToken);
 
         await Task.Delay(100, TestContext.Current.CancellationToken);
         phase2aMessages = [.. broadcasted.Where(r => r.ContentCase == RapidClusterRequest.ContentOneofCase.Phase2AMessage)];
-        Assert.Single(phase2aMessages);
+        _ = Assert.Single(phase2aMessages);
     }
 
     [Fact]
@@ -210,7 +210,7 @@ public sealed class ClassicProposerConsensusCoordinatorTests
         var phase1aRank = broadcasted.First(r => r.ContentCase == RapidClusterRequest.ContentOneofCase.Phase1AMessage).Phase1AMessage.Rank;
         while (broadcasted.TryDequeue(out _)) { }
 
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase1BMessage = new Phase1bMessage
             {
@@ -220,7 +220,7 @@ public sealed class ClassicProposerConsensusCoordinatorTests
             },
         }, TestContext.Current.CancellationToken);
 
-        coordinator.HandleMessages(new RapidClusterRequest
+        _ = coordinator.HandleMessages(new RapidClusterRequest
         {
             Phase1BMessage = new Phase1bMessage
             {

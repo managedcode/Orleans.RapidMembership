@@ -223,7 +223,7 @@ public class ConfigurationIdTests
         var config1 = new ConfigurationId(new ClusterId(100), 5);
         var config2 = new ConfigurationId(new ClusterId(200), 10);
 
-        Assert.Throws<InvalidOperationException>(() => _ = config1 < config2);
+        _ = Assert.Throws<InvalidOperationException>(() => _ = config1 < config2);
     }
 
     [Fact]
@@ -232,7 +232,7 @@ public class ConfigurationIdTests
         var config1 = new ConfigurationId(new ClusterId(100), 5);
         var config2 = new ConfigurationId(new ClusterId(200), 10);
 
-        Assert.Throws<InvalidOperationException>(() => _ = config1 > config2);
+        _ = Assert.Throws<InvalidOperationException>(() => _ = config1 > config2);
     }
 
     [Fact]

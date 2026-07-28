@@ -47,17 +47,17 @@ internal sealed class TestCluster : IAsyncDisposable
     {
         var port = ((IPEndPoint)address).Port;
         var builder = WebApplication.CreateBuilder();
-        builder.Logging.ClearProviders();
-        builder.Services.AddSingleton(_loggerFactory);
-        builder.ConfigureRapidClusterKestrel(port);
+        _ = builder.Logging.ClearProviders();
+        _ = builder.Services.AddSingleton(_loggerFactory);
+        _ = builder.ConfigureRapidClusterKestrel(port);
 
-        builder.Services
+        _ = builder.Services
             .AddRapidClusterManual(options => options.SeedAddresses = [address])
             .UseGrpcTransport()
             .UseListenAddress(address);
 
         var app = builder.Build();
-        app.MapRapidClusterMembershipService();
+        _ = app.MapRapidClusterMembershipService();
 
         await app.StartAsync(cancellationToken);
         _apps.Add(app);
@@ -84,11 +84,11 @@ internal sealed class TestCluster : IAsyncDisposable
     {
         var port = ((IPEndPoint)address).Port;
         var builder = WebApplication.CreateBuilder();
-        builder.Logging.ClearProviders();
-        builder.Services.AddSingleton(_loggerFactory);
-        builder.ConfigureRapidClusterKestrel(port);
+        _ = builder.Logging.ClearProviders();
+        _ = builder.Services.AddSingleton(_loggerFactory);
+        _ = builder.ConfigureRapidClusterKestrel(port);
 
-        builder.Services
+        _ = builder.Services
             .AddRapidClusterManual(options =>
             {
                 options.SeedAddresses = [address];
@@ -98,7 +98,7 @@ internal sealed class TestCluster : IAsyncDisposable
             .UseListenAddress(address);
 
         var app = builder.Build();
-        app.MapRapidClusterMembershipService();
+        _ = app.MapRapidClusterMembershipService();
 
         await app.StartAsync(cancellationToken);
         _apps.Add(app);
@@ -125,17 +125,17 @@ internal sealed class TestCluster : IAsyncDisposable
     {
         var port = ((IPEndPoint)address).Port;
         var builder = WebApplication.CreateBuilder();
-        builder.Logging.ClearProviders();
-        builder.Services.AddSingleton(_loggerFactory);
-        builder.ConfigureRapidClusterKestrel(port);
+        _ = builder.Logging.ClearProviders();
+        _ = builder.Services.AddSingleton(_loggerFactory);
+        _ = builder.ConfigureRapidClusterKestrel(port);
 
-        builder.Services
+        _ = builder.Services
             .AddRapidCluster(options => options.SeedAddresses = [seedAddress])
             .UseGrpcTransport()
             .UseListenAddress(address);
 
         var app = builder.Build();
-        app.MapRapidClusterMembershipService();
+        _ = app.MapRapidClusterMembershipService();
 
         await app.StartAsync(cancellationToken);
         _apps.Add(app);
@@ -159,11 +159,11 @@ internal sealed class TestCluster : IAsyncDisposable
     {
         var port = ((IPEndPoint)address).Port;
         var builder = WebApplication.CreateBuilder();
-        builder.Logging.ClearProviders();
-        builder.Services.AddSingleton(_loggerFactory);
-        builder.ConfigureRapidClusterKestrel(port);
+        _ = builder.Logging.ClearProviders();
+        _ = builder.Services.AddSingleton(_loggerFactory);
+        _ = builder.ConfigureRapidClusterKestrel(port);
 
-        builder.Services
+        _ = builder.Services
             .AddRapidCluster(options =>
             {
                 options.SeedAddresses = [seedAddress];
@@ -173,7 +173,7 @@ internal sealed class TestCluster : IAsyncDisposable
             .UseListenAddress(address);
 
         var app = builder.Build();
-        app.MapRapidClusterMembershipService();
+        _ = app.MapRapidClusterMembershipService();
 
         await app.StartAsync(cancellationToken);
         _apps.Add(app);
@@ -285,7 +285,7 @@ internal sealed class TestCluster : IAsyncDisposable
         var sanitized = new StringBuilder();
         foreach (var c in name)
         {
-            sanitized.Append(invalidChars.Contains(c) ? '_' : c);
+            _ = sanitized.Append(invalidChars.Contains(c) ? '_' : c);
         }
 
         var result = sanitized.ToString();

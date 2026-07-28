@@ -69,7 +69,7 @@ public sealed class ClusterIntegrationTests(ITestOutputHelper outputHelper) : IA
         // Give it a moment to initialize
         await Task.Delay(500, TestContext.Current.CancellationToken);
 
-        Assert.Single(cluster.CurrentView.Members);
+        _ = Assert.Single(cluster.CurrentView.Members);
     }
 
     /// <summary>
@@ -82,7 +82,7 @@ public sealed class ClusterIntegrationTests(ITestOutputHelper outputHelper) : IA
         var joinerAddress = CreateAddress(_cluster.GetNextPort());
         var (_, seed) = await _cluster.CreateSeedNodeAsync(seedAddress, TestContext.Current.CancellationToken);
 
-        Assert.Single(seed.CurrentView.Members);
+        _ = Assert.Single(seed.CurrentView.Members);
         var (_, joiner) = await _cluster.CreateJoinerNodeAsync(joinerAddress, seedAddress, TestContext.Current.CancellationToken);
 
         // Wait for cluster convergence

@@ -137,7 +137,7 @@ internal sealed class TestClusterPortAllocator : IDisposable
                         {
                             // Acquired
                             _mutexes[name] = mutex;
-                            Interlocked.Increment(ref result[0]);
+                            _ = Interlocked.Increment(ref result[0]);
                             return;
                         }
 

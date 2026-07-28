@@ -25,15 +25,15 @@ public sealed class ClusterEndToEndTests(ITestOutputHelper outputHelper) : IAsyn
         var appHost = await DistributedApplicationTestingBuilder
             .CreateAsync<Projects.RapidCluster_EndToEnd_AppHost>(TestContext.Current.CancellationToken);
 
-        appHost.Services.AddLogging(logging =>
+        _ = appHost.Services.AddLogging(logging =>
         {
-            logging.SetMinimumLevel(LogLevel.Debug);
-            logging.AddFilter(appHost.Environment.ApplicationName, LogLevel.Debug);
-            logging.AddFilter("Aspire.", LogLevel.Warning);
-            logging.AddXUnit(outputHelper);
+            _ = logging.SetMinimumLevel(LogLevel.Debug);
+            _ = logging.AddFilter(appHost.Environment.ApplicationName, LogLevel.Debug);
+            _ = logging.AddFilter("Aspire.", LogLevel.Warning);
+            _ = logging.AddXUnit(outputHelper);
         });
 
-        appHost.Services.ConfigureHttpClientDefaults(clientBuilder => clientBuilder.AddStandardResilienceHandler());
+        _ = appHost.Services.ConfigureHttpClientDefaults(clientBuilder => clientBuilder.AddStandardResilienceHandler());
 
         _app = await appHost.BuildAsync(TestContext.Current.CancellationToken);
 
@@ -158,7 +158,7 @@ public sealed class ClusterEndToEndTests(ITestOutputHelper outputHelper) : IAsyn
         using var cts = new CancellationTokenSource(DefaultTimeout);
 
         // Wait for the first node to be healthy
-        await _app.ResourceNotifications.WaitForResourceHealthyAsync(
+        _ = await _app.ResourceNotifications.WaitForResourceHealthyAsync(
             "cluster-0",
             cts.Token);
 
@@ -211,7 +211,7 @@ public sealed class ClusterEndToEndTests(ITestOutputHelper outputHelper) : IAsyn
         using var cts = new CancellationTokenSource(DefaultTimeout);
 
         // Wait for a node to become healthy
-        await _app.ResourceNotifications.WaitForResourceHealthyAsync(
+        _ = await _app.ResourceNotifications.WaitForResourceHealthyAsync(
             "cluster-0",
             cts.Token);
 
@@ -299,7 +299,7 @@ public sealed class ClusterEndToEndTests(ITestOutputHelper outputHelper) : IAsyn
         using var cts = new CancellationTokenSource(DefaultTimeout);
 
         // Wait for a node to become healthy
-        await _app.ResourceNotifications.WaitForResourceHealthyAsync(
+        _ = await _app.ResourceNotifications.WaitForResourceHealthyAsync(
             "cluster-1",
             cts.Token);
 
@@ -416,7 +416,7 @@ public sealed class ClusterEndToEndTests(ITestOutputHelper outputHelper) : IAsyn
 
         // Node 0 is the bootstrap coordinator
         // It should be the first to become healthy since it starts a new cluster
-        await _app.ResourceNotifications.WaitForResourceHealthyAsync(
+        _ = await _app.ResourceNotifications.WaitForResourceHealthyAsync(
             "cluster-0",
             cts.Token);
 
@@ -435,7 +435,7 @@ public sealed class ClusterEndToEndTests(ITestOutputHelper outputHelper) : IAsyn
         using var cts = new CancellationTokenSource(DefaultTimeout);
 
         // Wait for the coordinator to be healthy first
-        await _app.ResourceNotifications.WaitForResourceHealthyAsync(
+        _ = await _app.ResourceNotifications.WaitForResourceHealthyAsync(
             "cluster-0",
             cts.Token);
 
@@ -446,7 +446,7 @@ public sealed class ClusterEndToEndTests(ITestOutputHelper outputHelper) : IAsyn
         for (var i = 1; i < ClusterSize; i++)
         {
             var resourceName = string.Create(CultureInfo.InvariantCulture, $"cluster-{i}");
-            await _app.ResourceNotifications.WaitForResourceHealthyAsync(
+            _ = await _app.ResourceNotifications.WaitForResourceHealthyAsync(
                 resourceName,
                 cts.Token);
             outputHelper.WriteLine($"{resourceName} has joined the cluster.");

@@ -49,7 +49,7 @@ public class CutDetectorWatermarkModeTests
         for (var i = 0; i < numNodes; i++)
         {
             var node = Utils.HostFromParts("127.0.0." + (i + 1).ToString(CultureInfo.InvariantCulture), 1000 + i, Utils.GetNextNodeId());
-            builder.RingAdd(node);
+            _ = builder.RingAdd(node);
         }
 
         return builder.Build();
@@ -76,7 +76,7 @@ public class CutDetectorWatermarkModeTests
 
         ret = detector.AggregateForProposal(CreateAlertMessage(
             Utils.HostFromParts("127.0.0.1", H), dst, EdgeStatus.Up, DefaultConfigId, H - 1));
-        Assert.Single(ret);
+        _ = Assert.Single(ret);
         Assert.Equal(1, detector.GetNumProposals());
     }
 
@@ -201,14 +201,14 @@ public class CutDetectorWatermarkModeTests
         }
 
         // Unlike the previous test, add more reports for dst1 and dst3 past the H boundary.
-        detector.AggregateForProposal(CreateAlertMessage(
+        _ = detector.AggregateForProposal(CreateAlertMessage(
             Utils.HostFromParts("127.0.0.1", H), dst1, EdgeStatus.Up, DefaultConfigId, H - 1));
         ret = detector.AggregateForProposal(CreateAlertMessage(
             Utils.HostFromParts("127.0.0.1", H + 1), dst1, EdgeStatus.Up, DefaultConfigId, H - 1));
         Assert.Empty(ret);
         Assert.Equal(0, detector.GetNumProposals());
 
-        detector.AggregateForProposal(CreateAlertMessage(
+        _ = detector.AggregateForProposal(CreateAlertMessage(
             Utils.HostFromParts("127.0.0.1", H), dst3, EdgeStatus.Up, DefaultConfigId, H - 1));
         ret = detector.AggregateForProposal(CreateAlertMessage(
             Utils.HostFromParts("127.0.0.1", H + 1), dst3, EdgeStatus.Up, DefaultConfigId, H - 1));
@@ -305,7 +305,7 @@ public class CutDetectorWatermarkModeTests
         {
             var node = Utils.HostFromParts("127.0.0.2", 2 + i, Utils.GetNextNodeId());
             endpoints.Add(node);
-            builder.RingAdd(node);
+            _ = builder.RingAdd(node);
         }
 
         var mView = builder.Build();
@@ -331,7 +331,7 @@ public class CutDetectorWatermarkModeTests
         for (var i = H - 1; i < K; i++)
         {
             var observersOfObserver = mView.GetObserversOf(observers[i]);
-            failedObservers.Add(observers[i]);
+            _ = failedObservers.Add(observers[i]);
             for (var j = 0; j < K; j++)
             {
                 ret = detector.AggregateForProposal(CreateAlertMessage(observersOfObserver[j], observers[i],
@@ -372,7 +372,7 @@ public class CutDetectorWatermarkModeTests
     [Fact]
     public void ConstructorNullViewThrows()
     {
-        Assert.Throws<ArgumentNullException>(() =>
+        _ = Assert.Throws<ArgumentNullException>(() =>
         {
             var detector = new CutDetector(K, H, L);
             detector.UpdateView(null!);
@@ -413,14 +413,14 @@ public class CutDetectorWatermarkModeTests
     public void ConstructorLZeroThrows()
     {
         var view = CreateTestView();
-        Assert.Throws<ArgumentOutOfRangeException>(() => CreateDetector(view, 8, 0));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(() => CreateDetector(view, 8, 0));
     }
 
     [Fact]
     public void ConstructorHZeroThrows()
     {
         var view = CreateTestView();
-        Assert.Throws<ArgumentOutOfRangeException>(() => CreateDetector(view, 0, 0));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(() => CreateDetector(view, 0, 0));
     }
 
     [Fact]
@@ -451,7 +451,7 @@ public class CutDetectorWatermarkModeTests
 
         for (var i = 0; i < K; i++)
         {
-            detector1.AggregateForProposal(CreateAlertMessage(
+            _ = detector1.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 1), dst, EdgeStatus.Up, DefaultConfigId, i));
         }
 
@@ -473,7 +473,7 @@ public class CutDetectorWatermarkModeTests
 
         for (var i = 0; i < K; i++)
         {
-            detector1.AggregateForProposal(CreateAlertMessage(
+            _ = detector1.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 1), dst1, EdgeStatus.Up, DefaultConfigId, i));
         }
 
@@ -484,7 +484,7 @@ public class CutDetectorWatermarkModeTests
 
         for (var i = 0; i < K; i++)
         {
-            detector2.AggregateForProposal(CreateAlertMessage(
+            _ = detector2.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 1), dst2, EdgeStatus.Up, DefaultConfigId, i));
         }
 
@@ -560,7 +560,7 @@ public class CutDetectorWatermarkModeTests
 
         var result = detector.AggregateForProposal(msg);
 
-        Assert.Single(result);
+        _ = Assert.Single(result);
     }
 
     [Fact]
@@ -572,7 +572,7 @@ public class CutDetectorWatermarkModeTests
 
         for (var i = 0; i < K; i++)
         {
-            detector.AggregateForProposal(CreateAlertMessage(
+            _ = detector.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 1), dst, EdgeStatus.Up, DefaultConfigId, i));
         }
 
@@ -588,7 +588,7 @@ public class CutDetectorWatermarkModeTests
 
         for (var i = 0; i < K; i++)
         {
-            detector.AggregateForProposal(CreateAlertMessage(
+            _ = detector.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 1), dst, EdgeStatus.Down, DefaultConfigId, i));
         }
 
@@ -604,7 +604,7 @@ public class CutDetectorWatermarkModeTests
 
         for (var i = 0; i < H; i++)
         {
-            detector.AggregateForProposal(CreateAlertMessage(
+            _ = detector.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 1), dst,
                 i % 2 == 0 ? EdgeStatus.Up : EdgeStatus.Down,
                 DefaultConfigId, i));
@@ -621,7 +621,7 @@ public class CutDetectorWatermarkModeTests
         var src = Utils.HostFromParts("127.0.0.1", 1);
         var dst = Utils.HostFromParts("127.0.0.2", 2);
 
-        Assert.Throws<ArgumentException>(() =>
+        _ = Assert.Throws<ArgumentException>(() =>
             detector.AggregateForProposal(CreateAlertMessage(src, dst, EdgeStatus.Up, DefaultConfigId, K)));
     }
 
@@ -633,7 +633,7 @@ public class CutDetectorWatermarkModeTests
         var src = Utils.HostFromParts("127.0.0.1", 1);
         var dst = Utils.HostFromParts("127.0.0.2", 2);
 
-        Assert.Throws<ArgumentException>(() =>
+        _ = Assert.Throws<ArgumentException>(() =>
             detector.AggregateForProposal(CreateAlertMessage(src, dst, EdgeStatus.Up, DefaultConfigId, -1)));
     }
 
@@ -673,9 +673,9 @@ public class CutDetectorWatermarkModeTests
 
         for (var i = 0; i < H - 1; i++)
         {
-            detector.AggregateForProposal(CreateAlertMessage(
+            _ = detector.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 1), dst1, EdgeStatus.Up, DefaultConfigId, i));
-            detector.AggregateForProposal(CreateAlertMessage(
+            _ = detector.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 100), dst2, EdgeStatus.Up, DefaultConfigId, i));
         }
 
@@ -728,7 +728,7 @@ public class CutDetectorWatermarkModeTests
         var dst = Utils.HostFromParts("127.0.0.2", 2);
         for (var i = 0; i < H - 1; i++)
         {
-            detector.AggregateForProposal(CreateAlertMessage(
+            _ = detector.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 1), dst, EdgeStatus.Up, DefaultConfigId, i));
         }
 
@@ -752,7 +752,7 @@ public class CutDetectorWatermarkModeTests
         var view = CreateTestView();
         var detector = CreateDetector(view, H, L);
 
-        Assert.Throws<ArgumentNullException>(() => detector.AggregateForProposal(null!));
+        _ = Assert.Throws<ArgumentNullException>(() => detector.AggregateForProposal(null!));
     }
 
     [Fact]
@@ -787,7 +787,7 @@ public class CutDetectorWatermarkModeTests
         }
 
         // Should now have a proposal
-        Assert.Single(result);
+        _ = Assert.Single(result);
         Assert.Equal(1, detector.GetNumProposals());
     }
 
@@ -818,7 +818,7 @@ public class CutDetectorWatermarkModeTests
         var view = CreateTestView();
         var detector = CreateDetector(view, H, L);
 
-        Assert.Throws<ArgumentNullException>(() => detector.AggregateForProposalSingleRing(null!, 0));
+        _ = Assert.Throws<ArgumentNullException>(() => detector.AggregateForProposalSingleRing(null!, 0));
     }
 
     [Fact]
@@ -831,8 +831,8 @@ public class CutDetectorWatermarkModeTests
             Utils.HostFromParts("127.0.0.2", 2),
             EdgeStatus.Up, DefaultConfigId, 0);
 
-        Assert.Throws<ArgumentException>(() => detector.AggregateForProposalSingleRing(msg, K));
-        Assert.Throws<ArgumentException>(() => detector.AggregateForProposalSingleRing(msg, -1));
+        _ = Assert.Throws<ArgumentException>(() => detector.AggregateForProposalSingleRing(msg, K));
+        _ = Assert.Throws<ArgumentException>(() => detector.AggregateForProposalSingleRing(msg, -1));
     }
 
     [Fact]
@@ -1011,7 +1011,7 @@ public class CutDetectorWatermarkModeTests
                     proposalEvents++;
                     foreach (var node in result)
                     {
-                        nodesProposed.Add(node);
+                        _ = nodesProposed.Add(node);
                     }
                 }
             }
@@ -1040,14 +1040,14 @@ public class CutDetectorWatermarkModeTests
         // Bring dst1 to H-1 reports (in preProposal)
         for (var i = 0; i < H - 1; i++)
         {
-            detector.AggregateForProposal(CreateAlertMessage(
+            _ = detector.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 1), dst1, EdgeStatus.Up, DefaultConfigId, i));
         }
 
         // Bring dst2 to L reports (in preProposal)
         for (var i = 0; i < L; i++)
         {
-            detector.AggregateForProposal(CreateAlertMessage(
+            _ = detector.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 1), dst2, EdgeStatus.Up, DefaultConfigId, i));
         }
 
@@ -1086,7 +1086,7 @@ public class CutDetectorWatermarkModeTests
         // Bring dst2 to L-1 reports (below L, should NOT block)
         for (var i = 0; i < L - 1; i++)
         {
-            detector.AggregateForProposal(CreateAlertMessage(
+            _ = detector.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 1), dst2, EdgeStatus.Up, DefaultConfigId, i));
         }
 
@@ -1099,7 +1099,7 @@ public class CutDetectorWatermarkModeTests
         }
 
         // dst1 should be proposed (dst2 below L doesn't block)
-        Assert.Single(result);
+        _ = Assert.Single(result);
         Assert.Equal(dst1, result[0]);
         Assert.Equal(1, detector.GetNumProposals());
     }
@@ -1205,7 +1205,7 @@ public class CutDetectorWatermarkModeTests
         {
             var node = Utils.HostFromParts("127.0.0.2", 2 + i, Utils.GetNextNodeId());
             endpoints.Add(node);
-            builder.RingAdd(node);
+            _ = builder.RingAdd(node);
         }
 
         var mView = builder.Build();
@@ -1229,7 +1229,7 @@ public class CutDetectorWatermarkModeTests
         for (var i = H - 1; i < K; i++)
         {
             var observersOfObserver = mView.GetObserversOf(observers[i]);
-            failedObservers.Add(observers[i]);
+            _ = failedObservers.Add(observers[i]);
             for (var j = 0; j < K; j++)
             {
                 var result = detector.AggregateForProposal(CreateAlertMessage(observersOfObserver[j], observers[i],
@@ -1264,7 +1264,7 @@ public class CutDetectorWatermarkModeTests
         // Add some UP events (joining nodes)
         for (var i = 0; i < H - 1; i++)
         {
-            detector.AggregateForProposal(CreateAlertMessage(
+            _ = detector.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 1), dst, EdgeStatus.Up, DefaultConfigId, i));
         }
 
@@ -1284,7 +1284,7 @@ public class CutDetectorWatermarkModeTests
         {
             var node = Utils.HostFromParts("127.0.0." + (i + 1).ToString(CultureInfo.InvariantCulture), 1000 + i, Utils.GetNextNodeId());
             endpoints.Add(node);
-            builder.RingAdd(node);
+            _ = builder.RingAdd(node);
         }
 
         var mView = builder.Build();
@@ -1294,7 +1294,7 @@ public class CutDetectorWatermarkModeTests
         var failingNode = endpoints[0];
         for (var i = 0; i < L; i++)
         {
-            detector.AggregateForProposal(CreateAlertMessage(
+            _ = detector.AggregateForProposal(CreateAlertMessage(
                 endpoints[i + 1], failingNode, EdgeStatus.Down, DefaultConfigId, i));
         }
 
@@ -1344,7 +1344,7 @@ public class CutDetectorWatermarkModeTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -1389,7 +1389,7 @@ public class CutDetectorWatermarkModeTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -1438,7 +1438,7 @@ public class CutDetectorWatermarkModeTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -1485,7 +1485,7 @@ public class CutDetectorWatermarkModeTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -1504,7 +1504,7 @@ public class CutDetectorWatermarkModeTests
                 // Bring subject1 to H-1 reports (just below H, in preProposal)
                 for (var i = 0; i < h - 1; i++)
                 {
-                    detector.AggregateForProposal(
+                    _ = detector.AggregateForProposal(
                         new AlertMessage
                         {
                             EdgeSrc = nodes[i % (nodes.Count - 2) + 2],
@@ -1517,7 +1517,7 @@ public class CutDetectorWatermarkModeTests
                 // Bring subject2 to L reports (in preProposal)
                 for (var i = 0; i < l; i++)
                 {
-                    detector.AggregateForProposal(
+                    _ = detector.AggregateForProposal(
                         new AlertMessage
                         {
                             EdgeSrc = nodes[i % (nodes.Count - 2) + 2],
@@ -1555,7 +1555,7 @@ public class CutDetectorWatermarkModeTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -1575,7 +1575,7 @@ public class CutDetectorWatermarkModeTests
                 {
                     for (var i = 0; i < h - 1; i++)
                     {
-                        detector.AggregateForProposal(
+                        _ = detector.AggregateForProposal(
                             new AlertMessage
                             {
                                 EdgeSrc = nodes[i % (nodes.Count - 3) + 3],
@@ -1587,7 +1587,7 @@ public class CutDetectorWatermarkModeTests
                 }
 
                 // Push first two to H - should not trigger (subject3 still blocking)
-                detector.AggregateForProposal(
+                _ = detector.AggregateForProposal(
                     new AlertMessage
                     {
                         EdgeSrc = nodes[3],
@@ -1641,7 +1641,7 @@ public class CutDetectorWatermarkModeTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -1712,7 +1712,7 @@ public class CutDetectorWatermarkModeTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -1767,7 +1767,7 @@ public class CutDetectorWatermarkModeTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -1786,7 +1786,7 @@ public class CutDetectorWatermarkModeTests
                 // subject2 gets L-1 reports (below L, should not block)
                 for (var i = 0; i < l - 1; i++)
                 {
-                    detector.AggregateForProposal(
+                    _ = detector.AggregateForProposal(
                         new AlertMessage
                         {
                             EdgeSrc = nodes[i % (nodes.Count - 2) + 2],
@@ -1827,7 +1827,7 @@ public class CutDetectorWatermarkModeTests
                 var builder = new MembershipViewBuilder(k);
                 foreach (var endpoint in nodes)
                 {
-                    builder.RingAdd(endpoint);
+                    _ = builder.RingAdd(endpoint);
                 }
 
                 var view = builder.Build();
@@ -1882,7 +1882,7 @@ public class CutDetectorWatermarkModeTests
         // Add L reports (node enters unstable mode)
         for (var i = 0; i < L; i++)
         {
-            detector.AggregateForProposal(CreateAlertMessage(
+            _ = detector.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 1), dst, EdgeStatus.Up, DefaultConfigId, i));
         }
 
@@ -1899,7 +1899,7 @@ public class CutDetectorWatermarkModeTests
         // Add H reports (node leaves unstable mode)
         for (var i = 0; i < H; i++)
         {
-            detector.AggregateForProposal(CreateAlertMessage(
+            _ = detector.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 1), dst, EdgeStatus.Up, DefaultConfigId, i));
         }
 
@@ -1928,14 +1928,14 @@ public class CutDetectorWatermarkModeTests
         // Bring dst1 to H-1 reports (almost stable but still unstable)
         for (var i = 0; i < H - 1; i++)
         {
-            detector.AggregateForProposal(CreateAlertMessage(
+            _ = detector.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 1), dst1, EdgeStatus.Up, DefaultConfigId, i));
         }
 
         // Bring dst2 to L reports (unstable)
         for (var i = 0; i < L; i++)
         {
-            detector.AggregateForProposal(CreateAlertMessage(
+            _ = detector.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 100), dst2, EdgeStatus.Up, DefaultConfigId, i));
         }
 
@@ -1964,14 +1964,14 @@ public class CutDetectorWatermarkModeTests
         // Bring dst1 to H reports (stable, but blocked by dst2)
         for (var i = 0; i < H - 1; i++)
         {
-            detector.AggregateForProposal(CreateAlertMessage(
+            _ = detector.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 1), dst1, EdgeStatus.Up, DefaultConfigId, i));
         }
 
         // Bring dst2 to L reports (unstable - blocking dst1)
         for (var i = 0; i < L; i++)
         {
-            detector.AggregateForProposal(CreateAlertMessage(
+            _ = detector.AggregateForProposal(CreateAlertMessage(
                 Utils.HostFromParts("127.0.0.1", i + 100), dst2, EdgeStatus.Up, DefaultConfigId, i));
         }
 
