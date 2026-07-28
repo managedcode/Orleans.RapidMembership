@@ -70,7 +70,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
     [InlineData(500)]
     public void LargeClusterFormation_Parallel(int clusterSize)
     {
-        var nodes = _harness.CreateClusterParallel(size: clusterSize);
+        var nodes = _harness.CreateClusterInBatches(size: clusterSize);
 
         _harness.WaitForConvergence();
 
@@ -96,7 +96,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
     [InlineData(500, 50)] // 500 nodes should have at most 50 config changes
     public void VeryLargeClusterFormation_Parallel(int clusterSize, int maxExpectedChanges)
     {
-        var nodes = _harness.CreateClusterParallel(size: clusterSize);
+        var nodes = _harness.CreateClusterInBatches(size: clusterSize);
 
         _harness.WaitForConvergence();
 
@@ -131,7 +131,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
     [InlineData(200, 25)] // 200 nodes in batches of 25
     public void LargeClusterFormation_BatchedParallel(int clusterSize, int batchSize)
     {
-        var nodes = _harness.CreateClusterParallel(size: clusterSize, batchSize: batchSize);
+        var nodes = _harness.CreateClusterInBatches(size: clusterSize, batchSize: batchSize);
         _harness.WaitForConvergence();
 
         Assert.Equal(clusterSize, nodes.Count);
@@ -165,7 +165,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
     [InlineData(80, 20)] // 80 nodes should have at most 20 config changes (at least 4 nodes per change on average)
     public void ParallelJoins_BatchMultipleNodesPerViewChange(int clusterSize, int maxExpectedChanges)
     {
-        var nodes = _harness.CreateClusterParallel(size: clusterSize);
+        var nodes = _harness.CreateClusterInBatches(size: clusterSize);
         _harness.WaitForConvergence();
 
         // Get the final configuration ID which represents the number of view changes
@@ -542,7 +542,7 @@ public sealed class LargeScaleClusterTests : IAsyncLifetime
     [InlineData(30, 10, 6)] // Remove 10 from 30 nodes, expect at most 6 config changes
     public void ParallelLeaves_BatchMultipleNodesPerViewChange(int clusterSize, int nodesToRemove, int maxExpectedChanges)
     {
-        var nodes = _harness.CreateClusterParallel(size: clusterSize);
+        var nodes = _harness.CreateClusterInBatches(size: clusterSize);
         _harness.WaitForConvergence();
 
         var configVersionBeforeLeaves = nodes[0].CurrentView.ConfigurationId.Version;

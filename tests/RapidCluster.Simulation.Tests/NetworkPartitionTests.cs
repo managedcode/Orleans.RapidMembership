@@ -71,8 +71,8 @@ public sealed class NetworkPartitionTests : IAsyncLifetime
         // Wait for failure detection and removal
         // With 3 nodes, the remaining 2 can reach consensus to remove the isolated node
         // Only check the non-isolated nodes - the isolated node won't see the updated view
-        _harness.WaitForNodeSize(seedNode, expectedSize: 2);
-        _harness.WaitForNodeSize(joiner1, expectedSize: 2);
+        _harness.WaitForMembershipSize(expectedSize: 2, nodes: [seedNode]);
+        _harness.WaitForMembershipSize(expectedSize: 2, nodes: [joiner1]);
 
         Assert.Equal(2, seedNode.MembershipSize);
         Assert.Equal(2, joiner1.MembershipSize);

@@ -248,7 +248,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// This results in O(N) consensus rounds but guarantees deterministic behavior.
     /// </summary>
     /// <remarks>
-    /// For large clusters (50+ nodes), consider using <see cref="CreateClusterParallel"/>
+    /// For large clusters (50+ nodes), consider using <see cref="CreateClusterInBatches"/>
     /// which batches joins together for O(log N) consensus rounds.
     /// </remarks>
     public IReadOnlyList<RapidSimulationNode> CreateCluster(int size, RapidClusterProtocolOptions? options = null, PingPongFailureDetectorOptions? failureDetectorOptions = null)
@@ -280,7 +280,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     }
 
     /// <summary>
-    /// Creates a cluster of the specified size using parallel joins.
+    /// Creates a cluster of the specified size using concurrent joins in stable batches.
     /// Multiple nodes join concurrently, allowing the multi-node cut detection
     /// to batch them into fewer consensus rounds (O(log N) instead of O(N)).
     /// </summary>
@@ -297,15 +297,17 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// </remarks>
     /// <param name="size">The number of nodes in the cluster.</param>
     /// <param name="options">Optional protocol options.</param>
+    /// <param name="failureDetectorOptions">Optional failure detector options applied to every node.</param>
     /// <param name="batchSize">
-    /// Number of nodes to initiate joining simultaneously. Default is 0 which means all nodes.
+    /// Number of nodes to initiate joining simultaneously. The default joins all remaining nodes at once.
     /// Smaller batch sizes provide more control over join ordering while still enabling batching.
     /// </param>
     /// <returns>List of all nodes in the cluster.</returns>
-    public IReadOnlyList<RapidSimulationNode> CreateClusterParallel(
+    public IReadOnlyList<RapidSimulationNode> CreateClusterInBatches(
         int size,
         RapidClusterProtocolOptions? options = null,
-        int batchSize = 0)
+        PingPongFailureDetectorOptions? failureDetectorOptions = null,
+        int? batchSize = null)
     {
         if (size < 1)
         {
@@ -315,7 +317,12 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         var result = new List<RapidSimulationNode>(size);
 
         // Create seed node first
-        var seedNode = StartCluster(0, options);
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than zero when specified.");
+        }
+
+        var seedNode = StartCluster(0, options, failureDetectorOptions);
         result.Add(seedNode);
 
         if (size == 1)
@@ -323,8 +330,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
             return result;
         }
 
-        // Use all remaining nodes as batch size if not specified or invalid
-        var effectiveBatchSize = batchSize <= 0 ? size - 1 : batchSize;
+        var effectiveBatchSize = batchSize ?? size - 1;
 
         // Process nodes in batches
         var remainingNodes = size - 1;
@@ -339,7 +345,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
             for (var i = 0; i < currentBatchSize; i++)
             {
                 var address = RapidClusterUtils.HostFromParts("node", nodeId++);
-                var node = new RapidSimulationNode(this, address, seedNode.Address, metadata: null, options, failureDetectorOptions: null, LoggerFactory);
+                var node = new RapidSimulationNode(this, address, seedNode.Address, metadata: null, options, failureDetectorOptions, LoggerFactory);
                 RegisterNode(node);
 
                 _log.NodeJoiningParallel(RapidClusterUtils.Loggable(node.Address));
@@ -362,14 +368,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
 
             // Complete the current view change before handing the stable membership to the next batch.
             var expectedSize = result.Count;
-            var convergence = RunUntilConverged(result, expectedSize);
-            if (!convergence.ConditionMet)
-            {
-                throw new TimeoutException(
-                    string.Create(CultureInfo.InvariantCulture, $"Batch convergence failed. Expected size: {expectedSize}, ") +
-                    $"Actual sizes: [{string.Join(", ", result.Select(n => n.MembershipSize))}].{Environment.NewLine}" +
-                    convergence.ToDetailedString());
-            }
+            WaitForMembershipSize(expectedSize, result);
         }
 
         return result;
@@ -414,15 +413,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
 
         // The leaving node must remain active to participate in consensus.
         // Run the simulation until all remaining nodes converge to the new size.
-        var convergence = RunUntilConverged(remainingNodes, targetSize);
-
-        if (!convergence.ConditionMet)
-        {
-            var sizes = string.Join(", ", remainingNodes.Select(n => n.MembershipSize));
-            _logger.LogWarning(
-                "RemoveNodeGracefully: remaining nodes did not converge to size {TargetSize}. Current sizes: [{Sizes}]. Outcome: {Outcome}",
-                targetSize, sizes, convergence.ToDetailedString());
-        }
+        WaitForMembershipSize(targetSize, remainingNodes);
 
         // Dispose the node's resources while it's still registered.
         // This ensures the simulation can drive the node's task queue during disposal.
@@ -477,15 +468,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
             node.CompleteStop();
         }
 
-        var convergence = RunUntilConverged(remainingNodes, targetSize);
-
-        if (!convergence.ConditionMet)
-        {
-            var sizes = string.Join(", ", remainingNodes.Select(n => n.MembershipSize));
-            _logger.LogWarning(
-                "RemoveNodesGracefullyParallel: remaining nodes did not converge to size {TargetSize}. Current sizes: [{Sizes}]. Outcome: {Outcome}",
-                targetSize, sizes, convergence.ToDetailedString());
-        }
+        WaitForMembershipSize(targetSize, remainingNodes);
 
         // Dispose all leaving nodes' resources while they're still registered.
         // This ensures the simulation can drive each node's task queue during disposal.
@@ -561,24 +544,34 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     }
 
     /// <summary>
-    /// Runs until all non-suspended nodes have the expected membership size.
-    /// Suspended nodes are excluded from the check since they cannot process messages.
+    /// Waits until the selected nodes have the expected membership size.
+    /// When <paramref name="nodes"/> is omitted, suspended and departed nodes are excluded.
     /// </summary>
-    public SimulationExecutionResult RunUntilConverged(int expectedSize, SimulationAdaptiveBudget? budget = null) =>
-        RunUntilConverged(() => ActiveNodes.All(n => n.MembershipSize == expectedSize), budget);
-
-    /// <summary>
-    /// Runs until the specified nodes have the expected membership size.
-    /// Use this overload when some nodes (e.g., isolated/partitioned nodes) should be excluded from the check.
-    /// </summary>
-    public SimulationExecutionResult RunUntilConverged(
-        IEnumerable<RapidSimulationNode> nodes,
+    public void WaitForMembershipSize(
         int expectedSize,
+        IEnumerable<RapidSimulationNode>? nodes = null,
         SimulationAdaptiveBudget? budget = null)
     {
-        ArgumentNullException.ThrowIfNull(nodes);
-        var nodeList = nodes.ToList();
-        return RunUntilConverged(() => nodeList.TrueForAll(n => n.MembershipSize == expectedSize), budget);
+        ArgumentOutOfRangeException.ThrowIfNegative(expectedSize);
+        var participants = nodes?.ToList() ??
+            ActiveNodes.Where(static node => node.CurrentView.IsHostPresent(node.Address)).ToList();
+        var outcome = RunUntilConverged(
+            () => participants.TrueForAll(node => node.MembershipSize == expectedSize),
+            budget);
+        if (!outcome.ConditionMet)
+        {
+            var nodeDetails = participants.Count == 0
+                ? "<none>"
+                : string.Join(
+                    ", ",
+                    participants.Select(node => string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{RapidClusterUtils.Loggable(node.Address)}=size:{node.MembershipSize},suspended:{node.IsSuspended},present:{node.CurrentView.IsHostPresent(node.Address)}")));
+            throw new TimeoutException(
+                string.Create(CultureInfo.InvariantCulture, $"Nodes did not reach membership size {expectedSize}. Participants: [{nodeDetails}].") +
+                Environment.NewLine +
+                outcome.ToDetailedString());
+        }
     }
 
     /// <summary>
@@ -652,38 +645,6 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
                 $"Active node count: {ActiveNodes.Count}, " +
                 $"Active node sizes: [{string.Join(", ", ActiveNodes.Select(n => n.MembershipSize))}], " +
                 $"Suspended nodes: {suspendedNodes.Count}.{Environment.NewLine}" +
-                outcome.ToDetailedString());
-        }
-    }
-
-    /// <summary>
-    /// Waits for a specific node to reach the expected membership size.
-    /// </summary>
-    public void WaitForNodeSize(RapidSimulationNode node, int expectedSize)
-    {
-        ArgumentNullException.ThrowIfNull(node);
-        var outcome = RunUntilConverged(() => node.MembershipSize == expectedSize);
-        if (!outcome.ConditionMet)
-        {
-            throw new TimeoutException(
-                string.Create(CultureInfo.InvariantCulture, $"Node did not reach size {expectedSize}. Current size: {node.MembershipSize}.") +
-                Environment.NewLine +
-                outcome.ToDetailedString());
-        }
-    }
-
-    /// <summary>
-    /// Waits for a specific node to reach the expected membership size within an explicit test boundary.
-    /// </summary>
-    public void WaitForNodeSize(RapidSimulationNode node, int expectedSize, int maxIterations)
-    {
-        ArgumentNullException.ThrowIfNull(node);
-        var outcome = RunUntilDetailed(() => node.MembershipSize == expectedSize, maxIterations);
-        if (!outcome.ConditionMet)
-        {
-            throw new TimeoutException(
-                string.Create(CultureInfo.InvariantCulture, $"Node did not reach size {expectedSize}. Current size: {node.MembershipSize}.") +
-                Environment.NewLine +
                 outcome.ToDetailedString());
         }
     }

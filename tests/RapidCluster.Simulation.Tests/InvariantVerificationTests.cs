@@ -51,7 +51,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
         var seedNode = _harness.StartCluster();
         var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
-        _ = _harness.RunUntilConverged(expectedSize: 2);
+        _harness.WaitForMembershipSize(expectedSize: 2);
 
         var knownAddresses = _harness.Nodes
             .Select(n => string.Create(CultureInfo.InvariantCulture, $"{n.Address.Hostname.ToStringUtf8()}:{n.Address.Port}"))
@@ -82,7 +82,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
         var seedNode = _harness.StartCluster();
         _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
-        _ = _harness.RunUntilConverged(expectedSize: 2);
+        _harness.WaitForMembershipSize(expectedSize: 2);
 
         var result = _checker.CheckNoSplitBrain();
 
@@ -107,7 +107,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
         var initialConfigId = seedNode.CurrentView.ConfigurationId;
         _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
-        _ = _harness.RunUntilConverged(expectedSize: 2);
+        _harness.WaitForMembershipSize(expectedSize: 2);
 
         // Config ID should have changed after membership change (it's a hash, not monotonically increasing)
         Assert.NotEqual(initialConfigId, seedNode.CurrentView.ConfigurationId);
@@ -138,7 +138,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
         var seedNode = _harness.StartCluster();
         _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
-        _ = _harness.RunUntilConverged(expectedSize: 2);
+        _harness.WaitForMembershipSize(expectedSize: 2);
 
         var result = _checker.CheckMembershipConsistency();
         Assert.True(result);
@@ -168,7 +168,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
         var seedNode = _harness.StartCluster();
         _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
-        _ = _harness.RunUntilConverged(expectedSize: 2);
+        _harness.WaitForMembershipSize(expectedSize: 2);
 
         var result = _checker.CheckAll();
         Assert.True(result);
@@ -239,7 +239,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
         var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
         var joiner2 = _harness.JoinNode(nodeId: 2, seed: seedNode);
 
-        _ = _harness.RunUntilConverged(expectedSize: 3);
+        _harness.WaitForMembershipSize(expectedSize: 3);
 
         // Crash one joiner
         _harness.CrashNode(joiner2);
@@ -263,7 +263,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
         var seedNode = _harness.StartCluster();
         var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
-        _ = _harness.RunUntilConverged(expectedSize: 2);
+        _harness.WaitForMembershipSize(expectedSize: 2);
 
         // Create partition
         _harness.PartitionNodes(seedNode, joiner);
@@ -272,9 +272,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
         _harness.HealPartition(seedNode, joiner);
 
         // Nodes should eventually re-converge
-        var convergence = _harness.RunUntilConverged(expectedSize: 2);
-
-        Assert.True(convergence.ConditionMet, $"Nodes did not reconverge after partition heal.{Environment.NewLine}{convergence.ToDetailedString()}");
+        _harness.WaitForMembershipSize(expectedSize: 2);
         Assert.Equal(2, seedNode.MembershipSize);
         Assert.Equal(2, joiner.MembershipSize);
     }

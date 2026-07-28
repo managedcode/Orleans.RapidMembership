@@ -190,9 +190,9 @@ public sealed class ClusterIdRejectionTests : IAsyncLifetime
         var joiner1b = _harness.JoinNode(nodeId: 2, seed: seed1);
 
         // Wait for the first cluster to converge to 3 nodes
-        _harness.WaitForNodeSize(seed1, expectedSize: 3);
-        _harness.WaitForNodeSize(joiner1a, expectedSize: 3);
-        _harness.WaitForNodeSize(joiner1b, expectedSize: 3);
+        _harness.WaitForMembershipSize(expectedSize: 3, nodes: [seed1]);
+        _harness.WaitForMembershipSize(expectedSize: 3, nodes: [joiner1a]);
+        _harness.WaitForMembershipSize(expectedSize: 3, nodes: [joiner1b]);
 
         // Create second cluster (nodes 100-102) - independent cluster
         var seed2 = _harness.StartCluster(nodeId: 100);
@@ -200,9 +200,9 @@ public sealed class ClusterIdRejectionTests : IAsyncLifetime
         var joiner2b = _harness.JoinNode(nodeId: 102, seed: seed2);
 
         // Wait for the second cluster to converge to 3 nodes
-        _harness.WaitForNodeSize(seed2, expectedSize: 3);
-        _harness.WaitForNodeSize(joiner2a, expectedSize: 3);
-        _harness.WaitForNodeSize(joiner2b, expectedSize: 3);
+        _harness.WaitForMembershipSize(expectedSize: 3, nodes: [seed2]);
+        _harness.WaitForMembershipSize(expectedSize: 3, nodes: [joiner2a]);
+        _harness.WaitForMembershipSize(expectedSize: 3, nodes: [joiner2b]);
 
         // The two clusters should have different ClusterIds
         var clusterId1 = seed1.CurrentView.ConfigurationId.ClusterId;

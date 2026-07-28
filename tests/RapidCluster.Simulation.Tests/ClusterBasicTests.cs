@@ -110,7 +110,7 @@ public sealed class ClusterBasicTests : IAsyncLifetime
         _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
 
         // Wait for seed to see the joiner
-        _harness.WaitForNodeSize(seedNode, expectedSize: 2);
+        _harness.WaitForMembershipSize(expectedSize: 2, nodes: [seedNode]);
 
         Assert.Equal(2, seedNode.MembershipSize);
     }

@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Clockwork;
+using RapidCluster.Monitoring;
 using RapidCluster.Simulation.Tests.Infrastructure;
 
 namespace RapidCluster.Simulation.Tests.InfrastructureTests;
@@ -457,22 +458,62 @@ public sealed class SimulationHarnessTests : IAsyncLifetime
     }
 
     [Fact]
-    public void WaitForConvergenceTimesOutCorrectly()
+    public void WaitForMembershipSizeTimesOutWithDetailedOutcome()
     {
         var seedNode = _harness.StartCluster();
+        var budget = new SimulationAdaptiveBudget(
+            initialMaxIterations: 100,
+            maxTotalIterations: 100);
 
-        // Waiting for size 5 when only 1 node exists should timeout
-        // Using WaitForNodeSize since parameterless WaitForConvergence would succeed
-        // with a single node (active count = 1, node sees 1)
-        _ = Assert.Throws<TimeoutException>(() => _harness.WaitForNodeSize(seedNode, expectedSize: 5, maxIterations: 100));
+        var exception = Assert.Throws<TimeoutException>(
+            () => _harness.WaitForMembershipSize(expectedSize: 5, nodes: [seedNode], budget: budget));
+
+        Assert.Contains("membership size 5", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("node:0=size:1", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Reason:", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void CreateClusterInBatchesRejectsInvalidBatchSize(int batchSize)
+    {
+        _ = Assert.Throws<ArgumentOutOfRangeException>(
+            () => _harness.CreateClusterInBatches(size: 3, batchSize: batchSize));
     }
 
     [Fact]
-    public void WaitForNodeSizeTimesOutCorrectly()
+    public void CreateClusterInBatchesDefaultsToOneBatch()
     {
-        var seedNode = _harness.StartCluster();
+        var nodes = _harness.CreateClusterInBatches(size: 4);
 
-        // Waiting for size 5 when only 1 node exists should timeout
-        _ = Assert.Throws<TimeoutException>(() => _harness.WaitForNodeSize(seedNode, expectedSize: 5, maxIterations: 100));
+        Assert.All(nodes, node => Assert.Equal(4, node.MembershipSize));
+        Assert.Equal(1, nodes[0].CurrentView.ConfigurationId.Version);
+    }
+
+    [Fact]
+    public void CreateClusterInBatchesHonorsExplicitBatches()
+    {
+        var nodes = _harness.CreateClusterInBatches(size: 5, batchSize: 2);
+
+        Assert.All(nodes, node => Assert.Equal(5, node.MembershipSize));
+        Assert.Equal(3, nodes[0].CurrentView.ConfigurationId.Version);
+    }
+
+    [Fact]
+    public void CreateClusterInBatchesForwardsFailureDetectorOptions()
+    {
+        var failureDetectorOptions = new PingPongFailureDetectorOptions
+        {
+            ProbeTimeout = TimeSpan.FromMilliseconds(321),
+        };
+
+        var nodes = _harness.CreateClusterInBatches(
+            size: 3,
+            failureDetectorOptions: failureDetectorOptions);
+
+        Assert.All(
+            nodes,
+            node => Assert.Equal(failureDetectorOptions.ProbeTimeout, node.MessagingClient.ProbeTimeout));
     }
 }

@@ -37,6 +37,8 @@ internal sealed class InMemoryMessagingClient(
     /// </summary>
     private static readonly TimeSpan JoinTimeout = TimeSpan.FromSeconds(5);
 
+    internal TimeSpan ProbeTimeout => _failureDetectorOptions.ProbeTimeout;
+
     private TimeSpan GetTimeout(RapidClusterRequest request)
     {
 #pragma warning disable IDE0072 // Protobuf enums can contain unnamed numeric values.

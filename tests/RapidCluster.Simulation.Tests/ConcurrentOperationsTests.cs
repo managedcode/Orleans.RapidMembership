@@ -237,10 +237,10 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
 
         // Drive propagation to the non-suspended nodes.
         // Wait for the active nodes to see membership of 5 (4 original + 1 new)
-        _harness.WaitForNodeSize(nodes[0], expectedSize: 5);
-        _harness.WaitForNodeSize(nodes[1], expectedSize: 5);
-        _harness.WaitForNodeSize(nodes[2], expectedSize: 5);
-        _harness.WaitForNodeSize(newNode, expectedSize: 5);
+        _harness.WaitForMembershipSize(expectedSize: 5, nodes: [nodes[0]]);
+        _harness.WaitForMembershipSize(expectedSize: 5, nodes: [nodes[1]]);
+        _harness.WaitForMembershipSize(expectedSize: 5, nodes: [nodes[2]]);
+        _harness.WaitForMembershipSize(expectedSize: 5, nodes: [newNode]);
 
         // Remaining active nodes should see the new member
         Assert.Equal(5, nodes[0].MembershipSize);

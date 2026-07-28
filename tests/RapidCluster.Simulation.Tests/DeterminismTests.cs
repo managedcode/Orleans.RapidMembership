@@ -109,14 +109,12 @@ public sealed class DeterminismTests : IAsyncLifetime
     }
 
     [Fact]
-    public void RunUntilConvergedWorks()
+    public void WaitForMembershipSizeWorks()
     {
         _ = _harness.StartCluster();
 
         // The condition should already be met since the single node is converged.
-        var result = _harness.RunUntilConverged(expectedSize: 1);
-
-        Assert.True(result.ConditionMet, result.ToDetailedString());
+        _harness.WaitForMembershipSize(expectedSize: 1);
     }
 
     [Fact]

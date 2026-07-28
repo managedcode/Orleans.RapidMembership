@@ -178,7 +178,7 @@ public sealed class ConsensusProtocolTests : IAsyncLifetime
         {
             _ = _harness.JoinNode(nodeId: i, seed: seedNode);
 
-            _harness.WaitForNodeSize(seedNode, expectedSize: i + 1);
+            _harness.WaitForMembershipSize(expectedSize: i + 1, nodes: [seedNode]);
 
             var newConfigId = seedNode.CurrentView.ConfigurationId;
 
