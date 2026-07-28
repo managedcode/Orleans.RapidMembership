@@ -40,13 +40,27 @@ public sealed class InvariantCheckerTests : IAsyncLifetime
     }
 
     [Fact]
-    public void CheckMembershipConsistencyPassesWithSingleNode()
+    public void CheckTransitionalMembershipSizeBoundPassesWithSingleNode()
     {
         _ = _harness.StartCluster();
 
-        var result = _checker.CheckMembershipConsistency();
+        var result = _checker.CheckAtMostTwoTransitionalMembershipSizes();
 
         Assert.True(result);
+    }
+
+    [Fact]
+    public void CheckTransitionalMembershipSizeBoundDetectsThreeSizes()
+    {
+        var seed = _harness.StartCluster(nodeId: 0);
+        _ = _harness.JoinNode(nodeId: 1, seed);
+        _ = _harness.StartCluster(nodeId: 10);
+        _ = _harness.AddUnstartedNode(nodeId: 20);
+
+        Assert.False(_checker.CheckAtMostTwoTransitionalMembershipSizes());
+        Assert.Contains(
+            _checker.Violations,
+            violation => violation.Type == InvariantType.TransitionalMembershipSizeBound);
     }
 
     [Fact]
@@ -67,6 +81,25 @@ public sealed class InvariantCheckerTests : IAsyncLifetime
         var result = _checker.CheckConfigurationIdMonotonicity();
 
         Assert.True(result);
+    }
+
+    [Fact]
+    public void CheckConfigurationIdMonotonicityDetectsDecreasingVersion()
+    {
+        var seed = _harness.StartCluster(nodeId: 0);
+        var joiner = _harness.JoinNode(nodeId: 1, seed);
+        _harness.WaitForConvergence();
+        Assert.True(_checker.CheckConfigurationIdMonotonicity());
+
+        _harness.CrashNode(joiner);
+        _harness.CrashNode(seed);
+        _ = _harness.StartCluster(nodeId: 0);
+
+        Assert.False(_checker.CheckConfigurationIdMonotonicity());
+        var violation = Assert.Single(
+            _checker.Violations,
+            violation => violation.Type == InvariantType.ConfigurationIdMonotonicity);
+        Assert.Contains("decreased", violation.Message, StringComparison.Ordinal);
     }
 
     [Fact]

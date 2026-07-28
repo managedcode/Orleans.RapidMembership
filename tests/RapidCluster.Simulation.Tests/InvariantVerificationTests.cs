@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using Clockwork;
 using RapidCluster.Simulation.Tests.Infrastructure;
 
 namespace RapidCluster.Simulation.Tests;
@@ -119,7 +120,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void MembershipConsistencyWithNoNodes()
     {
-        var result = _checker.CheckMembershipConsistency();
+        var result = _checker.CheckAtMostTwoTransitionalMembershipSizes();
         Assert.True(result);
     }
 
@@ -128,7 +129,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     {
         _ = _harness.StartCluster();
 
-        var result = _checker.CheckMembershipConsistency();
+        var result = _checker.CheckAtMostTwoTransitionalMembershipSizes();
         Assert.True(result);
     }
 
@@ -140,7 +141,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
 
         _harness.WaitForMembershipSize(expectedSize: 2);
 
-        var result = _checker.CheckMembershipConsistency();
+        var result = _checker.CheckAtMostTwoTransitionalMembershipSizes();
         Assert.True(result);
     }
 
@@ -183,9 +184,9 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     [Fact]
     public void EventualProgressGuaranteeWithPendingTasks()
     {
-        // Create a task that will allow progress
-        var task = new Task(() => { });
-        task.Start(_harness.TaskScheduler);
+        var node = _harness.StartCluster();
+        using var item = new ScheduledActionItem(() => { });
+        node.Context.TaskQueue.Enqueue(item);
 
         // CheckLiveness should succeed when there are tasks to execute
         var result = _checker.CheckLiveness(maxSteps: 100);
@@ -207,6 +208,16 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
 
         // Should fail since no progress can be made
         Assert.False(result);
+        Assert.True(_checker.HasViolations);
+    }
+
+    [Fact]
+    public void ClusterQueueWorkDoesNotCountAsNodeProgress()
+    {
+        var task = new Task(() => { });
+        task.Start(_harness.TaskScheduler);
+
+        Assert.False(_checker.CheckLiveness(maxSteps: 100));
         Assert.True(_checker.HasViolations);
     }
 
