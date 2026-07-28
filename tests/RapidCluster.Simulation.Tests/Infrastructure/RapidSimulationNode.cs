@@ -149,7 +149,7 @@ internal sealed class RapidSimulationNode : SimulationNode
             _ => new SimulationHostApplicationLifetime(_disposeCts.Token));
         _ = services.AddSingleton(new SharedResources(
             simulationTimeProvider,
-            _disposeCts.Token));
+            shuttingDownToken: _disposeCts.Token));
         _ = services.AddSingleton<IMessagingClient>(sp => new InMemoryMessagingClient(
             harness,
             this,

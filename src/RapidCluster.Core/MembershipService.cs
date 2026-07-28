@@ -2442,24 +2442,47 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
 
         _log.Dispose();
 
-        // Cancel background tasks (in case StopAsync wasn't called)
-        await _stoppingCts.CancelAsync();
-        _stoppingCts.Dispose();
-
-        // Dispose failure detectors (may already be disposed by StopAsync)
-        foreach (var fd in _failureDetectors)
+        var failureDetectors = _failureDetectors.ToArray();
+        _failureDetectors.Clear();
+        try
         {
-            fd.Dispose();
+            // Cancel background tasks (in case StopAsync wasn't called)
+            await _stoppingCts.CancelAsync();
+        }
+        finally
+        {
+            _stoppingCts.Dispose();
+            try
+            {
+                DisposeFailureDetectors(failureDetectors, 0);
+            }
+            finally
+            {
+                _unstableModeTimer.Dispose();
+
+                // Dispose consensus instance (may be null if initialization failed)
+                if (_consensusInstance is not null)
+                {
+                    await _consensusInstance.DisposeAsync();
+                }
+            }
+        }
+    }
+
+    private static void DisposeFailureDetectors(IDisposable[] failureDetectors, int index)
+    {
+        if (index >= failureDetectors.Length)
+        {
+            return;
         }
 
-        _failureDetectors.Clear();
-
-        _unstableModeTimer.Dispose();
-
-        // Dispose consensus instance (may be null if initialization failed)
-        if (_consensusInstance is not null)
+        try
         {
-            await _consensusInstance.DisposeAsync();
+            failureDetectors[index].Dispose();
+        }
+        finally
+        {
+            DisposeFailureDetectors(failureDetectors, index + 1);
         }
     }
 

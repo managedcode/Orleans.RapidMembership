@@ -62,14 +62,24 @@ internal sealed class InMemoryMessagingClient(
                 static (t, state) =>
                 {
                     var (callback, endpoint, rank) = ((DeliveryFailureCallback, Endpoint, Rank))state!;
-                    if (!t.IsCompletedSuccessfully || !t.Result.Delivered)
+                    if (t.IsCanceled)
+                    {
+                        return;
+                    }
+
+                    if (t.IsFaulted)
+                    {
+                        _ = t.Exception;
+                        callback(endpoint, rank);
+                    }
+                    else if (!t.Result.Delivered)
                     {
                         callback(endpoint, rank);
                     }
                 },
                 (onDeliveryFailure, remote, rank ?? throw new InvalidOperationException("Rank required when onDeliveryFailure is provided.")),
-                harness.TeardownCancellationToken,
-                TaskContinuationOptions.NotOnRanToCompletion,
+                CancellationToken.None,
+                TaskContinuationOptions.None,
                 sourceNode.Context.TaskScheduler).Ignore();
         }
     }
@@ -177,20 +187,25 @@ internal sealed class InMemoryMessagingClient(
 
     private Task<MessageDeliveryResult> CreateFailureTask(TimeSpan timeout, CancellationToken cancellationToken)
     {
-#pragma warning disable CA2000 // The continuation disposes the linked source after the delay completes.
+#pragma warning disable CA2000 // The completion continuation disposes the linked source.
         var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
 #pragma warning restore CA2000
-        return Task.Delay(timeout, sourceNode.Context.TimeProvider, linkedCts.Token).ContinueWith(
-            static (task, state) =>
+        var resultTask = Task.Delay(timeout, sourceNode.Context.TimeProvider, linkedCts.Token).ContinueWith(
+            static task =>
             {
-                ((CancellationTokenSource)state!).Dispose();
                 task.GetAwaiter().GetResult();
                 return MessageDeliveryResult.Failed;
             },
+            linkedCts.Token,
+            TaskContinuationOptions.ExecuteSynchronously,
+            sourceNode.Context.TaskScheduler);
+        resultTask.ContinueWith(
+            static (_, state) => ((CancellationTokenSource)state!).Dispose(),
             linkedCts,
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
-            sourceNode.Context.TaskScheduler);
+            sourceNode.Context.TaskScheduler).Ignore();
+        return resultTask;
     }
 
     private static RapidClusterResponse CreateFailureResponse(RapidClusterRequest request)

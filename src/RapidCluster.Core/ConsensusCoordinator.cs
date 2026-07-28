@@ -83,6 +83,8 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
     private int _fallbackSignaled;
     private MembershipProposal? _candidateValue;
     private Task? _consensusLoopTask;
+    private int _cancelled;
+    private int _cancellationResourcesCleaned;
     private int _disposed;
 
     public Task<MembershipProposal> Decided => _onDecidedTcs.Task;
@@ -986,15 +988,21 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
     /// </summary>
     public void Cancel()
     {
+        if (Interlocked.Exchange(ref _cancelled, 1) != 0)
+        {
+            return;
+        }
+
         _log.Cancelling();
 
-        _disposeCts.Cancel();
-        _ = _events.Writer.TryComplete();
-        _paxosLearner.Cancel();
-
-        // Dispose timers immediately to stop any scheduled callbacks
-        _timer.Dispose();
-        _classicRestartTimer.Dispose();
+        try
+        {
+            _disposeCts.Cancel();
+        }
+        finally
+        {
+            CleanupCancellationResources();
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -1006,22 +1014,53 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
 
         _log.Dispose();
 
-        // Cancel if not already cancelled
-        await _disposeCts.CancelAsync();
-        _ = _events.Writer.TryComplete();
-
-        _paxosLearner.Cancel();
-
-        if (_consensusLoopTask is { } task)
+        try
         {
-            await task.ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+            if (Interlocked.Exchange(ref _cancelled, 1) == 0)
+            {
+                await _disposeCts.CancelAsync();
+            }
+        }
+        finally
+        {
+            try
+            {
+                CleanupCancellationResources();
+            }
+            finally
+            {
+                try
+                {
+                    if (_consensusLoopTask is { } task)
+                    {
+                        await task.ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+                    }
+                }
+                finally
+                {
+                    _ = _onDecidedTcs.TrySetCanceled(_disposeCts.Token);
+                    _disposeCts.Dispose();
+                }
+            }
+        }
+    }
+
+    private void CleanupCancellationResources()
+    {
+        if (Interlocked.Exchange(ref _cancellationResourcesCleaned, 1) != 0)
+        {
+            return;
         }
 
-        _timer.Dispose();
-        _classicRestartTimer.Dispose();
-
-        _ = _onDecidedTcs.TrySetCanceled(_disposeCts.Token);
-
-        _disposeCts.Dispose();
+        _ = _events.Writer.TryComplete();
+        try
+        {
+            _paxosLearner.Cancel();
+        }
+        finally
+        {
+            _timer.Dispose();
+            _classicRestartTimer.Dispose();
+        }
     }
 }
