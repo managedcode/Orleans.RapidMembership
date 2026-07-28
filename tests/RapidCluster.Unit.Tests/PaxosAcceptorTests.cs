@@ -40,7 +40,7 @@ public sealed class PaxosAcceptorTests
             Rank = new Rank { Round = 2, NodeIndex = 1 },
         }, TestContext.Current.CancellationToken);
 
-        Assert.Single(sent);
+        _ = Assert.Single(sent);
         Assert.Equal(sender, sent[0].Remote);
         Assert.Equal(RapidClusterRequest.ContentOneofCase.Phase1BMessage, sent[0].Request.ContentCase);
         Assert.Equal(2, sent[0].Request.Phase1BMessage.Rnd.Round);
@@ -156,7 +156,7 @@ public sealed class PaxosAcceptorTests
             Proposal = proposal,
         }, TestContext.Current.CancellationToken);
 
-        Assert.Single(broadcasted);
+        _ = Assert.Single(broadcasted);
         Assert.Equal(RapidClusterRequest.ContentOneofCase.Phase2BMessage, broadcasted[0].ContentCase);
         Assert.Equal(2, broadcasted[0].Phase2BMessage.Rnd.Round);
 

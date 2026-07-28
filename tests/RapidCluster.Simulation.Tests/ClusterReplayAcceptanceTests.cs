@@ -103,7 +103,7 @@ public sealed class ClusterReplayAcceptanceTests
 
         Assert.Equal(phaseIds, phaseDecisions.Select(static decision => decision.SelectedResult));
         Assert.All(phaseDecisions, static decision => Assert.False(string.IsNullOrWhiteSpace(decision.SourceId)));
-        return phaseDecisions.Select(decision => phaseNamesById[decision.SelectedResult]).ToArray();
+        return [.. phaseDecisions.Select(decision => phaseNamesById[decision.SelectedResult])];
     }
 
     private static void ScheduleClusterScenario(

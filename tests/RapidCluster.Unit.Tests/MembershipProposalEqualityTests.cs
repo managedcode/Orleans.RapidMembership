@@ -280,7 +280,7 @@ public class MembershipProposalEqualityTests
             ++count;
         }
 
-        Assert.Single(dict);
+        _ = Assert.Single(dict);
         Assert.Equal(3, dict.Values.First());
     }
 

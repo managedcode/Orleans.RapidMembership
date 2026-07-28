@@ -111,21 +111,21 @@ public class ExceptionTests
     public void JoinExceptionInheritsFromException()
     {
         var ex = new JoinException("test");
-        Assert.IsType<Exception>(ex, exactMatch: false);
+        _ = Assert.IsType<Exception>(ex, exactMatch: false);
     }
 
     [Fact]
     public void NodeAlreadyInRingExceptionInheritsFromException()
     {
         var ex = new NodeAlreadyInRingException("test");
-        Assert.IsType<Exception>(ex, exactMatch: false);
+        _ = Assert.IsType<Exception>(ex, exactMatch: false);
     }
 
     [Fact]
     public void NodeNotInRingExceptionInheritsFromException()
     {
         var ex = new NodeNotInRingException("test");
-        Assert.IsType<Exception>(ex, exactMatch: false);
+        _ = Assert.IsType<Exception>(ex, exactMatch: false);
     }
 
     [Fact]

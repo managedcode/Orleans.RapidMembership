@@ -28,7 +28,7 @@ foreach (var node in nodes)
 {
     foreach (var peer in nodes)
     {
-        node.WithReference(peer);
+        _ = node.WithReference(peer);
     }
 }
 

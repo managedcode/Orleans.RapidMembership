@@ -206,7 +206,7 @@ public class ListEndpointComparerTests
         var key2 = new List<Endpoint> { Utils.HostFromParts("127.0.0.1", 1234) };
         dict[key2] = 200;
 
-        Assert.Single(dict);
+        _ = Assert.Single(dict);
         Assert.Equal(200, dict[key1]);
     }
 

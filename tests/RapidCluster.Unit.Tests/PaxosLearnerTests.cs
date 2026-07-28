@@ -53,7 +53,7 @@ public sealed class PaxosLearnerTests
         learner.HandlePhase2bMessage(CreatePhase2b(configId, senderPort: 1001, rnd, proposal));
 
         var result = learner.Decided!;
-        Assert.IsType<ConsensusResult.Decided>(result);
+        _ = Assert.IsType<ConsensusResult.Decided>(result);
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public sealed class PaxosLearnerTests
         learner.Cancel();
 
         var result = learner.Decided!;
-        Assert.IsType<ConsensusResult.Cancelled>(result);
+        _ = Assert.IsType<ConsensusResult.Cancelled>(result);
     }
 
     [Fact]
@@ -106,7 +106,7 @@ public sealed class PaxosLearnerTests
         Assert.True(learner.IsDecided);
 
         var decidedA = learner.Decided!;
-        Assert.IsType<ConsensusResult.Decided>(decidedA);
+        _ = Assert.IsType<ConsensusResult.Decided>(decidedA);
 
         // Even if a later round gets a majority, the learner should not change its decision.
         learner.HandlePhase2bMessage(CreatePhase2b(configId, senderPort: 1002, rndB, proposalB));

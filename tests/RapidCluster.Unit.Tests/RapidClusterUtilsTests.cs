@@ -172,7 +172,7 @@ public class RapidClusterUtilsTests
         var request = msg.ToRapidClusterRequest();
 
         Assert.NotNull(request.BatchedAlertMessage);
-        Assert.Single(request.BatchedAlertMessage.Messages);
+        _ = Assert.Single(request.BatchedAlertMessage.Messages);
     }
 
     [Fact]
@@ -265,7 +265,7 @@ public class RapidClusterUtilsTests
         var request = msg.ToRapidClusterRequest();
 
         Assert.NotNull(request.Phase2AMessage);
-        Assert.Single(request.Phase2AMessage.Proposal.Members);
+        _ = Assert.Single(request.Phase2AMessage.Proposal.Members);
     }
 
     [Fact]
@@ -287,7 +287,7 @@ public class RapidClusterUtilsTests
         var request = msg.ToRapidClusterRequest();
 
         Assert.NotNull(request.Phase2BMessage);
-        Assert.Single(request.Phase2BMessage.Proposal.Members);
+        _ = Assert.Single(request.Phase2BMessage.Proposal.Members);
     }
 
     [Fact]

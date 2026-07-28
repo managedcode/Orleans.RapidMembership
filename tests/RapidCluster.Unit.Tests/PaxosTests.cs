@@ -93,7 +93,7 @@ public class PaxosTests
         Assert.Equal(sender, msg.Sender);
         Assert.Equal(100, msg.ConfigurationId.Version);
         Assert.Equal(5, msg.Rnd.Round);
-        Assert.Single(msg.Proposal.Members);
+        _ = Assert.Single(msg.Proposal.Members);
     }
 
     private static int CompareRanks(Rank r1, Rank r2)
@@ -174,7 +174,7 @@ public class PaxosTests
         Assert.Equal(100, msg.ConfigurationId.Version);
         Assert.Equal(5, msg.Rnd.Round);
         Assert.Equal(3, msg.Vrnd.Round);
-        Assert.Single(msg.Proposal.Members);
+        _ = Assert.Single(msg.Proposal.Members);
         Assert.Equal(vval.Hostname, msg.Proposal.Members[0].Hostname);
         Assert.Equal(vval.Port, msg.Proposal.Members[0].Port);
     }
@@ -230,7 +230,7 @@ public class PaxosTests
         Assert.Equal(sender, msg.Sender);
         Assert.Equal(100, msg.ConfigurationId.Version);
         Assert.Equal(5, msg.Rnd.Round);
-        Assert.Single(msg.Proposal.Members);
+        _ = Assert.Single(msg.Proposal.Members);
     }
 
     [Fact]
@@ -267,7 +267,7 @@ public class PaxosTests
         Assert.Equal(sender, msg.Sender);
         Assert.Equal(100, msg.ConfigurationId.Version);
         Assert.Equal(5, msg.Rnd.Round);
-        Assert.Single(msg.Proposal.Members);
+        _ = Assert.Single(msg.Proposal.Members);
     }
 
     [Fact]
@@ -307,7 +307,7 @@ public class PaxosTests
         Assert.Equal(100, msg.ConfigurationId.Version);
         Assert.Equal(1, msg.Rnd.Round);
         Assert.Equal(0, msg.Rnd.NodeIndex);
-        Assert.Single(msg.Proposal.Members);
+        _ = Assert.Single(msg.Proposal.Members);
     }
 
     [Fact]
@@ -562,7 +562,7 @@ public class PaxosTests
         var result = ConsensusCoordinator.ChooseValue(messages, n: 5);
 
         Assert.NotNull(result);
-        Assert.Single(result.Members);
+        _ = Assert.Single(result.Members);
         Assert.Equal(node1.Hostname, result.Members[0].Hostname);
         Assert.Equal(node1.Port, result.Members[0].Port);
     }
@@ -583,7 +583,7 @@ public class PaxosTests
         var result = ConsensusCoordinator.ChooseValue(messages, n: 5);
 
         Assert.NotNull(result);
-        Assert.Single(result.Members);
+        _ = Assert.Single(result.Members);
         Assert.Equal(node1.Hostname, result.Members[0].Hostname);
         Assert.Equal(node1.Port, result.Members[0].Port);
     }
@@ -605,7 +605,7 @@ public class PaxosTests
         var result = ConsensusCoordinator.ChooseValue(messages, n: 5);
 
         Assert.NotNull(result);
-        Assert.Single(result.Members);
+        _ = Assert.Single(result.Members);
         Assert.Equal(node1.Hostname, result.Members[0].Hostname);
         Assert.Equal(node1.Port, result.Members[0].Port);
     }
@@ -630,7 +630,7 @@ public class PaxosTests
 
         // Should return one of the values (first non-empty proposal from any message)
         Assert.NotNull(result);
-        Assert.Single(result.Members);
+        _ = Assert.Single(result.Members);
         var endpoint = result.Members[0];
         Assert.True(
             endpoint.Hostname.Equals(node1.Hostname) && endpoint.Port == node1.Port ||
@@ -655,7 +655,7 @@ public class PaxosTests
 
         // Should fall back to the first non-empty proposal
         Assert.NotNull(result);
-        Assert.Single(result.Members);
+        _ = Assert.Single(result.Members);
         Assert.Equal(node1.Hostname, result.Members[0].Hostname);
         Assert.Equal(node1.Port, result.Members[0].Port);
     }
@@ -682,7 +682,7 @@ public class PaxosTests
 
         // No value exceeds N/4, should fall back to smallest proposal (deterministic)
         Assert.NotNull(result);
-        Assert.Single(result.Members);
+        _ = Assert.Single(result.Members);
 
         // Falls back to smallest proposal by lexicographic order: node1 < node2
         Assert.Equal(node1.Hostname, result.Members[0].Hostname);
@@ -714,7 +714,7 @@ public class PaxosTests
 
         // node2 has 6 votes which exceeds N/4=5
         Assert.NotNull(result);
-        Assert.Single(result.Members);
+        _ = Assert.Single(result.Members);
         Assert.Equal(node2.Hostname, result.Members[0].Hostname);
         Assert.Equal(node2.Port, result.Members[0].Port);
     }
@@ -770,7 +770,7 @@ public class PaxosTests
 
         // Should choose node1 because vrnd (1,2) > (1,1)
         Assert.NotNull(result);
-        Assert.Single(result.Members);
+        _ = Assert.Single(result.Members);
         Assert.Equal(node1.Hostname, result.Members[0].Hostname);
         Assert.Equal(node1.Port, result.Members[0].Port);
     }
@@ -839,7 +839,7 @@ public class PaxosTests
 
         // Should select nodeA (smallest by lexicographic order), not nodeC (first in list)
         Assert.NotNull(result);
-        Assert.Single(result.Members);
+        _ = Assert.Single(result.Members);
         Assert.Equal(nodeA.Hostname, result.Members[0].Hostname);
         Assert.Equal(nodeA.Port, result.Members[0].Port);
     }

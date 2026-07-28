@@ -58,29 +58,29 @@ internal sealed partial class Program
         var builder = WebApplication.CreateBuilder();
 
         // Configure logging
-        builder.Logging.ClearProviders();
-        builder.Logging.AddConsole();
-        builder.Logging.SetMinimumLevel(LogLevel.Information);
+        _ = builder.Logging.ClearProviders();
+        _ = builder.Logging.AddConsole();
+        _ = builder.Logging.SetMinimumLevel(LogLevel.Information);
 
         var (listen, listenPort) = ParseEndPoint(listenAddress);
         var (seed, _) = ParseEndPoint(seedAddress);
 
         // Configure Kestrel for gRPC
-        builder.ConfigureRapidClusterKestrel(listenPort);
+        _ = builder.ConfigureRapidClusterKestrel(listenPort);
 
         // Add Rapid services
-        builder.Services
+        _ = builder.Services
             .AddRapidCluster(options => options.SeedAddresses = [seed])
             .UseGrpcTransport()
             .UseListenAddress(listen);
 
         // Add background service to monitor cluster
-        builder.Services.AddHostedService<ClusterMonitorService>();
+        _ = builder.Services.AddHostedService<ClusterMonitorService>();
 
         var app = builder.Build();
 
         // Map Rapid gRPC endpoints
-        app.MapRapidClusterMembershipService();
+        _ = app.MapRapidClusterMembershipService();
 
         LogStarting(app.Logger, listenAddress);
 

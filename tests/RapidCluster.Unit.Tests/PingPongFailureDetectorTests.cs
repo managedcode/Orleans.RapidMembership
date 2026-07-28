@@ -276,7 +276,7 @@ public sealed class PingPongFailureDetectorTests
 
         detector.Dispose();
 
-        Assert.Throws<ObjectDisposedException>(detector.Start);
+        _ = Assert.Throws<ObjectDisposedException>(detector.Start);
     }
 
     [Fact]
@@ -412,7 +412,7 @@ public sealed class PingPongFailureDetectorTests
         using var detector = factory.CreateInstance(subject, () => { });
 
         Assert.NotNull(detector);
-        Assert.IsType<PingPongFailureDetector>(detector);
+        _ = Assert.IsType<PingPongFailureDetector>(detector);
     }
 
     /// <summary>

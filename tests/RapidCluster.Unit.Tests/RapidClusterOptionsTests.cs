@@ -24,7 +24,7 @@ public class RapidClusterOptionsTests
         };
 
         Assert.NotNull(options.SeedAddresses);
-        Assert.Single(options.SeedAddresses);
+        _ = Assert.Single(options.SeedAddresses);
         var ipEndPoint = Assert.IsType<IPEndPoint>(options.SeedAddresses[0]);
         Assert.Equal("192.168.1.1", ipEndPoint.Address.ToString());
         Assert.Equal(9000, ipEndPoint.Port);
@@ -49,7 +49,7 @@ public class RapidClusterOptionsTests
 
         var options = new RapidClusterOptions { Metadata = metadata };
 
-        Assert.Single(options.Metadata);
+        _ = Assert.Single(options.Metadata);
         Assert.Equal("value", Encoding.UTF8.GetString(options.Metadata["key"]));
     }
 
@@ -102,7 +102,7 @@ public class RapidClusterOptionsTests
             ["new"] = Encoding.UTF8.GetBytes("value"),
         };
 
-        Assert.Single(options.Metadata);
+        _ = Assert.Single(options.Metadata);
         Assert.False(options.Metadata.ContainsKey("old"));
         Assert.True(options.Metadata.ContainsKey("new"));
     }

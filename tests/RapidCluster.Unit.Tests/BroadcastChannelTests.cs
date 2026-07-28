@@ -12,7 +12,7 @@ public class BroadcastChannelTests
         using var channel = new BroadcastChannel<int>();
 
         // Publish first element before subscribing
-        channel.Writer.TryPublish(1);
+        _ = channel.Writer.TryPublish(1);
 
         // Get enumerator - should receive element 1 on first MoveNextAsync
         var enumerator = channel.Reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
@@ -32,16 +32,16 @@ public class BroadcastChannelTests
         using var channel = new BroadcastChannel<int>();
 
         // Publish first element
-        channel.Writer.TryPublish(1);
+        _ = channel.Writer.TryPublish(1);
 
         // Get enumerator - should start at element 1
         var enumerator = channel.Reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
         // Move to first element (replay)
-        await enumerator.MoveNextAsync();
+        _ = await enumerator.MoveNextAsync();
 
         // Publish second element - this should complete the "next" TCS of element 1
-        channel.Writer.TryPublish(2);
+        _ = channel.Writer.TryPublish(2);
 
         // Act - call MoveNextAsync
         var task = enumerator.MoveNextAsync();
@@ -59,7 +59,7 @@ public class BroadcastChannelTests
         using var channel = new BroadcastChannel<int>();
 
         // Publish first element
-        channel.Writer.TryPublish(1);
+        _ = channel.Writer.TryPublish(1);
 
         // Get enumerator - should start at element 1
         var enumerator = channel.Reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
@@ -89,7 +89,7 @@ public class BroadcastChannelTests
         Assert.False(task.IsCompleted, "MoveNextAsync should wait when no value published yet");
 
         // Now publish
-        channel.Writer.TryPublish(42);
+        _ = channel.Writer.TryPublish(42);
 
         // Assert - should now complete with the value
         var result = await task;
@@ -102,12 +102,12 @@ public class BroadcastChannelTests
     {
         // Arrange
         using var channel = new BroadcastChannel<int>();
-        channel.Writer.TryPublish(1);
+        _ = channel.Writer.TryPublish(1);
 
         var enumerator = channel.Reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
         // Move to first element
-        await enumerator.MoveNextAsync();
+        _ = await enumerator.MoveNextAsync();
 
         // Complete the channel
         channel.Writer.Complete();

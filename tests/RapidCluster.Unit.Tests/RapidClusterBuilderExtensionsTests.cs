@@ -10,7 +10,7 @@ public sealed class RapidClusterBuilderExtensionsTests
     public void Configure_options_applies_values()
     {
         var services = new ServiceCollection();
-        services
+        _ = services
             .AddRapidClusterManual()
             .ConfigureProtocol(options => options.BatchingWindow = TimeSpan.FromSeconds(2))
             .ConfigureFailureDetector(options => options.Interval = TimeSpan.FromSeconds(3));
