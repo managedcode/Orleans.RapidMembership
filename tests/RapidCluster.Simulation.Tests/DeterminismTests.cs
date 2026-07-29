@@ -94,7 +94,7 @@ public sealed class DeterminismTests : IAsyncLifetime
         var task = new Task(() => conditionMet = true);
         task.Start(_harness.TaskScheduler);
 
-        var result = _harness.RunUntilDetailed(() => conditionMet);
+        var result = _harness.RunUntil(() => conditionMet);
 
         Assert.True(result.ConditionMet, result.ToDetailedString());
         Assert.True(conditionMet);
@@ -103,7 +103,7 @@ public sealed class DeterminismTests : IAsyncLifetime
     [Fact]
     public void RunUntilReturnsFalseWhenMaxStepsReached()
     {
-        var result = _harness.RunUntilDetailed(() => false, maxIterations: 10);
+        var result = _harness.RunUntil(() => false, maxIterations: 10);
 
         Assert.False(result.ConditionMet);
     }
