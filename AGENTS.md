@@ -13,7 +13,7 @@ dotnet format RapidCluster.slnx --exclude src/Clockwork --verify-no-changes
 dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj --no-build -- --timeout 60s
 dotnet run --project tests/RapidCluster.Integration.Tests/RapidCluster.Integration.Tests.csproj --no-build -- --timeout 60s
 dotnet build tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj -p:EnforceCodeStyleInBuild=false
-dotnet run --project tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj --no-build -- --timeout 600s
+dotnet test tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj --no-build -- --timeout 600s
 dotnet run --project tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests/RapidCluster.EndToEnd.Tests.csproj --no-build -- --timeout 60s
 
 # Common test options:

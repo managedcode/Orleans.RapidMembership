@@ -56,11 +56,8 @@ jobs:
       - name: Test Integration
         run: dotnet run --project tests/RapidCluster.Integration.Tests/RapidCluster.Integration.Tests.csproj --configuration Release --no-build -- --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/integration.cobertura.xml --timeout 600s
 
-      - name: Build Simulation Instrumentation Closure
-        run: dotnet build tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj --configuration Release --no-restore -p:EnforceCodeStyleInBuild=false
-
       - name: Test Simulation Clockwork
-        run: dotnet run --project tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj --configuration Release --no-build -- --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/simulation.cobertura.xml --timeout 600s
+        run: dotnet test tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj --configuration Release --no-build -- --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/simulation.cobertura.xml --timeout 600s
 
       - name: Test EndToEnd
         run: dotnet run --project tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests/RapidCluster.EndToEnd.Tests.csproj --configuration Release --no-build -- --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/endtoend.cobertura.xml --timeout 600s
