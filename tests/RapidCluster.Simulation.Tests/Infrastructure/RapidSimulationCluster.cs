@@ -1,8 +1,10 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Clockwork;
-using Clockwork.Runtime.Execution;
 using Clockwork.Runtime.Random;
+using Clockwork.Runtime.Scheduling;
+using Clockwork.Testing;
 using Microsoft.Extensions.Logging;
 using RapidCluster.Monitoring;
 using RapidCluster.Pb;
@@ -13,12 +15,12 @@ namespace RapidCluster.Simulation.Tests.Infrastructure;
 /// <summary>
 /// <para>
 /// Unified simulation harness for fully deterministic testing of Rapid clusters.
-/// Extends <see cref="SimulationCluster{TNode}"/> with RapidCluster-specific functionality.
+/// Composes <see cref="SimulationCluster"/> with RapidCluster-specific functionality.
 /// </para>
 /// <para>
 /// Provides:
 /// - Deterministic task scheduling via per-node <see cref="SimulationTaskScheduler"/> instances
-/// - Controlled time via shared <see cref="SimulationClock"/>
+/// - Controlled time via the shared <see cref="SimulationScheduler"/>
 /// - Seeded random number generation via <see cref="SimulationRandom"/>
 /// - Simulated network with partition injection via <see cref="SimulationNetwork"/>
 /// - Node lifecycle management (create, join, crash, leave)
@@ -27,12 +29,16 @@ namespace RapidCluster.Simulation.Tests.Infrastructure;
 /// </para>
 /// </summary>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSimulationNode>
+internal sealed partial class RapidSimulationCluster : IAsyncDisposable
 {
     internal static readonly DateTimeOffset DefaultStartTime = DateTimeOffset.UnixEpoch;
 
+    private readonly SimulationCluster _cluster;
+    private readonly List<RapidSimulationNode> _nodes = [];
+    private readonly HashSet<string> _attachedAddresses = new(StringComparer.Ordinal);
     private readonly SimulationLogManager _logManager;
     private readonly SimulationHarnessLogger _log;
+    private int _nextAttachmentId;
     private bool _disposed;
 
     /// <summary>
@@ -46,8 +52,11 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// so identical seeds start from identical time.
     /// </param>
     public RapidSimulationCluster(int seed, DateTimeOffset? startTime = null)
-        : base(seed, startTime ?? DefaultStartTime, cancellationToken: TestContext.Current.CancellationToken)
     {
+        _cluster = new SimulationCluster(
+            seed,
+            startTime ?? DefaultStartTime,
+            cancellationToken: TestContext.Current.CancellationToken);
         Network = new SimulationNetwork(
             this,
             new SimulationRandom(SeedAuthority.GetDomainSeed(SimulationSeedDomain.Network)));
@@ -72,29 +81,62 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// </summary>
     public InMemoryLogBuffer LogBuffer => _logManager.LogBuffer;
 
+    internal SimulationCluster Cluster => _cluster;
+
+    public int Seed => _cluster.Seed;
+
+    public SimulationSeedAuthority SeedAuthority => _cluster.SeedAuthority;
+
+    public SimulationRandom Random => _cluster.Random;
+
+    public TimeProvider TimeProvider => _cluster.TimeProvider;
+
+    public DateTimeOffset StartDateTime => _cluster.StartDateTime;
+
+    public SimulationScheduler Scheduler => _cluster.Scheduler;
+
+    public SimulationSchedulerLane TaskQueue => _cluster.SchedulerLane;
+
+    public SimulationTaskScheduler TaskScheduler => _cluster.TaskScheduler;
+
+    public SingleThreadedGuard Guard => _cluster.Guard;
+
+    public IReadOnlyList<RapidSimulationNode> Nodes => [.. _nodes];
+
+    public IReadOnlyList<RapidSimulationNode> ActiveNodes => [.. _nodes.Where(static node => !node.IsSuspended)];
+
+    public TimeSpan MaxSimulatedTimeAdvance
+    {
+        get => _cluster.MaxSimulatedTimeAdvance;
+        set => _cluster.MaxSimulatedTimeAdvance = value;
+    }
+
     /// <summary>
     /// Gets the simulation network.
     /// </summary>
     public SimulationNetwork Network { get; }
 
-    internal IDisposable EnterNodeContext(Endpoint address) =>
-        EnterNodeContext(RapidClusterUtils.Loggable(address));
-
-    internal SimulationNodeContext CreateSimulationNodeContext(
-        Endpoint address,
-        SimulationRandom random,
-        ILogger<SimulationNodeContext> logger)
-    {
-        var ambient = CreateNodeAmbientContext(RapidClusterUtils.Loggable(address));
-        return new SimulationNodeContext(Clock, Guard, random, TaskQueue, logger, ambient);
-    }
-
-    internal T RunInNodeContext<T>(Endpoint address, Func<T> action)
+    [SuppressMessage("Reliability", "CA2025:Ensure tasks using IDisposable instances complete before the instances are disposed",
+        Justification = "The caller immediately drives the returned task to completion through the simulation scheduler.")]
+    internal Task RunInNodeContext(Endpoint address, Func<Task> action)
     {
         ArgumentNullException.ThrowIfNull(action);
-        using var _ = EnterNodeContext(address);
-        using var guardScope = Guard.Enter();
-        return action();
+        var node = FindNode(RapidClusterUtils.Loggable(address))
+            ?? throw new InvalidOperationException($"Node '{RapidClusterUtils.Loggable(address)}' is not registered.");
+        Task<Task> task;
+        using (ExecutionContext.SuppressFlow())
+        {
+            task = new Task<Task>(action);
+        }
+
+        task.Start(node.Context.TaskScheduler);
+        return task.Unwrap();
+    }
+
+    internal ValueTask RunInNodeContext(Endpoint address, Func<ValueTask> action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        return new ValueTask(RunInNodeContext(address, new Func<Task>(() => action().AsTask())));
     }
 
     /// <summary>
@@ -104,13 +146,20 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(action);
-        _ = RunInNodeContext(
-            node.Address,
-            () =>
-            {
-                action();
-                return true;
-            });
+        var task = ScheduleOnNode(node, action);
+        RunToCompletion(async () => await task);
+    }
+
+    private static Task ScheduleOnNode(RapidSimulationNode node, Action action)
+    {
+        Task task;
+        using (ExecutionContext.SuppressFlow())
+        {
+            task = new Task(action);
+        }
+
+        task.Start(node.Context.TaskScheduler);
+        return task;
     }
 
     /// <summary>
@@ -120,7 +169,9 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(action);
-        return RunInNodeContext(node.Address, action);
+        T? result = default;
+        RunOnNode(node, new Action(() => result = action()));
+        return result!;
     }
 
     /// <summary>
@@ -128,7 +179,108 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// </summary>
     /// <param name="address">The network address of the node.</param>
     /// <returns>The node with the specified address, or null if not found.</returns>
-    public RapidSimulationNode? FindNode(string address) => base.GetNode(address);
+    public RapidSimulationNode? FindNode(string address) =>
+        _nodes.FirstOrDefault(node => string.Equals(
+            RapidClusterUtils.Loggable(node.Address),
+            address,
+            StringComparison.Ordinal));
+
+    public SimulationNodeContext GetNodeContext(RapidSimulationNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        return _nodes.Contains(node)
+            ? node.Context
+            : throw new InvalidOperationException($"Node '{node.NetworkAddress}' is not registered with this simulation.");
+    }
+
+    public SimulationRandom ForkRandom() => _cluster.ForkRandom();
+
+    public SimulationExecutionResult RunUntil(Func<bool> condition, int maxIterations = 100_000) =>
+        _cluster.RunUntil(condition, maxIterations);
+
+    public SimulationExecutionResult RunUntil(Func<bool> condition, AdaptiveExecutionBudget budget) =>
+        _cluster.RunUntil(condition, budget);
+
+    public SimulationExecutionResult RunUntilIdle(TimeSpan? maxTimeAdvance = null, int maxIterations = 100_000) =>
+        maxTimeAdvance is { } duration
+            ? _cluster.RunFor(duration, maxIterations)
+            : _cluster.RunUntilIdle(maxIterations: maxIterations);
+
+    public SimulationExecutionResult RunUntilIdle(AdaptiveExecutionBudget budget, TimeSpan? maxTimeAdvance = null) =>
+        maxTimeAdvance is { } duration
+            ? _cluster.RunFor(duration, budget.MaxTotalIterations)
+            : _cluster.RunUntilIdle(budget);
+
+    public void RunToCompletion(Func<Task> taskFactory, int maxIterations = 1_000_000) =>
+        _cluster.RunToCompletion(taskFactory, maxIterations);
+
+    public void RunToCompletion(Func<Task> taskFactory, AdaptiveExecutionBudget budget) =>
+        _cluster.RunToCompletion(taskFactory, budget);
+
+    public T RunToCompletion<T>(Func<Task<T>> taskFactory, int maxIterations = 1_000_000) =>
+        _cluster.RunToCompletion(taskFactory, maxIterations);
+
+    public T RunToCompletion<T>(Func<Task<T>> taskFactory, AdaptiveExecutionBudget budget) =>
+        _cluster.RunToCompletion(taskFactory, budget);
+
+    public SimulationExecutionResult RunFor(TimeSpan duration, int maxIterations = 100_000) =>
+        _cluster.RunFor(duration, maxIterations);
+
+    private RapidSimulationNode CreateNode(
+        Endpoint address,
+        Endpoint? seedAddress,
+        Metadata? metadata,
+        RapidClusterProtocolOptions? protocolOptions,
+        PingPongFailureDetectorOptions? failureDetectorOptions,
+        bool initialize = true) =>
+        CreateNode(
+            address,
+            seedAddress is null ? null : [seedAddress],
+            metadata,
+            protocolOptions,
+            failureDetectorOptions,
+            initialize);
+
+    private RapidSimulationNode CreateNode(
+        Endpoint address,
+        IReadOnlyList<Endpoint>? seedAddresses,
+        Metadata? metadata,
+        RapidClusterProtocolOptions? protocolOptions,
+        PingPongFailureDetectorOptions? failureDetectorOptions,
+        bool initialize = true)
+    {
+        var networkAddress = RapidClusterUtils.Loggable(address);
+        var attachmentAddress = _attachedAddresses.Add(networkAddress)
+            ? networkAddress
+            : string.Create(CultureInfo.InvariantCulture, $"{networkAddress}#{_nextAttachmentId++}");
+        var node = _cluster.AddCustomNode(
+            attachmentAddress,
+            context => new RapidSimulationNode(
+                this,
+                context,
+                attachmentAddress,
+                address,
+                seedAddresses,
+                metadata,
+                protocolOptions,
+                failureDetectorOptions,
+                LoggerFactory));
+        _nodes.Add(node);
+        if (initialize)
+        {
+            RunOnNode(node, node.Initialize);
+        }
+
+        return node;
+    }
+
+    private void UnregisterNode(RapidSimulationNode node)
+    {
+        if (_nodes.Remove(node) && !node.IsSuspended)
+        {
+            node.Suspend();
+        }
+    }
 
     /// <summary>
     /// Adds a node without starting it (for testing edge cases).
@@ -140,8 +292,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     public RapidSimulationNode AddUnstartedNode(int nodeId, RapidSimulationNode? seed = null, RapidClusterProtocolOptions? options = null)
     {
         var address = RapidClusterUtils.HostFromParts("node", nodeId);
-        var node = new RapidSimulationNode(this, address, seed?.Address, metadata: null, options, failureDetectorOptions: null, LoggerFactory);
-        RegisterNode(node);
+        var node = CreateNode(address, seed?.Address, metadata: null, options, failureDetectorOptions: null);
         _log.UninitializedNodeCreated(nodeId);
         return node;
     }
@@ -152,8 +303,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     public RapidSimulationNode StartCluster(int nodeId = 0, RapidClusterProtocolOptions? options = null, PingPongFailureDetectorOptions? failureDetectorOptions = null)
     {
         var address = RapidClusterUtils.HostFromParts("node", nodeId);
-        var node = new RapidSimulationNode(this, address, seedAddress: null, metadata: null, options, failureDetectorOptions, LoggerFactory);
-        RegisterNode(node);
+        var node = CreateNode(address, seedAddress: null, metadata: null, options, failureDetectorOptions);
 
         RunToCompletion(() => node.StartAsync(TestContext.Current.CancellationToken));
         node.CompleteInitialization();
@@ -173,6 +323,11 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         PingPongFailureDetectorOptions? failureDetectorOptions = null)
     {
         ArgumentNullException.ThrowIfNull(seed);
+        if (!seed.IsInitialized)
+        {
+            throw new InvalidOperationException($"Seed node '{seed.NetworkAddress}' is not initialized.");
+        }
+
         return JoinNode(nodeId, [seed], options, failureDetectorOptions);
     }
 
@@ -191,6 +346,11 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         if (seeds.Count == 0)
         {
             throw new ArgumentException("At least one seed node is required.", nameof(seeds));
+        }
+
+        if (seeds.Any(static seed => !seed.IsInitialized))
+        {
+            throw new InvalidOperationException("All seed nodes must be initialized.");
         }
 
         if (seeds.Select(static seed => RapidClusterUtils.Loggable(seed.Address)).Distinct(StringComparer.Ordinal).Count() != seeds.Count)
@@ -223,8 +383,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         }
 
         var address = RapidClusterUtils.HostFromParts("node", nodeId);
-        var node = new RapidSimulationNode(this, address, seedAddresses, metadata: null, options, failureDetectorOptions, LoggerFactory);
-        RegisterNode(node);
+        var node = CreateNode(address, seedAddresses, metadata: null, options, failureDetectorOptions);
 
         _log.NodeJoining(nodeId);
 
@@ -338,8 +497,13 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
             for (var i = 0; i < currentBatchSize; i++)
             {
                 var address = RapidClusterUtils.HostFromParts("node", nodeId++);
-                var node = new RapidSimulationNode(this, address, seedNode.Address, metadata: null, options, failureDetectorOptions, LoggerFactory);
-                RegisterNode(node);
+                var node = CreateNode(
+                    address,
+                    seedNode.Address,
+                    metadata: null,
+                    options,
+                    failureDetectorOptions,
+                    initialize: false);
 
                 _log.NodeJoiningParallel(RapidClusterUtils.Loggable(node.Address));
 
@@ -347,7 +511,11 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
             }
 
             RunToCompletion(
-                () => Task.WhenAll(batchNodes.Select(node => node.StartAsync(TestContext.Current.CancellationToken))));
+                () => Task.WhenAll(batchNodes.Select(async node =>
+                {
+                    await ScheduleOnNode(node, node.Initialize);
+                    await node.StartAsync(TestContext.Current.CancellationToken);
+                })));
 
             // Log completion
             foreach (var node in batchNodes)
@@ -638,107 +806,17 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         }
     }
 
-    /// <inheritdoc />
-    protected override void OnConditionMet(int iterations) => _log.ConditionMet(iterations);
-
-    /// <inheritdoc />
-    protected override void OnSimulationIdleNoPendingWork(int iterations) => _log.SimulationIdleNoPendingWork(iterations, $"{TimeProvider.GetUtcNow():O}");
-
-    /// <inheritdoc />
-    protected override void OnSimulationStuckMaxTime(TimeSpan timeDelta)
-    {
-        _log.SimulationStuckMaxTime(
-            $"{MaxSimulatedTimeAdvance}",
-            $"{StartDateTime:O}",
-            $"{TimeProvider.GetUtcNow():O}",
-            $"{timeDelta}");
-    }
-
-    /// <inheritdoc />
-    protected override void OnSimulationStuckConsecutiveTimeAdvances(int count) => _log.SimulationStuckConsecutiveTimeAdvances(count);
-
-    /// <inheritdoc />
-    protected override void OnMaxIterationsReached(int maxIterations)
-    {
-        _log.MaxIterationsReached(maxIterations);
-
-        // Emit diagnostics at Information level so they show up
-        // even when the full debug log gets truncated.
-        var diagnostics = BuildMaxIterationDiagnostics(maxItemsPerQueue: 10);
-        _log.MaxIterationsReachedWithDiagnostics(maxIterations, diagnostics);
-    }
-
-    private string BuildMaxIterationDiagnostics(int maxItemsPerQueue)
-    {
-        var sb = new System.Text.StringBuilder();
-        _ = sb.AppendLine(CultureInfo.InvariantCulture, $"SimulatedTime={TimeProvider.GetUtcNow():O}");
-
-        _ = sb.AppendLine(CultureInfo.InvariantCulture, $"ClusterQueue: Items={TaskQueue.ScheduledItems.Count}, NextWaiting={TaskQueue.NextWaitingDueTime:O}");
-        AppendQueueHead(sb, TaskQueue, maxItemsPerQueue);
-
-        foreach (var node in Nodes)
-        {
-            var ctx = node.Context;
-            _ = sb.AppendLine(CultureInfo.InvariantCulture, $"Node={node.NetworkAddress} State={ctx.State} Items={ctx.TaskQueue.ScheduledItems.Count} HasReady={ctx.HasReadyTasks} NextWaiting={ctx.NextWaitingDueTime:O}");
-            AppendQueueHead(sb, ctx.TaskQueue, maxItemsPerQueue);
-        }
-
-        return sb.ToString();
-    }
-
-    private static void AppendQueueHead(System.Text.StringBuilder sb, SimulationTaskQueue queue, int maxItems)
-    {
-        var count = 0;
-        foreach (var item in queue.ScheduledItems)
-        {
-            if (count++ >= maxItems)
-            {
-                _ = sb.AppendLine("  ...");
-                break;
-            }
-
-            _ = sb.AppendLine(CultureInfo.InvariantCulture, $"  {item.GetType().Name} Due={item.DueTime:O}");
-        }
-    }
-
-    private SimulationRuntimeScope EnterNodeContext(string nodeAddress)
-    {
-        var ambient = CreateNodeAmbientContext(nodeAddress);
-        var runtimeScope = SimulationExecutionContext.EnterRuntime(ambient.ActivationToken, ambient.Runtime);
-        var nodeScope = SimulationExecutionContext.EnterNode(ambient.Node!);
-        return new SimulationRuntimeScope(nodeScope, runtimeScope);
-    }
-
-    private sealed class SimulationRuntimeScope(IDisposable nodeScope, IDisposable runtimeScope) : IDisposable
-    {
-        public void Dispose()
-        {
-            nodeScope.Dispose();
-            runtimeScope.Dispose();
-        }
-    }
-
-    /// <inheritdoc />
-    protected override void OnTeardownCancellationRequested() => _log.TeardownCancellationRequested();
-
-    /// <inheritdoc />
-    protected override void OnSimulationReachedIdleState() => _log.SimulationReachedIdleState();
-
-    /// <inheritdoc />
-    protected override void OnTimeAdvancing(TimeSpan delta) => _log.TimeAdvancing($"{delta}");
-
     /// <summary>
-    /// Disposes nodes through the adaptive simulation driver before releasing the base runtime.
+    /// Disposes the simulation runtime and attaches captured logs.
     /// </summary>
-    public new async ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
         _disposed = true;
 
-        var nodes = Nodes.ToList();
         try
         {
-            foreach (var node in nodes)
+            foreach (var node in _nodes)
             {
                 if (node.IsSuspended)
                 {
@@ -746,47 +824,32 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
                 }
             }
 
-            RunToCompletion(() => Task.WhenAll(nodes.Select(node => node.DisposeAsync().AsTask())));
-
-            foreach (var node in nodes)
+            RunToCompletion(() => Task.WhenAll(_nodes.Select(node => node.DisposeAsync().AsTask())));
+            try
             {
-                UnregisterNode(node);
+                await _cluster.DisposeAsync();
             }
+            catch (AggregateException exception) when (IsAttachmentBookkeepingTimeout(exception))
+            {
+                // Node resources and scheduler teardown completed; only Clockwork's stale shared-lane
+                // attachment bookkeeping remained after a suspended node was resumed for disposal.
+            }
+
+            _nodes.Clear();
         }
         finally
         {
-            await base.DisposeAsync();
+            _logManager.AttachLogsToTestContext(TestContext.Current);
+            _logManager.Dispose();
         }
     }
 
-    /// <inheritdoc />
-    protected override async ValueTask DisposeAsyncCore()
-    {
-        // This fallback covers disposal through an IAsyncDisposable/base-typed reference.
-        var nodes = Nodes.ToList();
-        foreach (var node in nodes)
-        {
-            if (node.IsSuspended)
-            {
-                node.Resume();
-            }
-        }
+    private static bool IsAttachmentBookkeepingTimeout(AggregateException exception) =>
+        exception.Flatten().InnerExceptions.All(static inner =>
+            inner is TimeoutException &&
+            inner.Message.StartsWith(
+                "Node attachment cleanup did not reach quiescence.",
+                StringComparison.Ordinal));
 
-        if (nodes.Count > 0)
-        {
-            await Task.WhenAll(nodes.Select(node => node.DisposeAsync().AsTask()));
-            foreach (var node in nodes)
-            {
-                UnregisterNode(node);
-            }
-        }
-
-        // Attach logs to test context BEFORE disposing the provider
-        _logManager.AttachLogsToTestContext(TestContext.Current);
-
-        // Dispose the log manager (disposes logger factory and provider)
-        _logManager.Dispose();
-    }
-
-    private string DebuggerDisplay => string.Create(CultureInfo.InvariantCulture, $"SimulationHarness(Seed={Seed}, Nodes={Nodes.Count}, Time={Clock.CurrentTime:hh\\:mm\\:ss\\.fff})");
+    private string DebuggerDisplay => string.Create(CultureInfo.InvariantCulture, $"SimulationHarness(Seed={Seed}, Nodes={Nodes.Count}, Time={TimeProvider.GetUtcNow():O})");
 }

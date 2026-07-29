@@ -3,8 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Metrics;
 using System.Globalization;
 using Clockwork;
-using Clockwork.Runtime.Random;
-using Clockwork.Runtime.Threading;
+using Clockwork.Shims.System;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -25,16 +24,23 @@ namespace RapidCluster.Simulation.Tests.Infrastructure;
 /// </summary>
 [SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable",
     Justification = "Lifetime is managed by the simulation harness.")]
+[SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
+    Justification = "The service provider owns node services, and DisposeAsync releases the provider and cancellation source.")]
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-internal sealed class RapidSimulationNode : SimulationNode
+internal sealed class RapidSimulationNode : SimulationNode, IAsyncDisposable
 {
     private readonly RapidSimulationCluster _harness;
-    private readonly RapidSimulationNodeLogger _log;
-    private readonly ILoggerFactory _nodeLoggerFactory;
-    private readonly MembershipService _membershipService;
-    private readonly IRapidClusterLifecycle _lifecycle;
-    private readonly ServiceProvider _serviceProvider;
+    private readonly string _networkAddress;
+    private readonly IReadOnlyList<Endpoint>? _seedAddresses;
+    private readonly RapidClusterProtocolOptions? _protocolOptions;
+    private readonly PingPongFailureDetectorOptions? _failureDetectorOptions;
+    private readonly ILoggerFactory? _loggerFactory;
     private readonly CancellationTokenSource _disposeCts = new();
+    private RapidSimulationNodeLogger _log = null!;
+    private ILoggerFactory _nodeLoggerFactory = null!;
+    private MembershipService _membershipService = null!;
+    private IRapidClusterLifecycle _lifecycle = null!;
+    private ServiceProvider? _serviceProvider;
     private bool _disposed;
     private bool _isInitialized;
 
@@ -46,7 +52,7 @@ internal sealed class RapidSimulationNode : SimulationNode
     /// <summary>
     /// Gets the network address of this node as a string for routing.
     /// </summary>
-    public override string NetworkAddress => RapidClusterUtils.Loggable(Address);
+    public override string NetworkAddress => _networkAddress;
 
     /// <summary>
     /// Gets the simulation context for this node.
@@ -61,7 +67,7 @@ internal sealed class RapidSimulationNode : SimulationNode
     /// <summary>
     /// Gets the membership view accessor for subscribing to view changes.
     /// </summary>
-    public IMembershipViewAccessor ViewAccessor { get; }
+    public IMembershipViewAccessor ViewAccessor { get; private set; } = null!;
 
     /// <summary>
     /// Gets a value indicating whether gets whether this node is initialized and part of a cluster.
@@ -76,7 +82,7 @@ internal sealed class RapidSimulationNode : SimulationNode
     /// <summary>
     /// Gets the messaging client for testing purposes.
     /// </summary>
-    internal InMemoryMessagingClient MessagingClient { get; }
+    internal InMemoryMessagingClient MessagingClient { get; private set; } = null!;
 
     /// <summary>
     /// Gets the cancellation token that is triggered when this node is being torn down.
@@ -89,13 +95,15 @@ internal sealed class RapidSimulationNode : SimulationNode
     /// </summary>
     internal RapidSimulationNode(
         RapidSimulationCluster harness,
+        SimulationNodeContext context,
+        string networkAddress,
         Endpoint address,
         Endpoint? seedAddress,
         Metadata? metadata,
         RapidClusterProtocolOptions? protocolOptions,
         PingPongFailureDetectorOptions? failureDetectorOptions,
         ILoggerFactory? loggerFactory)
-        : this(harness, address, seedAddress != null ? [seedAddress] : null, metadata, protocolOptions, failureDetectorOptions, loggerFactory)
+        : this(harness, context, networkAddress, address, seedAddress != null ? [seedAddress] : null, metadata, protocolOptions, failureDetectorOptions, loggerFactory)
     {
     }
 
@@ -105,6 +113,8 @@ internal sealed class RapidSimulationNode : SimulationNode
     /// </summary>
     internal RapidSimulationNode(
         RapidSimulationCluster harness,
+        SimulationNodeContext context,
+        string networkAddress,
         Endpoint address,
         IReadOnlyList<Endpoint>? seedAddresses,
         Metadata? metadata,
@@ -112,31 +122,34 @@ internal sealed class RapidSimulationNode : SimulationNode
         PingPongFailureDetectorOptions? failureDetectorOptions,
         ILoggerFactory? loggerFactory)
     {
-        using var runtimeScope = harness.EnterNodeContext(address);
-        using var guardScope = harness.Guard.Enter();
         _harness = harness;
+        _networkAddress = networkAddress;
         Address = address;
+        Context = context;
+        _seedAddresses = seedAddresses;
+        _protocolOptions = protocolOptions;
+        _failureDetectorOptions = failureDetectorOptions;
+        _loggerFactory = loggerFactory;
+        Metadata = metadata;
+    }
+
+    internal Metadata? Metadata { get; }
+
+    internal void Initialize()
+    {
+        if (_nodeLoggerFactory is not null)
+        {
+            throw new InvalidOperationException("The simulation node is already initialized.");
+        }
 
         // Wrap the logger factory to prepend the node name to all log messages
-        var baseLoggerFactory = loggerFactory ?? harness.LoggerFactory;
-        var nodeName = string.Create(CultureInfo.InvariantCulture, $"{address.Hostname.ToStringUtf8()}:{address.Port}");
-        _nodeLoggerFactory = baseLoggerFactory != null
-            ? new NodePrefixedLoggerFactory(baseLoggerFactory, nodeName)
-            : NullLoggerFactory.Instance;
-
-        // Create logger for the context (suspend/resume logging happens there)
-        var contextLogger = _nodeLoggerFactory.CreateLogger<SimulationNodeContext>();
-        var nodeRandom = new SimulationRandom(
-            harness.SeedAuthority.GetSiteSeed(SimulationSeedDomain.Application, RapidClusterUtils.Loggable(address)));
-        Context = harness.CreateSimulationNodeContext(
-            address,
-            nodeRandom,
-            contextLogger);
+        var baseLoggerFactory = _loggerFactory ?? _harness.LoggerFactory ?? NullLoggerFactory.Instance;
+        _nodeLoggerFactory = new NonDisposingLoggerFactory(baseLoggerFactory);
 
         _log = new RapidSimulationNodeLogger(_nodeLoggerFactory.CreateLogger<RapidSimulationNode>());
 
-        var configuredProtocolOptions = protocolOptions ?? new RapidClusterProtocolOptions();
-        var configuredFailureDetectorOptions = failureDetectorOptions ?? new PingPongFailureDetectorOptions();
+        var configuredProtocolOptions = _protocolOptions ?? new RapidClusterProtocolOptions();
+        var configuredFailureDetectorOptions = _failureDetectorOptions ?? new PingPongFailureDetectorOptions();
         var simulationTimeProvider = ControlledTimeProvider.System;
         var services = new ServiceCollection();
         _ = services.AddLogging();
@@ -148,9 +161,9 @@ internal sealed class RapidSimulationNode : SimulationNode
             simulationTimeProvider,
             shuttingDownToken: _disposeCts.Token));
         _ = services.AddSingleton<IMessagingClient>(sp => new InMemoryMessagingClient(
-            harness,
+            _harness,
             this,
-            address,
+            Address,
             sp.GetRequiredService<IOptions<RapidClusterProtocolOptions>>().Value,
             sp.GetRequiredService<IOptions<PingPongFailureDetectorOptions>>().Value));
         _ = services.AddSingleton(sp => new RapidClusterMetrics(sp.GetRequiredService<IMeterFactory>(), cluster: null));
@@ -159,14 +172,14 @@ internal sealed class RapidSimulationNode : SimulationNode
             .AddRapidClusterManual(
                 options =>
                 {
-                    options.SeedAddresses = seedAddresses?.Select(s => s.ToEndPointPreferIP()).ToList();
-                    options.Metadata = metadata?.Metadata_.ToDictionary(
+                    options.SeedAddresses = _seedAddresses?.Select(s => s.ToEndPointPreferIP()).ToList();
+                    options.Metadata = Metadata?.Metadata_.ToDictionary(
                         kvp => kvp.Key,
                         kvp => kvp.Value.ToByteArray(),
                         StringComparer.Ordinal) ?? [];
                 },
                 simulationTimeProvider)
-            .UseListenAddress(address.ToEndPointPreferIP())
+            .UseListenAddress(Address.ToEndPointPreferIP())
             .ConfigureProtocol(options => CopyOptions(configuredProtocolOptions, options))
             .ConfigureFailureDetector(options => CopyOptions(configuredFailureDetectorOptions, options));
 
@@ -244,11 +257,14 @@ internal sealed class RapidSimulationNode : SimulationNode
                 var node = (RapidSimulationNode)state!;
                 try
                 {
-                    var providerDisposal = node._harness.RunInNodeContext(
-                        node.Address,
-                        node._serviceProvider.DisposeAsync);
+                    if (node._serviceProvider is { } serviceProvider)
+                    {
+                        var providerDisposal = node._harness.RunInNodeContext(
+                            node.Address,
+                            serviceProvider.DisposeAsync);
 
-                    await providerDisposal;
+                        await providerDisposal;
+                    }
                 }
                 finally
                 {
@@ -287,6 +303,17 @@ internal sealed class RapidSimulationNode : SimulationNode
         destination.Interval = source.Interval;
         destination.ProbeTimeout = source.ProbeTimeout;
         destination.ConsecutiveFailuresThreshold = source.ConsecutiveFailuresThreshold;
+    }
+
+    private sealed class NonDisposingLoggerFactory(ILoggerFactory inner) : ILoggerFactory
+    {
+        public void AddProvider(ILoggerProvider provider) => inner.AddProvider(provider);
+
+        public ILogger CreateLogger(string categoryName) => inner.CreateLogger(categoryName);
+
+        public void Dispose()
+        {
+        }
     }
 
     /// <summary>

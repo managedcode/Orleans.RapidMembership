@@ -13,11 +13,14 @@ namespace RapidCluster.Simulation.Tests.Infrastructure;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 internal sealed class SimulationNetwork : Clockwork.SimulationNetwork
 {
+    private readonly RapidSimulationCluster _harness;
     private SimulationNetworkLogger _log;
+    private bool _enableDelays;
 
     internal SimulationNetwork(RapidSimulationCluster harness, SimulationRandom random)
         : base(() => harness.Nodes, random)
     {
+        _harness = harness;
         _log = new SimulationNetworkLogger(Microsoft.Extensions.Logging.Abstractions.NullLogger<SimulationNetwork>.Instance);
     }
 
@@ -26,6 +29,46 @@ internal sealed class SimulationNetwork : Clockwork.SimulationNetwork
         _log = new SimulationNetworkLogger(logger);
         base.SetLogger(logger);
     }
+
+    public bool EnableDelays
+    {
+        get => _enableDelays;
+        set => _enableDelays = value;
+    }
+
+    public new TimeSpan GetMessageDelay() => _enableDelays ? base.GetMessageDelay() : TimeSpan.Zero;
+
+    public new void IsolateNode(string nodeAddress)
+    {
+        OnNodeIsolating(nodeAddress);
+        foreach (var node in _harness.Nodes)
+        {
+            var address = RapidClusterUtils.Loggable(node.Address);
+            if (!string.Equals(address, nodeAddress, StringComparison.Ordinal))
+            {
+                CreateBidirectionalPartition(nodeAddress, address);
+            }
+        }
+    }
+
+    public new void ReconnectNode(string nodeAddress)
+    {
+        OnNodeReconnecting(nodeAddress);
+        foreach (var node in _harness.Nodes)
+        {
+            var address = RapidClusterUtils.Loggable(node.Address);
+            if (!string.Equals(address, nodeAddress, StringComparison.Ordinal))
+            {
+                HealBidirectionalPartition(nodeAddress, address);
+            }
+        }
+    }
+
+    public new bool IsNodeIsolated(string nodeAddress) =>
+        _harness.Nodes
+            .Select(static node => RapidClusterUtils.Loggable(node.Address))
+            .Where(address => !string.Equals(address, nodeAddress, StringComparison.Ordinal))
+            .All(address => !CanDeliver(nodeAddress, address));
 
     /// <inheritdoc />
     protected override void OnPartitionCreated(string source, string target) => _log.PartitionCreated(source, target);
