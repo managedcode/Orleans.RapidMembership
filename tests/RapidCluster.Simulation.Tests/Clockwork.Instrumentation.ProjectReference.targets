@@ -1,123 +1,13 @@
 <Project>
-
-	<!-- Adapt Clockwork's package targets to load the task from its source-project output. -->
 	<PropertyGroup>
-		<ClockworkInstrumentationToolDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../../src/Clockwork/src/Clockwork.Instrumentation.Build/bin/$(Configuration)/net10.0'))</ClockworkInstrumentationToolDirectory>
+		<ClockworkInstrumentationTaskAssembly>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../../src/Clockwork/src/Clockwork.Instrumentation.Build/bin/$(Configuration)/net10.0/Clockwork.Instrumentation.Build.dll'))</ClockworkInstrumentationTaskAssembly>
+		<ClockworkIntermediateRoot>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\clockwork\</ClockworkIntermediateRoot>
+		<ClockworkUninstrumentedTestDirectory>$(ClockworkIntermediateRoot)source\</ClockworkUninstrumentedTestDirectory>
+		<ClockworkStagingDirectory>$(ClockworkIntermediateRoot)instrumented\</ClockworkStagingDirectory>
+		<ClockworkManifestPath>$(ClockworkIntermediateRoot)clockwork.manifest.json</ClockworkManifestPath>
+		<ClockworkSuccessPath>$(ClockworkIntermediateRoot)clockwork.$(ClockworkInstrumentationMode).success</ClockworkSuccessPath>
+		<ClockworkModeStampPath>$(ClockworkIntermediateRoot)clockwork.mode</ClockworkModeStampPath>
 	</PropertyGroup>
-	<UsingTask TaskName="Clockwork.Instrumentation.Build.ClockworkInstrumentTask"
-			   AssemblyFile="$(ClockworkInstrumentationToolDirectory)/Clockwork.Instrumentation.Build.dll" />
 
-	<Target Name="ClockworkSetInstrumentationDefaults">
-		<PropertyGroup>
-			<ClockworkSourceDirectory Condition="'$(ClockworkSourceDirectory)' == ''">$(TargetDir)</ClockworkSourceDirectory>
-			<ClockworkEntryAssemblyName Condition="'$(ClockworkEntryAssemblyName)' == ''">$(TargetName)</ClockworkEntryAssemblyName>
-			<ClockworkStagingDirectory Condition="'$(ClockworkStagingDirectory)' == ''">$(IntermediateOutputPath)clockwork/instrumented/</ClockworkStagingDirectory>
-			<ClockworkManifestPath Condition="'$(ClockworkManifestPath)' == ''">$(IntermediateOutputPath)clockwork/clockwork.manifest.json</ClockworkManifestPath>
-			<ClockworkModeStampPath Condition="'$(ClockworkModeStampPath)' == ''">$(IntermediateOutputPath)clockwork/clockwork.mode</ClockworkModeStampPath>
-			<ClockworkConfigurationPath Condition="'$(ClockworkConfigurationPath)' == '' and Exists('$(MSBuildProjectDirectory)/clockwork.config.json')">$(MSBuildProjectDirectory)/clockwork.config.json</ClockworkConfigurationPath>
-		</PropertyGroup>
-	</Target>
-
-	<Target Name="ClockworkComputeInstrumentationToolSignature"
-			DependsOnTargets="ClockworkSetInstrumentationDefaults"
-			Condition="'$(ClockworkInstrumentedTestProject)' == 'true'">
-		<ItemGroup>
-			<ClockworkInstrumentationToolBinary Include="$(ClockworkInstrumentationToolDirectory)/Clockwork.Instrumentation.Build.dll" />
-			<ClockworkInstrumentationToolBinary Include="$(ClockworkInstrumentationToolDirectory)/Clockwork.Instrumentation.dll" />
-			<ClockworkInstrumentationToolBinary Include="$(ClockworkInstrumentationToolDirectory)/Clockwork.Runtime.dll" />
-			<ClockworkInstrumentationToolBinary Include="$(ClockworkInstrumentationToolDirectory)/Mono.Cecil.dll" />
-			<ClockworkInstrumentationToolBinary Include="$(ClockworkInstrumentationToolDirectory)/Mono.Cecil.Mdb.dll" />
-			<ClockworkInstrumentationToolBinary Include="$(ClockworkInstrumentationToolDirectory)/Mono.Cecil.Pdb.dll" />
-			<ClockworkInstrumentationToolBinary Include="$(ClockworkInstrumentationToolDirectory)/Mono.Cecil.Rocks.dll" />
-		</ItemGroup>
-		<Error Condition="!Exists('%(ClockworkInstrumentationToolBinary.Identity)')"
-			   Text="Clockwork instrumentation tool binary '%(ClockworkInstrumentationToolBinary.Identity)' was not built." />
-		<GetFileHash Files="@(ClockworkInstrumentationToolBinary)" Algorithm="SHA256">
-			<Output TaskParameter="Items" ItemName="_ClockworkHashedInstrumentationToolBinary" />
-		</GetFileHash>
-		<PropertyGroup>
-			<ClockworkInstrumentationToolBinaryHashes>@(_ClockworkHashedInstrumentationToolBinary->'%(Filename)%(Extension)=%(FileHash)', '|')</ClockworkInstrumentationToolBinaryHashes>
-			<ClockworkInstrumentationToolSignatureInputPath>$(IntermediateOutputPath)clockwork/clockwork.tools.sha256-input</ClockworkInstrumentationToolSignatureInputPath>
-		</PropertyGroup>
-		<MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(ClockworkInstrumentationToolSignatureInputPath)'))" />
-		<WriteLinesToFile File="$(ClockworkInstrumentationToolSignatureInputPath)"
-						  Lines="$(ClockworkInstrumentationToolBinaryHashes)"
-						  Overwrite="true"
-						  WriteOnlyWhenDifferent="true" />
-		<GetFileHash Files="$(ClockworkInstrumentationToolSignatureInputPath)" Algorithm="SHA256">
-			<Output TaskParameter="Items" ItemName="_ClockworkInstrumentationToolSignatureFile" />
-		</GetFileHash>
-		<PropertyGroup>
-			<ClockworkInstrumentationToolSignature>@(_ClockworkInstrumentationToolSignatureFile->'%(FileHash)')</ClockworkInstrumentationToolSignature>
-			<ClockworkInstrumentationIdentity>$(ClockworkInstrumentationMode)|$(ClockworkInstrumentationToolSignature)</ClockworkInstrumentationIdentity>
-			<ClockworkSuccessPath Condition="'$(ClockworkSuccessPath)' == ''">$(IntermediateOutputPath)clockwork\clockwork.$(ClockworkInstrumentationMode).$(ClockworkInstrumentationToolSignature).success</ClockworkSuccessPath>
-		</PropertyGroup>
-		<Message Importance="normal"
-				 Text="Clockwork: instrumentation tool signature $(ClockworkInstrumentationToolSignature)" />
-	</Target>
-
-	<Target Name="ClockworkWriteInstrumentationModeStamp"
-			BeforeTargets="ClockworkInstrument"
-			DependsOnTargets="ClockworkComputeInstrumentationToolSignature"
-			Condition="'$(ClockworkInstrumentedTestProject)' == 'true'">
-		<ReadLinesFromFile File="$(ClockworkModeStampPath)"
-						   Condition="Exists('$(ClockworkModeStampPath)')">
-			<Output TaskParameter="Lines" PropertyName="ClockworkPreviousInstrumentationIdentity" />
-		</ReadLinesFromFile>
-		<Delete Files="$(ClockworkSuccessPath);$(ClockworkManifestPath)"
-				Condition="'$(ClockworkPreviousInstrumentationIdentity)' != '' and '$(ClockworkPreviousInstrumentationIdentity)' != '$(ClockworkInstrumentationIdentity)'" />
-		<WriteLinesToFile File="$(ClockworkModeStampPath)"
-						  Lines="$(ClockworkInstrumentationIdentity)"
-						  Overwrite="true"
-						  WriteOnlyWhenDifferent="true" />
-	</Target>
-
-	<Target Name="ClockworkInstrument"
-			AfterTargets="Build"
-			DependsOnTargets="ClockworkComputeInstrumentationToolSignature"
-			Condition="'$(ClockworkInstrumentedTestProject)' == 'true'"
-			Inputs="$(TargetPath);@(ReferenceCopyLocalPaths);@(ClockworkRuleSet);@(ClockworkBuiltInRuleSet);@(ClockworkInstrumentationToolBinary);$(ClockworkConfigurationPath);$(ClockworkModeStampPath);$(MSBuildAllProjects)"
-			Outputs="$(ClockworkSuccessPath);$(ClockworkManifestPath)">
-
-		<Message Importance="high" Text="Clockwork: instrumenting '$(ClockworkSourceDirectory)' -> '$(ClockworkStagingDirectory)'" />
-
-		<ClockworkInstrumentTask
-			SourceDirectory="$(ClockworkSourceDirectory)"
-			StagingDirectory="$(ClockworkStagingDirectory)"
-			ConfigurationPath="$(ClockworkConfigurationPath)"
-			RuleSetPaths="@(ClockworkRuleSet)"
-			BuiltInRuleSets="@(ClockworkBuiltInRuleSet)"
-			BuiltInIncludeFamilies="@(ClockworkBuiltInInclude)"
-			BuiltInExcludeFamilies="@(ClockworkBuiltInExclude)"
-			StrictBuiltIns="$(ClockworkStrictBuiltIns)"
-			IncludePatterns="@(ClockworkInstrumentedAssembly)"
-			ExcludePatterns="@(ClockworkExclude)"
-			InstrumentationMode="$(ClockworkInstrumentationMode)"
-			ExcludeFrameworkAssemblies="$(ClockworkExcludeFrameworkAssemblies)"
-			InstrumentDependencies="$(ClockworkInstrumentDependencies)"
-			ReadyToRunPolicy="$(ClockworkReadyToRunPolicy)"
-			StrongNamePolicy="$(ClockworkStrongNamePolicy)"
-			StrongNameKeyPath="$(ClockworkStrongNameKeyPath)"
-			TargetRuntime="$(ClockworkTargetRuntime)"
-			EntryAssemblyName="$(ClockworkEntryAssemblyName)"
-			ManifestPath="$(ClockworkManifestPath)"
-			CachePath="$(ClockworkSuccessPath)">
-			<Output TaskParameter="ResolvedManifestPath" PropertyName="ClockworkResolvedManifestPath" />
-			<Output TaskParameter="WasIncremental" PropertyName="ClockworkWasIncremental" />
-		</ClockworkInstrumentTask>
-
-		<Message Importance="normal" Text="Clockwork: manifest at '$(ClockworkResolvedManifestPath)' (incremental: $(ClockworkWasIncremental))" />
-	</Target>
-
-	<Target Name="ClockworkCopyInstrumentedClosureToOutput"
-			AfterTargets="ClockworkInstrument"
-			Condition="'$(ClockworkInstrumentedTestProject)' == 'true' and Exists('$(ClockworkStagingDirectory)')">
-		<ItemGroup>
-			<_ClockworkInstrumentedClosureFiles Include="$(ClockworkStagingDirectory)**\*" />
-		</ItemGroup>
-		<Copy SourceFiles="@(_ClockworkInstrumentedClosureFiles)"
-			  DestinationFiles="@(_ClockworkInstrumentedClosureFiles->'$(TargetDir)%(RecursiveDir)%(Filename)%(Extension)')"
-			  SkipUnchangedFiles="true" />
-	</Target>
-
+	<Import Project="..\..\src\Clockwork\src\Clockwork.Instrumentation.Build\build\Clockwork.Instrumentation.Build.targets" />
 </Project>
