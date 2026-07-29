@@ -32,9 +32,6 @@
 	<ItemGroup>
 		<ClockworkBuiltInRuleSet Include="clockwork.bcl.deterministic" />
 		<ClockworkBuiltInRuleSet Include="clockwork.tasks.controlled" />
-		<ClockworkInstrumentedAssembly Include="RapidCluster.Core.dll" />
-		<ClockworkInstrumentedAssembly Include="RapidCluster.Grpc.dll" />
-		<ClockworkInstrumentedAssembly Include="RapidCluster.Simulation.Fixtures.dll" />
 	</ItemGroup>
 
 	<ItemGroup>

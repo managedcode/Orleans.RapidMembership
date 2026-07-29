@@ -336,8 +336,7 @@ dotnet build RapidCluster.slnx
 # Run tests
 dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --timeout 60s
 dotnet run --project tests/RapidCluster.Integration.Tests/RapidCluster.Integration.Tests.csproj -- --timeout 60s
-dotnet build tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj -p:EnforceCodeStyleInBuild=false
-dotnet run --project tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj --no-build -- --timeout 600s
+dotnet test tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj --no-build -- --timeout 600s
 dotnet run --project tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests/RapidCluster.EndToEnd.Tests.csproj -- --timeout 60s
 ```
 
@@ -434,7 +433,7 @@ This project uses xUnit v3 with Microsoft Testing Platform:
 # Run all tests
 dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --timeout 60s
 dotnet run --project tests/RapidCluster.Integration.Tests/RapidCluster.Integration.Tests.csproj -- --timeout 60s
-dotnet run --project tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj -- --timeout 600s
+dotnet test tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj --no-build -- --timeout 600s
 dotnet run --project tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests/RapidCluster.EndToEnd.Tests.csproj -- --timeout 60s
 
 # Run specific test class
@@ -447,7 +446,7 @@ dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.cspro
 dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --timeout 60s --filter-class "*Tests.Unit*"
 
 # Run only simulation tests
-dotnet run --project tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj -- --timeout 600s --filter-class "*Tests.Simulation*"
+dotnet test tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj --no-build -- --timeout 600s --filter-class "*Tests.Simulation*"
 
 # Exclude integration tests
 dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --timeout 60s --filter-not-class "*Integration*"
