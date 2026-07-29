@@ -1,5 +1,9 @@
 <Project>
 
+	<PropertyGroup>
+		<_ClockworkInstrumentationEnabled Condition="'$(ClockworkInstrumentationEnabled)' == 'true' or '$(ClockworkInstrumentedTestProject)' == 'true'">true</_ClockworkInstrumentationEnabled>
+	</PropertyGroup>
+
 	<!-- Adapt Clockwork's package targets to load the task from its source-project output. -->
 	<PropertyGroup>
 		<ClockworkInstrumentationToolDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../../src/Clockwork/src/Clockwork.Instrumentation.Build/bin/$(Configuration)/net10.0'))</ClockworkInstrumentationToolDirectory>
@@ -20,7 +24,7 @@
 
 	<Target Name="ClockworkComputeInstrumentationToolSignature"
 			DependsOnTargets="ClockworkSetInstrumentationDefaults"
-			Condition="'$(ClockworkInstrumentationEnabled)' == 'true'">
+			Condition="'$(_ClockworkInstrumentationEnabled)' == 'true'">
 		<ItemGroup>
 			<ClockworkInstrumentationToolBinary Include="$(ClockworkInstrumentationToolDirectory)/Clockwork.Instrumentation.Build.dll" />
 			<ClockworkInstrumentationToolBinary Include="$(ClockworkInstrumentationToolDirectory)/Clockwork.Instrumentation.dll" />
@@ -59,7 +63,7 @@
 	<Target Name="ClockworkWriteInstrumentationModeStamp"
 			BeforeTargets="ClockworkInstrument"
 			DependsOnTargets="ClockworkComputeInstrumentationToolSignature"
-			Condition="'$(ClockworkInstrumentationEnabled)' == 'true'">
+			Condition="'$(_ClockworkInstrumentationEnabled)' == 'true'">
 		<ReadLinesFromFile File="$(ClockworkModeStampPath)"
 						   Condition="Exists('$(ClockworkModeStampPath)')">
 			<Output TaskParameter="Lines" PropertyName="ClockworkPreviousInstrumentationIdentity" />
@@ -75,8 +79,8 @@
 	<Target Name="ClockworkInstrument"
 			AfterTargets="Build"
 			DependsOnTargets="ClockworkComputeInstrumentationToolSignature"
-			Condition="'$(ClockworkInstrumentationEnabled)' == 'true'"
-			Inputs="$(TargetPath);@(ReferenceCopyLocalPaths);@(ClockworkRuleSet);@(ClockworkBuiltInRuleSet);@(ClockworkInstrumentationToolBinary);$(ClockworkConfigurationPath);$(ClockworkModeStampPath);$(MSBuildAllProjects)"
+			Condition="'$(_ClockworkInstrumentationEnabled)' == 'true'"
+			Inputs="$(TargetPath);@(ReferenceCopyLocalPaths);@(ClockworkRuleSet);@(ClockworkBuiltInRuleSet);@(ClockworkInstrumentedAssembly);@(ClockworkInstrumentationToolBinary);$(ClockworkConfigurationPath);$(ClockworkModeStampPath);$(MSBuildAllProjects)"
 			Outputs="$(ClockworkSuccessPath);$(ClockworkManifestPath)">
 
 		<Message Importance="high" Text="Clockwork: instrumenting '$(ClockworkSourceDirectory)' -> '$(ClockworkStagingDirectory)'" />
@@ -90,11 +94,10 @@
 			BuiltInIncludeFamilies="@(ClockworkBuiltInInclude)"
 			BuiltInExcludeFamilies="@(ClockworkBuiltInExclude)"
 			StrictBuiltIns="$(ClockworkStrictBuiltIns)"
-			IncludePatterns="@(ClockworkInclude)"
+			IncludePatterns="@(ClockworkInclude);@(ClockworkInstrumentedAssembly)"
 			ExcludePatterns="@(ClockworkExclude)"
 			InstrumentationMode="$(ClockworkInstrumentationMode)"
 			ExcludeFrameworkAssemblies="$(ClockworkExcludeFrameworkAssemblies)"
-			InstrumentDependencies="$(ClockworkInstrumentDependencies)"
 			ReadyToRunPolicy="$(ClockworkReadyToRunPolicy)"
 			StrongNamePolicy="$(ClockworkStrongNamePolicy)"
 			StrongNameKeyPath="$(ClockworkStrongNameKeyPath)"

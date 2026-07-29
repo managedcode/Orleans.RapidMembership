@@ -124,6 +124,36 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     }
 
     /// <summary>
+    /// Creates a derived simulation random stream.
+    /// </summary>
+    public SimulationRandom ForkRandom() => Random.Fork();
+
+    /// <summary>
+    /// Runs an async task to completion inside the simulation and returns once it has finished.
+    /// </summary>
+    public void RunToCompletion(Func<Task> taskFactory)
+    {
+        ArgumentNullException.ThrowIfNull(taskFactory);
+        Run(taskFactory);
+    }
+
+    /// <summary>
+    /// Runs an async task to completion inside the simulation and returns its result.
+    /// </summary>
+    public TResult RunToCompletion<TResult>(Func<Task<TResult>> taskFactory)
+    {
+        ArgumentNullException.ThrowIfNull(taskFactory);
+        TResult result = default!;
+        Run(async () => result = await taskFactory());
+        return result;
+    }
+
+    /// <summary>
+    /// Advances the simulation for a bounded amount of simulated time.
+    /// </summary>
+    public bool RunFor(TimeSpan maxSimulatedTime) => RunForDuration(maxSimulatedTime);
+
+    /// <summary>
     /// Finds a node by its network address.
     /// </summary>
     /// <param name="address">The network address of the node.</param>
@@ -542,17 +572,17 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     public void WaitForMembershipSize(
         int expectedSize,
         IEnumerable<RapidSimulationNode>? nodes = null,
-        AdaptiveExecutionBudget? budget = null)
+        SimulationAdaptiveBudget? budget = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(expectedSize);
         var candidates = nodes?.ToList() ?? Nodes.ToList();
         var participants = candidates
             .Where(static node => !node.IsSuspended && node.CurrentView.IsHostPresent(node.Address))
             .ToList();
-        var outcome = RunUntil(
+        var outcome = RunUntilConverged(
             () => participants.Count > 0 &&
                 participants.TrueForAll(node => node.MembershipSize == expectedSize),
-            budget ?? AdaptiveExecutionBudget.Default);
+            budget ?? SimulationAdaptiveBudget.Default);
         if (!outcome.ConditionMet)
         {
             var nodeDetails = participants.Count == 0
@@ -576,7 +606,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
     /// </summary>
     public void WaitForConvergence()
     {
-        var outcome = RunUntil(() =>
+        var outcome = RunUntilDetailed(() =>
         {
             var participants = ActiveNodes.Where(n => n.CurrentView.IsHostPresent(n.Address)).ToList();
             return participants.Count > 0 && participants.TrueForAll(n => n.MembershipSize == participants.Count);
@@ -598,7 +628,7 @@ internal sealed partial class RapidSimulationCluster : SimulationCluster<RapidSi
         IReadOnlyList<Endpoint> departedNodes)
     {
         var candidates = nodes.ToList();
-        var outcome = RunUntil(() =>
+        var outcome = RunUntilDetailed(() =>
         {
             var participants = candidates
                 .Where(static node => !node.IsSuspended && node.CurrentView.IsHostPresent(node.Address))

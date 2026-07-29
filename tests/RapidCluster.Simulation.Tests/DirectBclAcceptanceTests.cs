@@ -65,8 +65,13 @@ public sealed class DirectBclAcceptanceTests
         var harness = new RapidSimulationCluster(seed, VirtualTimeOrigin);
         try
         {
-            return harness.RunToCompletion(
-                () => DirectBclAcceptanceFixture.CaptureAsync(VirtualDelay));
+            var node = harness.StartCluster();
+            Task<DirectBclSnapshot>? captureTask = null;
+            harness.RunOnNode(
+                node,
+                () => captureTask = DirectBclAcceptanceFixture.CaptureAsync(VirtualDelay));
+            _ = harness.RunUntilDetailed(() => captureTask?.IsCompleted ?? false, maxIterations: 1_000_000);
+            return captureTask!.GetAwaiter().GetResult();
         }
         finally
         {

@@ -8,8 +8,7 @@
 		<!-- Suppress logging performance warnings for test projects -->
 		<NoWarn>$(NoWarn);CA1848;CA1873</NoWarn>
 		<TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
-		<ClockworkInstrumentationEnabled>true</ClockworkInstrumentationEnabled>
-		<ClockworkInstrumentationMode>Controlled</ClockworkInstrumentationMode>
+		<ClockworkInstrumentedTestProject>true</ClockworkInstrumentedTestProject>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -30,13 +29,12 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<!-- Exact rewrite allow-list for the simulation closure; keep the runner uninstrumented. -->
 		<ClockworkBuiltInRuleSet Include="clockwork.bcl.deterministic" />
 		<ClockworkBuiltInRuleSet Include="clockwork.tasks.controlled" />
-		<!-- The generated xUnit/MTP entry point runs before a simulation exists. Keep the
-		     runner uninstrumented while staging instrumented production assemblies beside it. -->
-		<ClockworkInclude Include="RapidCluster.Core.dll" />
-		<ClockworkInclude Include="RapidCluster.Grpc.dll" />
-		<ClockworkInclude Include="RapidCluster.Simulation.Fixtures.dll" />
+		<ClockworkInstrumentedAssembly Include="RapidCluster.Core.dll" />
+		<ClockworkInstrumentedAssembly Include="RapidCluster.Grpc.dll" />
+		<ClockworkInstrumentedAssembly Include="RapidCluster.Simulation.Fixtures.dll" />
 	</ItemGroup>
 
 	<ItemGroup>

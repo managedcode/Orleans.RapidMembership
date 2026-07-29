@@ -267,7 +267,7 @@ internal sealed class InvariantChecker(RapidSimulationCluster harness)
         var initialItems = _harness.Nodes
             .SelectMany(node => node.Context.TaskQueue.ScheduledItems.Select(item => (node.NetworkAddress, item.SequenceNumber)))
             .ToHashSet();
-        var outcome = _harness.RunUntil(() =>
+        var outcome = _harness.RunUntilDetailed(() =>
         {
             var currentItems = _harness.Nodes
                 .SelectMany(node => node.Context.TaskQueue.ScheduledItems.Select(item => (node.NetworkAddress, item.SequenceNumber)))
