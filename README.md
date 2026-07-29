@@ -334,8 +334,11 @@ cd RapidCluster
 dotnet build RapidCluster.slnx
 
 # Run tests
-cd tests/RapidCluster.Tests
-dotnet run -- --timeout 60s
+dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --timeout 60s
+dotnet run --project tests/RapidCluster.Integration.Tests/RapidCluster.Integration.Tests.csproj -- --timeout 60s
+dotnet build tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj -p:EnforceCodeStyleInBuild=false
+dotnet run --project tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj --no-build -- --timeout 600s
+dotnet run --project tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests/RapidCluster.EndToEnd.Tests.csproj -- --timeout 60s
 ```
 
 ## Testing
@@ -346,7 +349,7 @@ RapidCluster uses a comprehensive testing strategy combining four complementary 
 
 #### Unit Tests
 
-Located in `tests/RapidCluster.Tests/Unit/`, these tests verify individual components in isolation using mock dependencies. They're fast, deterministic, and test specific logic paths.
+Located in `tests/RapidCluster.Unit.Tests/`, these tests verify individual components in isolation using mock dependencies. They're fast, deterministic, and test specific logic paths.
 
 ```csharp
 [Fact]
@@ -359,7 +362,7 @@ public void AggregateForProposal_ReturnsProposal_WhenHighWatermarkReached()
 
 #### Integration Tests
 
-Located in `tests/RapidCluster.Tests/Integration/`, these tests run real cluster nodes with actual gRPC networking. They verify end-to-end behavior but are slower and require port allocation.
+Located in `tests/RapidCluster.Integration.Tests/`, these tests run real cluster nodes with actual gRPC networking. They verify end-to-end behavior but are slower and require port allocation.
 
 ```csharp
 [Fact]
@@ -395,7 +398,7 @@ public void Property_CompareTo_Is_Transitive()
 
 #### Deterministic Simulation Tests
 
-Located in `tests/RapidCluster.Tests/Simulation/`, these tests use the **Clockwork** framework (`src/Clockwork/`) to control all sources of non-determinism (time, randomness, network). This enables:
+Located in `tests/RapidCluster.Simulation.Tests/`, these tests use the **Clockwork** framework (`src/Clockwork/`) to control all sources of non-determinism (time, randomness, network). This enables:
 
 - **Reproducible failures**: Same seed produces identical execution
 - **Fast execution**: No real delays; simulated time advances instantly
@@ -428,31 +431,32 @@ Simulation tests are the preferred approach for testing distributed protocol beh
 This project uses xUnit v3 with Microsoft Testing Platform:
 
 ```bash
-cd tests/RapidCluster.Tests
-
 # Run all tests
-dotnet run -- --timeout 60s
+dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --timeout 60s
+dotnet run --project tests/RapidCluster.Integration.Tests/RapidCluster.Integration.Tests.csproj -- --timeout 60s
+dotnet run --project tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj -- --timeout 600s
+dotnet run --project tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests/RapidCluster.EndToEnd.Tests.csproj -- --timeout 60s
 
 # Run specific test class
-dotnet run -- --timeout 60s --filter-class "*ClusterBasicTests"
+dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --timeout 60s --filter-class "*ClusterBasicTests"
 
 # Run specific test method
-dotnet run -- --timeout 60s --filter-method "*ThreeNodeClusterFormation"
+dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --timeout 60s --filter-method "*ThreeNodeClusterFormation"
 
 # Run only unit tests (fastest)
-dotnet run -- --timeout 60s --filter-class "*Tests.Unit*"
+dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --timeout 60s --filter-class "*Tests.Unit*"
 
 # Run only simulation tests
-dotnet run -- --timeout 60s --filter-class "*Tests.Simulation*"
+dotnet run --project tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj -- --timeout 600s --filter-class "*Tests.Simulation*"
 
 # Exclude integration tests
-dotnet run -- --timeout 60s --filter-not-class "*Integration*"
+dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --timeout 60s --filter-not-class "*Integration*"
 
 # List all tests
-dotnet run -- --list-tests
+dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --list-tests
 
 # Run with code coverage
-dotnet run -- --coverage --coverage-output-format cobertura --coverage-output coverage.xml --timeout 60s
+dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --coverage --coverage-output-format cobertura --coverage-output coverage.xml --timeout 60s
 ```
 
 ## Cluster Events

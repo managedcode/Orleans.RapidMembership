@@ -20,7 +20,7 @@
 
 	<Target Name="ClockworkComputeInstrumentationToolSignature"
 			DependsOnTargets="ClockworkSetInstrumentationDefaults"
-			Condition="'$(ClockworkInstrumentationEnabled)' == 'true'">
+			Condition="'$(ClockworkInstrumentedTestProject)' == 'true'">
 		<ItemGroup>
 			<ClockworkInstrumentationToolBinary Include="$(ClockworkInstrumentationToolDirectory)/Clockwork.Instrumentation.Build.dll" />
 			<ClockworkInstrumentationToolBinary Include="$(ClockworkInstrumentationToolDirectory)/Clockwork.Instrumentation.dll" />
@@ -59,7 +59,7 @@
 	<Target Name="ClockworkWriteInstrumentationModeStamp"
 			BeforeTargets="ClockworkInstrument"
 			DependsOnTargets="ClockworkComputeInstrumentationToolSignature"
-			Condition="'$(ClockworkInstrumentationEnabled)' == 'true'">
+			Condition="'$(ClockworkInstrumentedTestProject)' == 'true'">
 		<ReadLinesFromFile File="$(ClockworkModeStampPath)"
 						   Condition="Exists('$(ClockworkModeStampPath)')">
 			<Output TaskParameter="Lines" PropertyName="ClockworkPreviousInstrumentationIdentity" />
@@ -75,7 +75,7 @@
 	<Target Name="ClockworkInstrument"
 			AfterTargets="Build"
 			DependsOnTargets="ClockworkComputeInstrumentationToolSignature"
-			Condition="'$(ClockworkInstrumentationEnabled)' == 'true'"
+			Condition="'$(ClockworkInstrumentedTestProject)' == 'true'"
 			Inputs="$(TargetPath);@(ReferenceCopyLocalPaths);@(ClockworkRuleSet);@(ClockworkBuiltInRuleSet);@(ClockworkInstrumentationToolBinary);$(ClockworkConfigurationPath);$(ClockworkModeStampPath);$(MSBuildAllProjects)"
 			Outputs="$(ClockworkSuccessPath);$(ClockworkManifestPath)">
 
@@ -90,7 +90,7 @@
 			BuiltInIncludeFamilies="@(ClockworkBuiltInInclude)"
 			BuiltInExcludeFamilies="@(ClockworkBuiltInExclude)"
 			StrictBuiltIns="$(ClockworkStrictBuiltIns)"
-			IncludePatterns="@(ClockworkInclude)"
+			IncludePatterns="@(ClockworkInstrumentedAssembly)"
 			ExcludePatterns="@(ClockworkExclude)"
 			InstrumentationMode="$(ClockworkInstrumentationMode)"
 			ExcludeFrameworkAssemblies="$(ClockworkExcludeFrameworkAssemblies)"
@@ -107,6 +107,17 @@
 		</ClockworkInstrumentTask>
 
 		<Message Importance="normal" Text="Clockwork: manifest at '$(ClockworkResolvedManifestPath)' (incremental: $(ClockworkWasIncremental))" />
+	</Target>
+
+	<Target Name="ClockworkCopyInstrumentedClosureToOutput"
+			AfterTargets="ClockworkInstrument"
+			Condition="'$(ClockworkInstrumentedTestProject)' == 'true' and Exists('$(ClockworkStagingDirectory)')">
+		<ItemGroup>
+			<_ClockworkInstrumentedClosureFiles Include="$(ClockworkStagingDirectory)**\*" />
+		</ItemGroup>
+		<Copy SourceFiles="@(_ClockworkInstrumentedClosureFiles)"
+			  DestinationFiles="@(_ClockworkInstrumentedClosureFiles->'$(TargetDir)%(RecursiveDir)%(Filename)%(Extension)')"
+			  SkipUnchangedFiles="true" />
 	</Target>
 
 </Project>

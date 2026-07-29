@@ -60,7 +60,7 @@ jobs:
         run: dotnet build tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj --configuration Release --no-restore -p:EnforceCodeStyleInBuild=false
 
       - name: Test Simulation Clockwork
-        run: dotnet tests/RapidCluster.Simulation.Tests/obj/Release/net10.0/clockwork/instrumented/RapidCluster.Simulation.Tests.dll --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/simulation.cobertura.xml --timeout 600s
+        run: dotnet run --project tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj --configuration Release --no-build -- --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/simulation.cobertura.xml --timeout 600s
 
       - name: Test EndToEnd
         run: dotnet run --project tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests/RapidCluster.EndToEnd.Tests.csproj --configuration Release --no-build -- --coverage --coverage-output-format cobertura --coverage-output ${{ github.workspace }}/coverage/endtoend.cobertura.xml --timeout 600s
