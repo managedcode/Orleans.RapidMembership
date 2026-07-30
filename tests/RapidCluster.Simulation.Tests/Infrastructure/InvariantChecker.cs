@@ -13,7 +13,8 @@ internal sealed class InvariantChecker(RapidSimulationCluster harness)
 {
     private readonly RapidSimulationCluster _harness = harness ?? throw new ArgumentNullException(nameof(harness));
     private readonly List<InvariantViolation> _violations = [];
-    private readonly Dictionary<string, long> _configurationVersions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _configurationVersions = [];
+
     private readonly Lock _lock = new();
 
     /// <summary>
@@ -255,7 +256,8 @@ internal sealed class InvariantChecker(RapidSimulationCluster harness)
     public bool CheckLiveness(int maxSteps = 1000)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxSteps);
-        var initialNodeWork = _harness.Nodes.Sum(static node => node.Context.SchedulerLane.CaptureScheduledItems().Count);
+        var initialNodeWork = _harness.Nodes.Sum(
+            static node => node.Context.TaskQueue.CaptureScheduledItems().Count);
         if (initialNodeWork == 0)
         {
             RecordViolation(
@@ -265,12 +267,12 @@ internal sealed class InvariantChecker(RapidSimulationCluster harness)
         }
 
         var initialItems = _harness.Nodes
-            .SelectMany(node => node.Context.SchedulerLane.CaptureScheduledItems().Select(item => (node.NetworkAddress, item.SequenceNumber)))
+            .SelectMany(node => node.Context.TaskQueue.CaptureScheduledItems().Select(item => (node.NetworkAddress, item.SequenceNumber)))
             .ToHashSet();
         var outcome = _harness.RunUntil(() =>
         {
             var currentItems = _harness.Nodes
-                .SelectMany(node => node.Context.SchedulerLane.CaptureScheduledItems().Select(item => (node.NetworkAddress, item.SequenceNumber)))
+                .SelectMany(node => node.Context.TaskQueue.CaptureScheduledItems().Select(item => (node.NetworkAddress, item.SequenceNumber)))
                 .ToHashSet();
             return !currentItems.SetEquals(initialItems);
         }, maxSteps);

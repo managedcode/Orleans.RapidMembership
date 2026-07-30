@@ -318,7 +318,7 @@ public sealed class ConcurrentOperationsTests : IAsyncLifetime
     {
         var seedNode = _harness.StartCluster();
         var executed = false;
-        seedNode.Context.SchedulerLane.Enqueue(() => executed = true);
+        seedNode.Context.TaskQueue.Enqueue(() => executed = true);
 
         // Step the node once
         var stepped = seedNode.Step();

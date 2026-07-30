@@ -24,25 +24,23 @@ namespace RapidCluster.Simulation.Tests.Infrastructure;
 /// </summary>
 [SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable",
     Justification = "Lifetime is managed by the simulation harness.")]
-[SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
-    Justification = "The service provider owns node services, and DisposeAsync releases the provider and cancellation source.")]
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-internal sealed class RapidSimulationNode : SimulationNode, IAsyncDisposable
+internal sealed class RapidSimulationNode : SimulationNode
 {
     private readonly RapidSimulationCluster _harness;
-    private readonly string _networkAddress;
-    private readonly IReadOnlyList<Endpoint>? _seedAddresses;
-    private readonly RapidClusterProtocolOptions? _protocolOptions;
-    private readonly PingPongFailureDetectorOptions? _failureDetectorOptions;
-    private readonly ILoggerFactory? _loggerFactory;
+    private readonly RapidSimulationNodeLogger _log;
+    private readonly ILoggerFactory _nodeLoggerFactory;
     private readonly CancellationTokenSource _disposeCts = new();
-    private RapidSimulationNodeLogger _log = null!;
-    private ILoggerFactory _nodeLoggerFactory = null!;
+    private readonly IReadOnlyList<Endpoint>? _seedAddresses;
+    private readonly Metadata? _metadata;
+    private readonly RapidClusterProtocolOptions _configuredProtocolOptions;
+    private readonly PingPongFailureDetectorOptions _configuredFailureDetectorOptions;
+    private ServiceProvider _serviceProvider = null!;
     private MembershipService _membershipService = null!;
     private IRapidClusterLifecycle _lifecycle = null!;
-    private ServiceProvider? _serviceProvider;
     private bool _disposed;
     private bool _isInitialized;
+    private bool _servicesInitialized;
 
     /// <summary>
     /// Gets the endpoint address of this node.
@@ -52,7 +50,7 @@ internal sealed class RapidSimulationNode : SimulationNode, IAsyncDisposable
     /// <summary>
     /// Gets the network address of this node as a string for routing.
     /// </summary>
-    public override string NetworkAddress => _networkAddress;
+    public override string NetworkAddress => RapidClusterUtils.Loggable(Address);
 
     /// <summary>
     /// Gets the simulation context for this node.
@@ -90,20 +88,24 @@ internal sealed class RapidSimulationNode : SimulationNode, IAsyncDisposable
     internal CancellationToken TeardownCancellationToken => _disposeCts.Token;
 
     /// <summary>
+    /// Executes one ready operation for this node.
+    /// </summary>
+    internal bool Step() => Context.Step(TestContext.Current.CancellationToken);
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="RapidSimulationNode"/> class.
     /// Creates a new simulation node with a single seed address.
     /// </summary>
     internal RapidSimulationNode(
         RapidSimulationCluster harness,
         SimulationNodeContext context,
-        string networkAddress,
         Endpoint address,
         Endpoint? seedAddress,
         Metadata? metadata,
         RapidClusterProtocolOptions? protocolOptions,
         PingPongFailureDetectorOptions? failureDetectorOptions,
         ILoggerFactory? loggerFactory)
-        : this(harness, context, networkAddress, address, seedAddress != null ? [seedAddress] : null, metadata, protocolOptions, failureDetectorOptions, loggerFactory)
+        : this(harness, context, address, seedAddress != null ? [seedAddress] : null, metadata, protocolOptions, failureDetectorOptions, loggerFactory)
     {
     }
 
@@ -114,7 +116,6 @@ internal sealed class RapidSimulationNode : SimulationNode, IAsyncDisposable
     internal RapidSimulationNode(
         RapidSimulationCluster harness,
         SimulationNodeContext context,
-        string networkAddress,
         Endpoint address,
         IReadOnlyList<Endpoint>? seedAddresses,
         Metadata? metadata,
@@ -122,38 +123,35 @@ internal sealed class RapidSimulationNode : SimulationNode, IAsyncDisposable
         PingPongFailureDetectorOptions? failureDetectorOptions,
         ILoggerFactory? loggerFactory)
     {
+        using var guardScope = harness.Guard.Enter();
         _harness = harness;
-        _networkAddress = networkAddress;
         Address = address;
         Context = context;
-        _seedAddresses = seedAddresses;
-        _protocolOptions = protocolOptions;
-        _failureDetectorOptions = failureDetectorOptions;
-        _loggerFactory = loggerFactory;
-        Metadata = metadata;
-    }
 
-    internal Metadata? Metadata { get; }
-
-    internal void Initialize()
-    {
-        if (_nodeLoggerFactory is not null)
-        {
-            throw new InvalidOperationException("The simulation node is already initialized.");
-        }
-
-        // Wrap the logger factory to prepend the node name to all log messages
-        var baseLoggerFactory = _loggerFactory ?? _harness.LoggerFactory ?? NullLoggerFactory.Instance;
-        _nodeLoggerFactory = new NonDisposingLoggerFactory(baseLoggerFactory);
+        _nodeLoggerFactory = loggerFactory ?? harness.LoggerFactory;
 
         _log = new RapidSimulationNodeLogger(_nodeLoggerFactory.CreateLogger<RapidSimulationNode>());
+        _seedAddresses = seedAddresses;
+        _metadata = metadata;
+        _configuredProtocolOptions = protocolOptions ?? new RapidClusterProtocolOptions();
+        _configuredFailureDetectorOptions =
+            failureDetectorOptions ?? new PingPongFailureDetectorOptions();
+    }
 
-        var configuredProtocolOptions = _protocolOptions ?? new RapidClusterProtocolOptions();
-        var configuredFailureDetectorOptions = _failureDetectorOptions ?? new PingPongFailureDetectorOptions();
+    /// <summary>
+    /// Resolves services which construct controlled synchronization primitives.
+    /// </summary>
+    internal bool InitializeServices()
+    {
+        if (_servicesInitialized)
+        {
+            return false;
+        }
+
         var simulationTimeProvider = ControlledTimeProvider.System;
         var services = new ServiceCollection();
         _ = services.AddLogging();
-        _ = services.AddSingleton<ILoggerFactory>(_ => _nodeLoggerFactory);
+        _ = services.AddSingleton(_nodeLoggerFactory);
         _ = services.AddSingleton<IMeterFactory>(_ => new TestMeterFactory());
         _ = services.AddSingleton<IHostApplicationLifetime>(
             _ => new SimulationHostApplicationLifetime(_disposeCts.Token));
@@ -173,15 +171,15 @@ internal sealed class RapidSimulationNode : SimulationNode, IAsyncDisposable
                 options =>
                 {
                     options.SeedAddresses = _seedAddresses?.Select(s => s.ToEndPointPreferIP()).ToList();
-                    options.Metadata = Metadata?.Metadata_.ToDictionary(
+                    options.Metadata = _metadata?.Metadata_.ToDictionary(
                         kvp => kvp.Key,
                         kvp => kvp.Value.ToByteArray(),
                         StringComparer.Ordinal) ?? [];
                 },
                 simulationTimeProvider)
             .UseListenAddress(Address.ToEndPointPreferIP())
-            .ConfigureProtocol(options => CopyOptions(configuredProtocolOptions, options))
-            .ConfigureFailureDetector(options => CopyOptions(configuredFailureDetectorOptions, options));
+            .ConfigureProtocol(options => CopyOptions(_configuredProtocolOptions, options))
+            .ConfigureFailureDetector(options => CopyOptions(_configuredFailureDetectorOptions, options));
 
         // Preserve simulation coverage for protocol edge cases which production validation rejects.
         _ = services.RemoveAll<IValidateOptions<RapidClusterProtocolOptions>>();
@@ -191,17 +189,22 @@ internal sealed class RapidSimulationNode : SimulationNode, IAsyncDisposable
             ValidateOnBuild = true,
             ValidateScopes = true,
         });
+
         _membershipService = _serviceProvider.GetRequiredService<MembershipService>();
         ViewAccessor = _serviceProvider.GetRequiredService<IMembershipViewAccessor>();
         _lifecycle = _serviceProvider.GetRequiredService<IRapidClusterLifecycle>();
         MessagingClient = (InMemoryMessagingClient)_serviceProvider.GetRequiredService<IMessagingClient>();
+        _servicesInitialized = true;
+        return true;
     }
 
     /// <summary>
     /// Initializes the membership service (completes the join or cluster start).
     /// </summary>
     internal Task StartAsync(CancellationToken cancellationToken = default)
-        => _harness.RunInNodeContext(Address, () => _lifecycle.StartAsync(cancellationToken));
+        => _harness.ScheduleInNodeContext(
+            Address,
+            () => _lifecycle.StartAsync(cancellationToken));
 
     internal void CompleteInitialization()
     {
@@ -234,7 +237,9 @@ internal sealed class RapidSimulationNode : SimulationNode, IAsyncDisposable
 
         // Graceful stop: notify observers and wait for background tasks
         // Keep MessagingClient alive so we can still participate in consensus
-        return _harness.RunInNodeContext(Address, () => _lifecycle.StopAsync(cancellationToken));
+        return _harness.ScheduleInNodeContext(
+            Address,
+            () => _lifecycle.StopAsync(cancellationToken));
     }
 
     internal void CompleteStop() => _log.NodeLeftGracefully(RapidClusterUtils.Loggable(Address));
@@ -246,35 +251,25 @@ internal sealed class RapidSimulationNode : SimulationNode, IAsyncDisposable
     {
         if (_disposed) return ValueTask.CompletedTask;
         _disposed = true;
+        _isInitialized = false;
 
         // Cancel any in-flight requests first so they complete promptly
 #pragma warning disable CA1849 // Synchronous cancellation keeps callbacks on the simulation thread.
         _disposeCts.Cancel();
 #pragma warning restore CA1849
-        var disposalTask = Task.Factory.StartNew(
-            static async state =>
+        var disposalTask = _harness.ScheduleInNodeContext(
+            Address,
+            async () =>
             {
-                var node = (RapidSimulationNode)state!;
                 try
                 {
-                    if (node._serviceProvider is { } serviceProvider)
-                    {
-                        var providerDisposal = node._harness.RunInNodeContext(
-                            node.Address,
-                            serviceProvider.DisposeAsync);
-
-                        await providerDisposal;
-                    }
+                    await _serviceProvider.DisposeAsync();
                 }
                 finally
                 {
-                    node._disposeCts.Dispose();
+                    _disposeCts.Dispose();
                 }
-            },
-            state: this,
-            CancellationToken.None,
-            TaskCreationOptions.DenyChildAttach,
-            Context.TaskScheduler).Unwrap();
+            });
         return new ValueTask(disposalTask);
     }
 
@@ -303,17 +298,6 @@ internal sealed class RapidSimulationNode : SimulationNode, IAsyncDisposable
         destination.Interval = source.Interval;
         destination.ProbeTimeout = source.ProbeTimeout;
         destination.ConsecutiveFailuresThreshold = source.ConsecutiveFailuresThreshold;
-    }
-
-    private sealed class NonDisposingLoggerFactory(ILoggerFactory inner) : ILoggerFactory
-    {
-        public void AddProvider(ILoggerProvider provider) => inner.AddProvider(provider);
-
-        public ILogger CreateLogger(string categoryName) => inner.CreateLogger(categoryName);
-
-        public void Dispose()
-        {
-        }
     }
 
     /// <summary>

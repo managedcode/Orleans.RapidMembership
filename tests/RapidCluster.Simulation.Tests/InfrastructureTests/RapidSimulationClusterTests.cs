@@ -188,7 +188,7 @@ public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
 
         Assert.True(_harness.TaskQueue.HasItems);
 
-        _ = _harness.TaskQueue.RunUntilIdle();
+        _ = _harness.TaskQueue.RunUntilIdle(TestContext.Current.CancellationToken);
 
         Assert.False(_harness.TaskQueue.HasItems);
     }
@@ -201,7 +201,7 @@ public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
         var executed = false;
 
         // Queue a task on the node
-        context.SchedulerLane.Enqueue(() => executed = true);
+        context.TaskQueue.Enqueue(() => executed = true);
 
         // Suspend the node
         seedNode.Suspend();
@@ -221,7 +221,7 @@ public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
         var executed = false;
 
         // Queue a task on the node
-        context.SchedulerLane.Enqueue(() => executed = true);
+        context.TaskQueue.Enqueue(() => executed = true);
 
         // Suspend and then resume the node
         seedNode.Suspend();
@@ -243,7 +243,7 @@ public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
         var executed = false;
 
         // Queue a task on the node
-        context.SchedulerLane.Enqueue(() => executed = true);
+        context.TaskQueue.Enqueue(() => executed = true);
 
         // Suspend for 1 second
         seedNode.SuspendFor(TimeSpan.FromSeconds(1));
@@ -269,9 +269,9 @@ public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
         var executionCount = 0;
 
         // Queue multiple tasks on the node
-        context.SchedulerLane.Enqueue(() => executionCount++);
-        context.SchedulerLane.Enqueue(() => executionCount++);
-        context.SchedulerLane.Enqueue(() => executionCount++);
+        context.TaskQueue.Enqueue(() => executionCount++);
+        context.TaskQueue.Enqueue(() => executionCount++);
+        context.TaskQueue.Enqueue(() => executionCount++);
 
         // Step once - should only execute one task
         var result = seedNode.Step();
@@ -300,7 +300,7 @@ public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
         var context = _harness.GetNodeContext(seedNode);
 
         // Queue a task
-        context.SchedulerLane.Enqueue(() => { });
+        context.TaskQueue.Enqueue(() => { });
 
         // Suspend the node
         seedNode.Suspend();
@@ -335,7 +335,7 @@ public sealed partial class RapidSimulationClusterTests : IAsyncLifetime
         var context = _harness.GetNodeContext(seedNode);
 
         Assert.NotNull(context);
-        Assert.NotNull(context.SchedulerLane);
+        Assert.NotNull(context.TaskQueue);
         Assert.NotNull(context.TaskScheduler);
         Assert.NotNull(context.SynchronizationContext);
         Assert.NotNull(context.TimeProvider);

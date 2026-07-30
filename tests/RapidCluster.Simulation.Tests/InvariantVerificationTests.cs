@@ -185,7 +185,7 @@ public sealed class InvariantVerificationTests : IAsyncLifetime
     public void EventualProgressGuaranteeWithPendingTasks()
     {
         var node = _harness.StartCluster();
-        node.Context.SchedulerLane.Enqueue(() => { });
+        node.Context.TaskQueue.Enqueue(() => { });
 
         // CheckLiveness should succeed when there are tasks to execute
         var result = _checker.CheckLiveness(maxSteps: 100);

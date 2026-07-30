@@ -11,7 +11,7 @@ namespace RapidCluster.Simulation.Tests.Infrastructure;
 /// Routes messages through the SimulationNetwork instead of gRPC.
 /// </para>
 /// <para>
-/// Messages are delivered by scheduling work on the target node's SimulationTaskQueue.
+/// Messages are delivered by scheduling work on the target node's scheduler lane.
 /// This provides deterministic execution where messages are processed when the simulation steps.
 /// </para>
 /// </summary>
