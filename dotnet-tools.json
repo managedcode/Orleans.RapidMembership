@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "clockwork.tool": {
+      "version": "1.0.0-local.6c16ea0874dc",
+      "commands": [
+        "dotnet-clockwork"
+      ],
+      "rollForward": false
+    }
+  }
+}

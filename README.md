@@ -43,6 +43,16 @@ dotnet build RapidCluster.slnx -p:EnforceCodeStyleInBuild=false
 dotnet format RapidCluster.slnx --exclude src/Clockwork --verify-no-changes
 ```
 
+Install the `dotnet clockwork` CLI from the pinned Clockwork submodule:
+
+```powershell
+.\eng\install-clockwork-tool.ps1
+dotnet clockwork --help
+```
+
+The script packs the pinned source into the ignored `artifacts/clockwork-tool` feed and creates or
+updates the repository's local `dotnet-tools.json` manifest.
+
 ## Installation
 
 ```bash
