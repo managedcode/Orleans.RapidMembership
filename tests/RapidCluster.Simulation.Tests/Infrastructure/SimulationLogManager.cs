@@ -1,5 +1,5 @@
 using System.Globalization;
-using Clockwork;
+using Clockwork.Testing;
 using Microsoft.Extensions.Logging;
 
 namespace RapidCluster.Simulation.Tests.Infrastructure;

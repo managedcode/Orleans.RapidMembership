@@ -17,7 +17,6 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Clockwork/src/Clockwork/Clockwork.csproj" />
-    <Project Path="src/Clockwork/src/Clockwork.Runtime/Clockwork.Runtime.csproj" />
     <Project Path="src/Clockwork/src/Clockwork.Instrumentation/Clockwork.Instrumentation.csproj" />
     <Project Path="src/Clockwork/src/Clockwork.Instrumentation.Build/Clockwork.Instrumentation.Build.csproj" />
     <Project Path="src/Clockwork/src/Clockwork.Testing/Clockwork.Testing.csproj" />

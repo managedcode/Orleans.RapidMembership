@@ -713,7 +713,7 @@ public sealed class GracefulLeaveTests : IAsyncLifetime
 
         // Advance time to trigger failure detection cycles
         _ = _harness.RunFor(TimeSpan.FromSeconds(10));
-        _ = _harness.RunUntilIdle();
+        _ = _harness.RunUntilIdle(TimeSpan.Zero);
 
         // Assert: Remaining nodes are still monitored (cluster stable)
         Assert.Equal(4, _harness.Nodes.Count);

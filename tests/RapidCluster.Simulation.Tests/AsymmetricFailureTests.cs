@@ -502,8 +502,7 @@ public sealed class AsymmetricFailureTests : IAsyncLifetime
         var newNode1 = _harness.JoinNode(nodeId: 20, seed: nodes[0]);
         var newNode2 = _harness.JoinNode(nodeId: 21, seed: nodes[2]);
 
-        // Wait for convergence
-        _ = _harness.RunUntilIdle(maxTimeAdvance: TimeSpan.FromMinutes(2));
+        _harness.WaitForConvergence();
 
         // Assert: Both new nodes should join successfully
         Assert.True(newNode1.IsInitialized, "First new node should join");

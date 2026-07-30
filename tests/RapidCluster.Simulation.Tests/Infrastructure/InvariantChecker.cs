@@ -255,7 +255,7 @@ internal sealed class InvariantChecker(RapidSimulationCluster harness)
     public bool CheckLiveness(int maxSteps = 1000)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxSteps);
-        var initialNodeWork = _harness.Nodes.Sum(static node => node.Context.TaskQueue.ScheduledItems.Count);
+        var initialNodeWork = _harness.Nodes.Sum(static node => node.Context.SchedulerLane.CaptureScheduledItems().Count);
         if (initialNodeWork == 0)
         {
             RecordViolation(
@@ -265,12 +265,12 @@ internal sealed class InvariantChecker(RapidSimulationCluster harness)
         }
 
         var initialItems = _harness.Nodes
-            .SelectMany(node => node.Context.TaskQueue.ScheduledItems.Select(item => (node.NetworkAddress, item.SequenceNumber)))
+            .SelectMany(node => node.Context.SchedulerLane.CaptureScheduledItems().Select(item => (node.NetworkAddress, item.SequenceNumber)))
             .ToHashSet();
         var outcome = _harness.RunUntil(() =>
         {
             var currentItems = _harness.Nodes
-                .SelectMany(node => node.Context.TaskQueue.ScheduledItems.Select(item => (node.NetworkAddress, item.SequenceNumber)))
+                .SelectMany(node => node.Context.SchedulerLane.CaptureScheduledItems().Select(item => (node.NetworkAddress, item.SequenceNumber)))
                 .ToHashSet();
             return !currentItems.SetEquals(initialItems);
         }, maxSteps);
