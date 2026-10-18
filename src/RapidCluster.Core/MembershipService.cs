@@ -40,6 +40,7 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
     private readonly Metadata _nodeMetadata;
     private readonly ISeedProvider _seedProvider;
     private readonly int _bootstrapExpect;
+    private readonly bool _joinBeforeBootstrap;
 
     // Buffer for consensus messages from future configurations
     private readonly Dictionary<ConfigurationId, List<RapidClusterRequest>> _pendingConsensusMessages = [];
@@ -117,6 +118,7 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
         _options = protocolOptions.Value;
         _seedProvider = seedProvider;
         _bootstrapExpect = opts.BootstrapExpect;
+        _joinBeforeBootstrap = opts.JoinBeforeBootstrap;
 
         // Seed addresses will be fetched asynchronously during InitializeAsync
         // We cannot filter self here because _myAddr is not yet known
@@ -180,8 +182,15 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
             // This node has the lowest address among all seeds (including self)
             // and BootstrapExpect is set, so this node becomes the bootstrap coordinator.
             // It starts as a single-node cluster and other nodes will join it.
-            _log.StartingAsBootstrapCoordinator(_myAddr, _bootstrapExpect);
-            StartNewCluster();
+            if (_joinBeforeBootstrap && await HasExistingClusterAsync(cancellationToken))
+            {
+                await JoinClusterAsync(cancellationToken);
+            }
+            else
+            {
+                _log.StartingAsBootstrapCoordinator(_myAddr, _bootstrapExpect);
+                StartNewCluster();
+            }
         }
         else
         {
@@ -194,6 +203,32 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
         TrackBackgroundTask(alertBatcherTask);
 
         _initialized = true;
+    }
+
+    private async Task<bool> HasExistingClusterAsync(CancellationToken cancellationToken)
+    {
+        foreach (var seed in _seedAddresses)
+        {
+            try
+            {
+                var response = await _messagingClient.SendMessageAsync(seed, new MembershipViewRequest
+                {
+                    Sender = _myAddr,
+                    CurrentConfigurationId = ConfigurationId.Empty.ToProtobuf(),
+                }.ToRapidClusterRequest(), cancellationToken);
+                if (response.MembershipViewResponse is { Endpoints.Count: > 0 })
+                {
+                    return true;
+                }
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested
+                && exception is not OperationCanceledException)
+            {
+                // An unavailable seed does not establish an existing cluster.
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -238,14 +273,7 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
                 isFirstSeed = false;
                 firstSeed = pbSeed;
 
-                // Compare by port only when bootstrapExpect > 0 and ports match
-                // This handles dynamic environments (like Aspire) where the hostname
-                // might differ between discovery (container IP) and local address (hostname)
-                if (_bootstrapExpect > 0 && pbSeed.Port == _myAddr.Port)
-                {
-                    _wasFirstSeed = true;
-                }
-                else if (EndpointAddressComparer.Instance.Equals(pbSeed, _myAddr))
+                if (EndpointAddressComparer.Instance.Equals(pbSeed, _myAddr))
                 {
                     _wasFirstSeed = true;
                 }
@@ -338,6 +366,14 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
             seedIndex++;
 
             _log.JoinAttemptWithSeed(attempt + 1, currentSeed);
+
+            if (await TryRefreshViewFromSeedAsync(currentSeed, cancellationToken)
+                && _membershipView.IsHostPresent(_myAddr))
+            {
+                _log.JoinCompletedViaLearnerProtocol(_myAddr, _membershipView);
+                _metrics.RecordJoinLatency(MetricNames.Results.Success, joinStopwatch);
+                return;
+            }
 
             var result = await TryJoinClusterAsync(currentSeed, cancellationToken);
 
@@ -1429,6 +1465,7 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
 
         ConsensusCoordinator? previousConsensusInstance;
         List<Endpoint>? deferredProposalsToProcess = null;
+        bool wasKicked;
 
         lock (_membershipUpdateLock)
         {
@@ -1523,6 +1560,7 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
 
             // Use SetMembershipView to apply all changes (including notifying waiting joiners)
             previousConsensusInstance = SetMembershipView(newView);
+            wasKicked = currentMembers.Contains(_myAddr) && !newView.IsHostPresent(_myAddr);
 
             // Check if we have deferred proposals to process
             // These are proposals that arrived while consensus was running
@@ -1536,6 +1574,12 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
         if (previousConsensusInstance != null)
         {
             await previousConsensusInstance.DisposeAsync();
+        }
+
+        if (wasKicked)
+        {
+            TrackBackgroundTask(RejoinClusterAsync(_stoppingCts.Token));
+            return;
         }
 
         // Process deferred proposals outside the lock
@@ -2006,7 +2050,10 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
             var responseConfigId = viewResponse.ConfigurationId.ToConfigurationId();
 
             // Guard against config ID regression - never allow a stale view to replace a fresher one
-            if (responseConfigId <= _membershipView.ConfigurationId)
+            var currentConfigId = _membershipView.ConfigurationId;
+            if (responseConfigId.ClusterId == ClusterId.None
+                || currentConfigId.ClusterId != ClusterId.None
+                    && (responseConfigId.ClusterId != currentConfigId.ClusterId || responseConfigId.Version <= currentConfigId.Version))
             {
                 return;
             }

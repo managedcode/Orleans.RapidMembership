@@ -57,13 +57,13 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
     private readonly Lock _lock = new();
     private readonly CancellationTokenSource _disposeCts = new();
 
-    private readonly TaskCompletionSource<MembershipProposal> _onDecidedTcs = new();
+    private readonly TaskCompletionSource<MembershipProposal> _onDecidedTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private readonly Channel<ConsensusEvent> _events = Channel.CreateUnbounded<ConsensusEvent>(new UnboundedChannelOptions
     {
         SingleReader = true,
         SingleWriter = false,
-        AllowSynchronousContinuations = true,
+        AllowSynchronousContinuations = false,
     });
 
     private readonly OneShotTimer _timer = new();
@@ -75,7 +75,7 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
     private readonly HashSet<Endpoint> _negativeVoters = [with(EndpointAddressComparer.Instance)];
 
     private Rank _currentRank = new() { Round = 1, NodeIndex = 0 };
-    private int _highestRoundSeen;
+    private int _highestRoundSeen = 1;
 
     private int? _scheduledClassicRoundStart;
     private TimeSpan? _scheduledClassicRoundDelay;
@@ -83,6 +83,7 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
     private int _fallbackSignaled;
     private MembershipProposal? _candidateValue;
     private Task? _consensusLoopTask;
+    private bool _proposalSubmitted;
     private int _cancelled;
     private int _cancellationResourcesCleaned;
     private int _disposed;
@@ -103,6 +104,8 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
     private abstract record ConsensusEvent
     {
         public sealed record Inbound(RapidClusterRequest Request, CancellationToken CancellationToken) : ConsensusEvent;
+
+        public sealed record Proposal(MembershipProposal Value) : ConsensusEvent;
 
         public sealed record Timeout(int Round, TimeSpan Delay) : ConsensusEvent;
 
@@ -158,49 +161,26 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
 
     public void Propose(MembershipProposal proposal)
     {
-        _log.Propose(proposal);
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed != 0, this);
+            if (_proposalSubmitted)
+            {
+                throw new InvalidOperationException("A proposal was already submitted for this consensus configuration.");
+            }
 
-        // Ensure our acceptor state includes our local fast-round vote.
-        _paxosAcceptor.RegisterFastRoundVote(proposal);
-
-        _consensusLoopTask = RunConsensusLoopAsync(proposal, _disposeCts.Token);
+            _proposalSubmitted = true;
+            _consensusLoopTask ??= RunConsensusLoopAsync(_disposeCts.Token);
+            _ = _events.Writer.TryWrite(new ConsensusEvent.Proposal(proposal));
+        }
     }
 
-    private async Task RunConsensusLoopAsync(MembershipProposal proposal, CancellationToken cancellationToken)
+    private async Task RunConsensusLoopAsync(CancellationToken cancellationToken)
     {
         var consensusStopwatch = Stopwatch.StartNew();
 
         try
         {
-            _currentRank = new Rank { Round = 1, NodeIndex = 0 };
-            _highestRoundSeen = 1;
-            _fallbackSignaled = 0;
-            _deliveryFailureEndpoints.Clear();
-            _votesPerProposal.Clear();
-            _votesReceived.Clear();
-            _scheduledClassicRoundStart = null;
-            _scheduledClassicRoundDelay = null;
-
-            _log.StartingFastRound();
-            _metricsScope.RecordProposal(_metrics);
-            _metricsScope.RecordRoundStarted(_metrics);
-
-            var timeout = GetRandomDelay();
-            _timer.Schedule(
-                _sharedResources.TimeProvider,
-                timeout,
-                () =>
-                {
-                    if (_onDecidedTcs.Task.IsCompleted)
-                    {
-                        return;
-                    }
-
-                    _ = _events.Writer.TryWrite(new ConsensusEvent.Timeout(1, timeout));
-                });
-
-            StartFastRound(proposal, cancellationToken);
-
             while (await _events.Reader.WaitToReadAsync(cancellationToken))
             {
                 while (_events.Reader.TryRead(out var @event))
@@ -233,6 +213,28 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
             _timer.Dispose();
             _classicRestartTimer.Dispose();
         }
+    }
+
+    private void StartProposal(MembershipProposal proposal, CancellationToken cancellationToken)
+    {
+        _log.Propose(proposal);
+        _metricsScope.RecordProposal(_metrics);
+        if (!_paxosAcceptor.RegisterFastRoundVote(proposal))
+        {
+            return;
+        }
+
+        _log.StartingFastRound();
+        _metricsScope.RecordRoundStarted(_metrics);
+        var timeout = GetRandomDelay();
+        _timer.Schedule(_sharedResources.TimeProvider, timeout, () =>
+        {
+            if (!_onDecidedTcs.Task.IsCompleted)
+            {
+                _ = _events.Writer.TryWrite(new ConsensusEvent.Timeout(1, timeout));
+            }
+        });
+        StartFastRound(proposal, cancellationToken);
     }
 
     private void StartFastRound(MembershipProposal proposal, CancellationToken cancellationToken)
@@ -376,6 +378,10 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
     {
         switch (@event)
         {
+            case ConsensusEvent.Proposal(var proposal):
+                StartProposal(proposal, cancellationToken);
+                return;
+
             case ConsensusEvent.Inbound(var request, _):
                 HandleInbound(request, consensusStopwatch, cancellationToken);
                 return;
@@ -934,8 +940,9 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
 
         lock (_lock)
         {
-            if (_disposed == 0 && _consensusLoopTask != null && !_onDecidedTcs.Task.IsCompleted)
+            if (_disposed == 0 && !_onDecidedTcs.Task.IsCompleted)
             {
+                _consensusLoopTask ??= RunConsensusLoopAsync(_disposeCts.Token);
                 _ = _events.Writer.TryWrite(new ConsensusEvent.Inbound(request, cancellationToken));
             }
         }

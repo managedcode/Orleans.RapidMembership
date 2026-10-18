@@ -10,4 +10,7 @@
     <ProjectReference Include="..\..\..\src\RapidCluster.Grpc\RapidCluster.Grpc.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="RapidCluster.EndToEnd.Tests" />
+  </ItemGroup>
 </Project>

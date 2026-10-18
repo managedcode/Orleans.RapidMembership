@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>ManagedCode.Orleans.RapidMembership</PackageId>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Description>Self-hosted quorum membership and gateway discovery for Microsoft Orleans, based on Reuben Bond's RapidCluster.</Description>
+    <PackageTags>orleans;membership;clustering;rapid;paxos;managedcode</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Orleans.Server" />
+    <PackageReference Include="Microsoft.Orleans.Client" />
+    <PackageReference Include="Microsoft.Orleans.Sdk" PrivateAssets="all" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="all" />
+    <ProjectReference Include="../RapidCluster.Grpc/RapidCluster.Grpc.csproj" />
+    <Protobuf Include="Transport/membership.proto" GrpcServices="Both" />
+    <InternalsVisibleTo Include="ManagedCode.Orleans.RapidMembership.Tests" />
+  </ItemGroup>
+</Project>

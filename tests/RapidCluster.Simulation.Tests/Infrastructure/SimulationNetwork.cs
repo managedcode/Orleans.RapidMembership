@@ -15,7 +15,6 @@ internal sealed class SimulationNetwork : Clockwork.SimulationNetwork
 {
     private readonly RapidSimulationCluster _harness;
     private SimulationNetworkLogger _log;
-    private bool _enableDelays;
 
     internal SimulationNetwork(RapidSimulationCluster harness, SimulationRandom random)
         : base(() => harness.Nodes, random)
@@ -30,13 +29,9 @@ internal sealed class SimulationNetwork : Clockwork.SimulationNetwork
         base.SetLogger(logger);
     }
 
-    public bool EnableDelays
-    {
-        get => _enableDelays;
-        set => _enableDelays = value;
-    }
+    public bool EnableDelays { get; set; }
 
-    public new TimeSpan GetMessageDelay() => _enableDelays ? base.GetMessageDelay() : TimeSpan.Zero;
+    public new TimeSpan GetMessageDelay() => EnableDelays ? base.GetMessageDelay() : TimeSpan.Zero;
 
     public new void IsolateNode(string nodeAddress)
     {

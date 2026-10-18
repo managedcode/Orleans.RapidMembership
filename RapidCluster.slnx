@@ -16,6 +16,7 @@
     <File Path=".editorconfig" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/ManagedCode.Orleans.RapidMembership/ManagedCode.Orleans.RapidMembership.csproj" />
     <Project Path="src/Clockwork/src/Clockwork/Clockwork.csproj" />
     <Project Path="src/Clockwork/src/Clockwork.Instrumentation/Clockwork.Instrumentation.csproj" />
     <Project Path="src/Clockwork/src/Clockwork.Instrumentation.Build/Clockwork.Instrumentation.Build.csproj" />
@@ -24,6 +25,9 @@
     <Project Path="src/RapidCluster.Grpc/RapidCluster.Grpc.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/ManagedCode.Orleans.RapidMembership.Tests/ManagedCode.Orleans.RapidMembership.Tests.csproj" />
+    <Project Path="tests/ManagedCode.Orleans.RapidMembership.Node/ManagedCode.Orleans.RapidMembership.Node.csproj" />
+    <Project Path="tests/ManagedCode.Orleans.RapidMembership.AppHost/ManagedCode.Orleans.RapidMembership.AppHost.csproj" />
     <Project Path="tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj" />
     <Project Path="tests/RapidCluster.Integration.Tests/RapidCluster.Integration.Tests.csproj" />
     <Project Path="tests/RapidCluster.Simulation.Fixtures/RapidCluster.Simulation.Fixtures.csproj" />

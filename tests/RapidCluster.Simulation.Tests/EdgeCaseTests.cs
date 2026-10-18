@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using RapidCluster.Exceptions;
 using RapidCluster.Monitoring;
 using RapidCluster.Simulation.Tests.Infrastructure;
 
@@ -160,10 +161,14 @@ public sealed class EdgeCaseTests : IAsyncLifetime
 
         // Attempting to join using an uninitialized node as seed should fail
         // because the uninitialized node doesn't have proper membership set up
-        _ = Assert.ThrowsAny<Exception>(() => _harness.JoinNode(nodeId: 2, seed: uninitializedNode));
+        var options = new RapidClusterProtocolOptions { MaxJoinRetries = 2 };
+        _ = Assert.Throws<JoinException>(() => _harness.JoinNode(nodeId: 2, seed: uninitializedNode, options));
 
         // Cleanup
         _harness.CrashNode(uninitializedNode);
+        var healthySeed = _harness.StartCluster();
+        var healthyJoiner = _harness.JoinNode(nodeId: 3, seed: healthySeed);
+        Assert.Equal(2, healthyJoiner.MembershipSize);
     }
 
     [Fact]

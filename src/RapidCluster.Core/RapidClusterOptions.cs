@@ -38,6 +38,9 @@ public sealed class RapidClusterOptions
     /// </remarks>
     public int BootstrapExpect { get; set; }
 
+    /// <summary>Gets or sets a value indicating whether the bootstrap seed first checks for an existing live cluster.</summary>
+    public bool JoinBeforeBootstrap { get; set; }
+
     /// <summary>
     /// Gets or sets timeout for waiting for <see cref="BootstrapExpect"/> nodes to contact the seed.
     /// If the timeout expires before the expected number of nodes join, the seed will

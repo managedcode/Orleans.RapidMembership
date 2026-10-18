@@ -1,0 +1,4 @@
+ManagedCode.Orleans.RapidMembership is based on RapidCluster by Reuben Bond.
+Upstream: https://github.com/ReubenBond/RapidCluster
+The original MIT license and copyright are retained in LICENSE.
+ManagedCode additions Copyright (c) 2026 ManagedCode SAS, under the MIT license.

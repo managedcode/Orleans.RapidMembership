@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Sdk Name="Aspire.AppHost.Sdk" Version="13.6.1" />
+  <PropertyGroup><OutputType>Exe</OutputType><IsAspireHost>true</IsAspireHost><AspireUseCliBundle>true</AspireUseCliBundle><IsPackable>false</IsPackable></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.AppHost" />
+    <ProjectReference Include="../ManagedCode.Orleans.RapidMembership.Node/ManagedCode.Orleans.RapidMembership.Node.csproj" />
+  </ItemGroup>
+</Project>

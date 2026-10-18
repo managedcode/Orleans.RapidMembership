@@ -14,15 +14,15 @@ internal sealed class RapidClusterImpl : IRapidCluster, IDisposable
     {
         _viewAccessor = viewAccessor;
 
-        // Publish initial empty view
-        _publicViewChannel.Publish(ClusterMembershipView.Empty);
+        // Publish the current native view for subscribers created after initialization.
+        _publicViewChannel.Publish(_viewAccessor.CurrentView.ToClusterMembershipView());
 
         // Subscribe to internal view changes and transform to public views
         _ = SubscribeToViewChangesAsync(_cts.Token);
     }
 
     /// <inheritdoc/>
-    public ClusterMembershipView CurrentView => _publicViewChannel.Current.Value;
+    public ClusterMembershipView CurrentView => _viewAccessor.CurrentView.ToClusterMembershipView();
 
     /// <inheritdoc/>
     public BroadcastChannelReader<ClusterMembershipView> ViewUpdates => _publicViewChannel.Reader;

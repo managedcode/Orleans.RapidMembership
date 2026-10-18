@@ -1,0 +1,5 @@
+syntax = "proto3";
+option csharp_namespace = "ManagedCode.Orleans.RapidMembership.Transport";
+package managedcode.orleans.rapidmembership;
+service MembershipPeer { rpc Exchange (PeerPayload) returns (PeerPayload); }
+message PeerPayload { bytes content = 1; }

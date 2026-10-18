@@ -15,24 +15,24 @@ public static class DirectBclAcceptanceFixture
         var gate = new object();
         var lockCounter = 0;
         var monitorEnteredInLock = false;
-        int entryThreadId = Environment.CurrentManagedThreadId;
+        var entryThreadId = Environment.CurrentManagedThreadId;
 
-        Guid firstGuid = Guid.NewGuid();
-        Guid secondGuid = Guid.NewGuid();
-        DateTime utcBefore = DateTime.UtcNow;
-        DateTimeOffset offsetBefore = DateTimeOffset.UtcNow;
-        long timestampBefore = Stopwatch.GetTimestamp();
-        int tickCountBefore = Environment.TickCount;
-        long tickCount64Before = Environment.TickCount64;
+        var firstGuid = Guid.NewGuid();
+        var secondGuid = Guid.NewGuid();
+        var utcBefore = DateTime.UtcNow;
+        var offsetBefore = DateTimeOffset.UtcNow;
+        var timestampBefore = Stopwatch.GetTimestamp();
+        var tickCountBefore = Environment.TickCount;
+        var tickCount64Before = Environment.TickCount64;
 
 #pragma warning disable CA5394 // These call sites verify deterministic Random instrumentation.
         var unseededRandom = new Random();
-        int unseededRandomValue = unseededRandom.Next();
-        int sharedRandomValue = Random.Shared.Next();
+        var unseededRandomValue = unseededRandom.Next();
+        var sharedRandomValue = Random.Shared.Next();
 #pragma warning restore CA5394
 
-        int taskRunThreadId = 0;
-        Task<int> taskRun = Task.Run(() =>
+        var taskRunThreadId = 0;
+        var taskRun = Task.Run(() =>
         {
             taskRunThreadId = Environment.CurrentManagedThreadId;
             lock (gate)
@@ -44,10 +44,10 @@ public static class DirectBclAcceptanceFixture
             return 17;
         });
 
-        int threadPoolThreadId = 0;
+        var threadPoolThreadId = 0;
         var threadPoolCompletion = new TaskCompletionSource<int>(
             TaskCreationOptions.RunContinuationsAsynchronously);
-        bool threadPoolQueued = ThreadPool.QueueUserWorkItem(_ =>
+        var threadPoolQueued = ThreadPool.QueueUserWorkItem(_ =>
         {
             threadPoolThreadId = Environment.CurrentManagedThreadId;
             lock (gate)
@@ -59,11 +59,11 @@ public static class DirectBclAcceptanceFixture
             threadPoolCompletion.SetResult(23);
         });
 
-        int configuredThreadId = 0;
-        int configuredValue = await Task.Run(() => 31).ConfigureAwait(false);
+        var configuredThreadId = 0;
+        var configuredValue = await Task.Run(() => 31).ConfigureAwait(false);
         configuredThreadId = Environment.CurrentManagedThreadId;
-        int taskRunValue = await taskRun.ConfigureAwait(false);
-        int threadPoolValue = await threadPoolCompletion.Task.ConfigureAwait(false);
+        var taskRunValue = await taskRun.ConfigureAwait(false);
+        var threadPoolValue = await threadPoolCompletion.Task.ConfigureAwait(false);
 
         lock (gate)
         {
@@ -72,19 +72,19 @@ public static class DirectBclAcceptanceFixture
             lockCounter++;
         }
 
-        DateTime delayUtcBefore = DateTime.UtcNow;
-        DateTimeOffset delayOffsetBefore = DateTimeOffset.UtcNow;
-        long delayTimestampBefore = Stopwatch.GetTimestamp();
-        int delayTickCountBefore = Environment.TickCount;
-        long delayTickCount64Before = Environment.TickCount64;
+        var delayUtcBefore = DateTime.UtcNow;
+        var delayOffsetBefore = DateTimeOffset.UtcNow;
+        var delayTimestampBefore = Stopwatch.GetTimestamp();
+        var delayTickCountBefore = Environment.TickCount;
+        var delayTickCount64Before = Environment.TickCount64;
 
         await Task.Delay(delay).ConfigureAwait(false);
 
-        DateTime delayUtcAfter = DateTime.UtcNow;
-        DateTimeOffset delayOffsetAfter = DateTimeOffset.UtcNow;
-        long delayTimestampAfter = Stopwatch.GetTimestamp();
-        int delayTickCountAfter = Environment.TickCount;
-        long delayTickCount64After = Environment.TickCount64;
+        var delayUtcAfter = DateTime.UtcNow;
+        var delayOffsetAfter = DateTimeOffset.UtcNow;
+        var delayTimestampAfter = Stopwatch.GetTimestamp();
+        var delayTickCountAfter = Environment.TickCount;
+        var delayTickCount64After = Environment.TickCount64;
 
         return new DirectBclSnapshot(
             firstGuid,

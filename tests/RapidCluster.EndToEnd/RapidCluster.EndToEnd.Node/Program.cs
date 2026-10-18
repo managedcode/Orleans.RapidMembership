@@ -19,7 +19,7 @@ builder.AddServiceDefaults();
 // Read cluster configuration from environment variables set by AppHost
 var nodeIndex = builder.Configuration.GetValue("CLUSTER_NODE_INDEX", 0);
 var bootstrapFilePath = builder.Configuration["CLUSTER_BOOTSTRAP_FILE"]
-    ?? Path.Combine(Path.GetTempPath(), "rapidcluster-e2e-bootstrap.json");
+    ?? throw new InvalidOperationException("AppHost must supply the repository-owned bootstrap file path.");
 
 // Register the file-based bootstrap provider for coordinated startup
 // Node 0 will start a new cluster, others will wait for node 0 and join it

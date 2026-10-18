@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup><IsPackable>false</IsPackable></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/ManagedCode.Orleans.RapidMembership/ManagedCode.Orleans.RapidMembership.csproj" />
+    <PackageReference Include="Microsoft.Orleans.Sdk" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

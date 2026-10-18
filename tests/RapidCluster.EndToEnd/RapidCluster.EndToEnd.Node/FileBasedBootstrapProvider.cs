@@ -93,10 +93,8 @@ internal sealed partial class FileBasedBootstrapProvider : ISeedProvider, IDispo
             return [node0Address];
         }
 
-        // Timeout waiting for bootstrap coordinator - return empty list
-        // This will cause the node to fail to join, which is the correct behavior
         LogBootstrapCoordinatorTimeout(_logger, _nodeIndex, _startupTimeout.TotalSeconds);
-        return [];
+        throw new TimeoutException("The configured RAPID bootstrap coordinator did not become available.");
     }
 
     private async Task RegisterNodeAsync(EndPoint myAddress, CancellationToken cancellationToken)

@@ -29,7 +29,8 @@ internal sealed partial class GrpcClient(
 #pragma warning disable CA1823 // Avoid unused private fields
     private readonly ILogger<GrpcClient> _logger = logger;
 #pragma warning restore CA1823 // Avoid unused private fields
-    private readonly ConcurrentDictionary<string, Pb.MembershipService.MembershipServiceClient> _clients = new(StringComparer.Ordinal);
+    private readonly Lock _clientGate = new();
+    private readonly Dictionary<string, (GrpcChannel Channel, Pb.MembershipService.MembershipServiceClient Client)> _clients = [with(StringComparer.Ordinal)];
     private readonly ConcurrentDictionary<int, Task> _pendingTasks = new();
     private readonly CancellationTokenSource _stoppingCts = new();
     private int _taskIdCounter;
@@ -68,10 +69,29 @@ internal sealed partial class GrpcClient(
     [LoggerMessage(Level = LogLevel.Trace, Message = "One-way message delivered successfully to {Remote}")]
     private partial void LogOneWayDeliverySucceeded(LoggableEndpoint Remote);
 
+    private global::Grpc.Core.Metadata CreateHeaders()
+    {
+        var headers = new global::Grpc.Core.Metadata();
+        foreach (var (key, value) in _grpcOptions.RequestHeaders)
+        {
+            headers.Add(key, value);
+        }
+
+        return headers;
+    }
+
     public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
+        lock (_clientGate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+        }
+
         // Cancel all pending operations immediately
         await _stoppingCts.CancelAsync();
 
@@ -101,8 +121,9 @@ internal sealed partial class GrpcClient(
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stoppingCts.Token);
-            var response = await client.SendRequestAsync(request, cancellationToken: cts.Token).ResponseAsync
-                .WaitAsync(_grpcOptions.Timeout, _sharedResources.TimeProvider, cts.Token);
+            using var call = client.SendRequestAsync(request, headers: CreateHeaders(), cancellationToken: cts.Token);
+            var response = await call.ResponseAsync
+                .WaitAsync(request.JoinMessage is not null ? _grpcOptions.JoinTimeout : _grpcOptions.Timeout, _sharedResources.TimeProvider, cts.Token);
             stopwatch.Stop();
             _metrics.RecordGrpcCallCompleted(SendRequestMethod, "OK");
             _metrics.RecordGrpcCallDuration(SendRequestMethod, "OK", stopwatch);
@@ -134,6 +155,10 @@ internal sealed partial class GrpcClient(
         var taskId = Interlocked.Increment(ref _taskIdCounter);
         var task = SendOneWayMessageInternalAsync(remote, request, rank, taskId, onDeliveryFailure, cancellationToken);
         _ = _pendingTasks.TryAdd(taskId, task);
+        if (task.IsCompleted)
+        {
+            _ = _pendingTasks.TryRemove(taskId, out _);
+        }
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "One-way messages ignore failures but may invoke callback")]
@@ -147,8 +172,9 @@ internal sealed partial class GrpcClient(
 
         try
         {
-            _ = await client.SendRequestAsync(request, cancellationToken: cts.Token).ResponseAsync
-                .WaitAsync(_grpcOptions.Timeout, _sharedResources.TimeProvider, cts.Token);
+            using var call = client.SendRequestAsync(request, headers: CreateHeaders(), cancellationToken: cts.Token);
+            _ = await call.ResponseAsync
+                .WaitAsync(request.JoinMessage is not null ? _grpcOptions.JoinTimeout : _grpcOptions.Timeout, _sharedResources.TimeProvider, cts.Token);
             stopwatch.Stop();
             LogOneWayDeliverySucceeded(new LoggableEndpoint(remote));
             _metrics.RecordGrpcCallCompleted(SendRequestMethod, "OK");
@@ -198,52 +224,76 @@ internal sealed partial class GrpcClient(
     private Pb.MembershipService.MembershipServiceClient GetOrCreateClient(Endpoint remote)
     {
         var key = string.Create(CultureInfo.InvariantCulture, $"{remote.Hostname.ToStringUtf8()}:{remote.Port}");
-        return _clients.GetOrAdd(key, static (key, grpcOptions) =>
+        lock (_clientGate)
         {
-            var scheme = grpcOptions.UseHttps ? "https" : "http";
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_clients.TryGetValue(key, out var existing))
+            {
+                return existing.Client;
+            }
+
+            var scheme = _grpcOptions.UseHttps ? "https" : "http";
             var handler = new SocketsHttpHandler
             {
                 EnableMultipleHttp2Connections = true,
             };
-            handler.SslOptions.RemoteCertificateValidationCallback = grpcOptions.RemoteCertificateValidationCallback;
+            handler.SslOptions.RemoteCertificateValidationCallback = _grpcOptions.RemoteCertificateValidationCallback;
             var channel = GrpcChannel.ForAddress($"{scheme}://{key}", new GrpcChannelOptions
             {
                 HttpHandler = handler,
+                DisposeHttpClient = true,
                 HttpVersion = new Version(2, 0),
-                HttpVersionPolicy = HttpVersionPolicy.RequestVersionExact, // Force HTTP/2 prior knowledge (for HTTP) or ALPN (for HTTPS)
+                HttpVersionPolicy = HttpVersionPolicy.RequestVersionExact,
                 ThrowOperationCanceledOnCancellation = true,
             });
-            return new Pb.MembershipService.MembershipServiceClient(channel);
-        }, _grpcOptions);
+            var client = new Pb.MembershipService.MembershipServiceClient(channel);
+            _clients.Add(key, (channel, client));
+            return client;
+        }
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (_disposed) return;
-        _disposed = true;
-
-        // Cancel any remaining pending operations (may already be cancelled by StopAsync)
-        await _stoppingCts.CancelAsync();
-
-        // Wait for all pending tasks to complete (with a timeout)
-        var pendingTasks = _pendingTasks.Values.ToArray();
-        if (pendingTasks.Length > 0)
+        GrpcChannel[] channels;
+        lock (_clientGate)
         {
-            try
+            if (_disposed)
             {
-                await Task.WhenAll(pendingTasks).WaitAsync(TimeSpan.FromSeconds(5), _sharedResources.TimeProvider);
+                return;
             }
-            catch (TimeoutException)
-            {
-                // Timeout waiting for pending tasks
-            }
-            catch (OperationCanceledException)
-            {
-                // Cancelled waiting for pending tasks
-            }
+
+            _disposed = true;
+            channels = [.. _clients.Values.Select(connection => connection.Channel)];
+            _clients.Clear();
         }
 
-        _stoppingCts.Dispose();
-        _clients.Clear();
+        try
+        {
+            await _stoppingCts.CancelAsync();
+            var pendingTasks = _pendingTasks.Values.ToArray();
+            if (pendingTasks.Length > 0)
+            {
+                try
+                {
+                    await Task.WhenAll(pendingTasks).WaitAsync(TimeSpan.FromSeconds(5), _sharedResources.TimeProvider);
+                }
+                catch (TimeoutException)
+                {
+                    // Channel disposal below terminates any remaining native RPCs.
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            }
+        }
+        finally
+        {
+            foreach (var channel in channels)
+            {
+                channel.Dispose();
+            }
+
+            _stoppingCts.Dispose();
+        }
     }
 }

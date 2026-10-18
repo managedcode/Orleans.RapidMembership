@@ -54,12 +54,12 @@ internal sealed class PaxosAcceptor
     /// <para>Records that this acceptor participated in the (single) fast round by locally accepting the proposal.</para>
     /// <para>Fast round is modeled as if the acceptor received an <c>AcceptRequest</c> directly.</para>
     /// </summary>
-    public void RegisterFastRoundVote(MembershipProposal proposal)
+    public bool RegisterFastRoundVote(MembershipProposal proposal)
     {
         // Do not participate in our only fast round if we are already participating in a classic round.
         if (_promisedRank.Round > 1)
         {
-            return;
+            return false;
         }
 
         // The first round in the consensus instance is always the fast round.
@@ -72,6 +72,7 @@ internal sealed class PaxosAcceptor
         ref var voteCount = ref CollectionsMarshal.GetValueRefOrAddDefault(_fastRoundVotes, proposal, out _);
         ++voteCount;
         _log.RegisterFastRoundVote(proposal, voteCount);
+        return true;
     }
 
     /// <summary>

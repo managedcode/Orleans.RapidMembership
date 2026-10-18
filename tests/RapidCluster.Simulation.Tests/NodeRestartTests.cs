@@ -29,6 +29,46 @@ public sealed class NodeRestartTests : IAsyncLifetime
 
     public async ValueTask DisposeAsync() => await _harness.DisposeAsync();
 
+    [Fact]
+    public void ReturningPassiveVoterParticipatesWithoutItsOwnProposal()
+    {
+        var seed = _harness.StartCluster();
+        var returning = _harness.JoinNode(nodeId: 1, seed: seed);
+        _harness.WaitForConvergence();
+        _harness.CrashNode(returning);
+        Assert.True(seed.CurrentView.IsHostPresent(returning.Address));
+
+        var restarted = _harness.JoinNode(nodeId: 1, seed: seed);
+        Assert.Equal(2, restarted.MembershipSize);
+        var next = _harness.JoinNode(nodeId: 2, seed: seed);
+        _harness.WaitForConvergence();
+        Assert.Equal(3, seed.MembershipSize);
+        Assert.Equal(3, restarted.MembershipSize);
+        Assert.Equal(3, next.MembershipSize);
+    }
+
+    [Fact]
+    public void ReturningNodeLearnsAnExistingViewBeforeItsAddressIsRemoved()
+    {
+        var seed = _harness.StartCluster();
+        var returning = _harness.JoinNode(nodeId: 1, seed: seed);
+        var peer = _harness.JoinNode(nodeId: 2, seed: seed);
+        _harness.WaitForConvergence();
+        _harness.CrashNode(returning);
+        Assert.True(seed.CurrentView.IsHostPresent(returning.Address));
+
+        var restarted = _harness.JoinNode(nodeId: 1, seed: seed);
+        Assert.Equal(seed.CurrentView.ConfigurationId, restarted.CurrentView.ConfigurationId);
+        Assert.Equal(3, restarted.MembershipSize);
+        Assert.Equal(peer.CurrentView.ConfigurationId, restarted.CurrentView.ConfigurationId);
+
+        var next = _harness.JoinNode(nodeId: 3, seed: restarted);
+        _harness.WaitForConvergence();
+        Assert.Equal(4, next.MembershipSize);
+        Assert.Equal(4, seed.MembershipSize);
+        Assert.Equal(4, restarted.MembershipSize);
+    }
+
     /// <summary>
     /// Tests that a node restarted at the same address gets a new NodeId.
     /// This is critical for Paxos correctness - the restarted node must not reuse the old identity.

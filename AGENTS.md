@@ -1,254 +1,59 @@
-# AGENTS.md - RapidCluster
+# ManagedCode.Orleans.RapidMembership
 
-> **Note**: Keep this file updated as you learn more about the environment, CLI tools, and project conventions.
+This repository follows [Managed Code AI Framework (MCAF)](https://mcaf.managed-code.com/). Root rules apply throughout the repository; project-local `AGENTS.md` files describe their actual ownership. User instructions control scope and authorization.
 
-## Build & Test Commands
-```bash
-git submodule update --init --recursive               # Initialize Clockwork after cloning
-dotnet build RapidCluster.slnx -p:EnforceCodeStyleInBuild=false  # Build (format is checked separately)
-dotnet format RapidCluster.slnx --exclude src/Clockwork --verify-no-changes
+## Product and ownership
 
-# Run tests using dotnet run (xUnit v3 with Microsoft.Testing.Platform)
-# Each test project is run separately:
-dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj --no-build -- --timeout 60s
-dotnet run --project tests/RapidCluster.Integration.Tests/RapidCluster.Integration.Tests.csproj --no-build -- --timeout 60s
-dotnet build tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj -p:EnforceCodeStyleInBuild=false
-dotnet test tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj --no-build -- --timeout 600s
-dotnet run --project tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests/RapidCluster.EndToEnd.Tests.csproj --no-build -- --timeout 60s
+This is the ManagedCode fork of Reuben Bond's RapidCluster. Preserve the upstream MIT license, copyright, NOTICE, protocol implementation and original test suites. Do not relabel third-party source as an independent ManagedCode invention. Clockwork is an upstream Git submodule; do not modify it to obtain green results.
 
-# Common test options:
-dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --timeout 60s --filter-class "*ClusterBasicTests"    # Single test class
-dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --timeout 60s --filter-method "*TestMethodName"      # Single test method
-dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --list-tests                                         # List all tests
-dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --help                                               # Show all options
+Microsoft Orleans owns silo lifecycle, status transitions, probes, placement, directory and grain execution. The provider implements native `IMembershipTable` and `IGatewayListProvider`. RAPID observes the fixed seed voters; it never supplies atomic membership-table CAS or replaces the Orleans runtime.
 
-# Code coverage (using Microsoft.Testing.Extensions.CodeCoverage)
-dotnet run --project tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj -- --coverage --coverage-output-format cobertura --coverage-output coverage.xml --timeout 60s
+- `src/ManagedCode.Orleans.RapidMembership/`: provider, durable voter storage, majority consensus, admission and hosting.
+- `src/RapidCluster.Core/`: upstream RAPID protocol and native hosted lifecycle.
+- `src/RapidCluster.Grpc/`: upstream protocol transport.
+- `tests/ManagedCode.Orleans.RapidMembership.{AppHost,Node,Tests}/`: actual silo-process membership qualification.
+- `tests/RapidCluster.*`: retained upstream unit, real-network, deterministic simulation and Aspire suites.
+- `docs/Architecture.md`: canonical ownership map; `docs/Features/` owns requirements and acceptance criteria; `docs/ADR/` records decisions.
+- `tasks/{todo,in-progress,done}/`: bounded work items. Move to done only after the stated acceptance and delivery gates actually pass.
+
+## Correctness contracts
+
+Preserve durable promises, accepted values, committed snapshots, atomic native row/version ETags, bounded mutation-outcome history and quorum intersection. A successful acknowledgement requires the actual configured voter majority. Loss of that majority cannot be repaired by changing the voter list or discovering an arbitrary IP. Never convert cancellation, corruption or ambiguous commit outcomes into success or a fabricated CAS rejection.
+
+Validate service/cluster identity, ordered voter configuration and shared secret before admitting peer work. Keep byte, row, admission, history, time and cancellation bounds explicit. Do not log secrets or application payloads. One process exclusively owns each voter directory. Keep startup, failure and joined shutdown visible at the actual owning entry point.
+
+Do not add consumer-side workarounds for defects in an owned library. Fix them at the owner with focused failure and healthy-follow-up tests. Do not introduce runtime fallbacks, compatibility paths, fake success, or duplicate cluster runtimes without explicit owner approval.
+
+## Working tree and style
+
+Work in the current checkout, preserve unrelated edits, and never stash, force-push, create copy checkouts or private isolation folders. Use `rg` for searches. Generated test state and diagnostics belong under ignored repository-owned `artifacts/`.
+
+Use .NET 10, centrally pinned packages and the root `.editorconfig`. Use file-scoped namespaces, Allman executable blocks, braces, nullable contracts and cancellation propagation. Keep responsibilities cohesive: target 400 lines per file, 200 per type, 64 executable lines per method and nesting depth three for new provider code. Do not rewrite unrelated upstream code merely to meet a new style target. Never disable analyzers, lower severities, exclude product code from coverage or weaken assertions for a passing gate.
+
+Repository documentation and source comments are English. Report progress in the user's language. Separate source inspection, focused tests, full build, real-process qualification, CI, package publication and consumer integration evidence. Keep public claims tied to original artifacts.
+
+## Required checks
+
+```sh
+git submodule update --init --recursive
+dotnet restore RapidCluster.slnx
+dotnet format RapidCluster.slnx --no-restore --exclude src/Clockwork
+dotnet format RapidCluster.slnx --no-restore --exclude src/Clockwork --verify-no-changes
+dotnet build RapidCluster.slnx --no-restore --configuration Release -warnaserror
 ```
 
-Note: This project uses xUnit v3 with Microsoft.Testing.Platform (MTP). Unit, integration, and end-to-end tests use `dotnet run --`; simulation tests execute the out-of-place Clockwork-instrumented application closure. The `--timeout` parameter sets a global test execution timeout (format: `<value>[h|m|s]`).
+Every build invocation uses `-warnaserror`. Run tests through their native xUnit v3 / Microsoft.Testing.Platform entry points with `--configuration Release --no-build -- --output Detailed --report-trx`. Do not replace the retained framework or invent test counts. See [CONTRIBUTING.md](CONTRIBUTING.md) and `.github/workflows/ci.yml` for exact suites.
 
-## Code Coverage
-Code coverage is collected using `Microsoft.Testing.Extensions.CodeCoverage`. Use the `--coverage` flag when running tests:
-- `--coverage` - Enable code coverage collection
-- `--coverage-output-format` - Output format: `coverage`, `xml`, or `cobertura`
-- `--coverage-output` - Path to the output coverage file
+Focused provider tests use real native operations and HTTP/2 transports. Aspire owns real process startup, readiness, discovered endpoints, resource commands and joined cleanup. Abrupt fault tests must actually kill the target process; graceful stopping is a separate case. Keep native external clients making real nonce-checked grain calls during membership changes. Assert exact active silo identities and generations on every surviving node, eventual recovery, execution coverage and resource cleanup.
 
-## CLI Tools
-- **Shell**: Use `pwsh` (modern PowerShell), not `cmd` or legacy `powershell`
-- **Platform**: Windows
-- **ripgrep (rg)**: Use `rg` for searching, not `grep`. Example: `rg "pattern" --type cs`
-- **sed**: Available for batch text replacements. Example: `sed -i 's/old/new/g' file.cs`
+The scale gate covers zero, ten, twenty and fifty silos, abrupt and graceful departures, simultaneous joins/departures, full process loss, client reconnection and loss/restoration of a voter majority. All configured cases remain mandatory. Protocol simulations do not substitute for actual Orleans processes.
 
-## Code Style (enforced via .editorconfig)
-- **Framework**: .NET 10, nullable enabled, warnings as errors
-- **Namespaces**: File-scoped (`namespace Foo;`)
-- **Types**: Use `var` always, prefer pattern matching, use collection expressions
-- **Braces**: Always use braces, newline before open brace (Allman style)
-- **Naming**: `_camelCase` for private fields, `PascalCase` for public/constants, `IPrefix` for interfaces
-- **Imports**: Sort System directives first, remove unused usings
-- **Async**: Forward CancellationToken, avoid ConfigureAwait
-- **Error handling**: Use throw helpers (ArgumentNullException.ThrowIfNull), rethrow to preserve stack
-- **Regions**: Do not use `#region`/`#endregion` directives
+`python3 eng/test-simulations.py --workers 2` discovers the compiled instrumented inventory, executes all native cases in bounded groups, retains every theory row and reconciles original TRX names and outcomes with discovery. Missing, skipped, timed-out or failed cases fail qualification. Preserve reproducible seeds and Clockwork artifacts.
 
-## Project Structure
-- `src/RapidCluster.Core/` - Main library
-- `src/Clockwork/` - Git submodule for the standalone Clockwork simulation framework
-- `tests/RapidCluster.Unit.Tests/` - Unit tests (underscores allowed in test names)
-- `tests/RapidCluster.Integration.Tests/` - Integration tests with real networking
-- `tests/RapidCluster.Simulation.Tests/` - Deterministic simulation tests using Clockwork
-- `tests/RapidCluster.EndToEnd/` - End-to-end tests using Aspire
+Collect native coverage: changed code must meet 80% line / 70% branch; the thirteen critical provider source files require 90% line coverage through `eng/verify-coverage.py`. Failure, cancellation, concurrent writes and recovery assertions matter more than implementation-mirroring tests. Keep Linux, Windows and macOS CI, Linux scale qualification and CodeQL enabled.
 
-## Work Item Management
+## Versions and delivery
 
-Work items are stored as markdown files under the `tasks/` directory:
-- `tasks/todo/` - New/unstarted work items
-- `tasks/in-progress/` - Actively being worked on (update content as you go)
-- `tasks/done/` - Fully completed work items (only after all tests pass)
+`Directory.Build.props` is the sole package-version owner. All three packages share a version: Orleans major/minor plus the ManagedCode patch. Version increases require explicit owner authorization for that increase. Batch all confirmed defects in this repository, add their tests, review the complete batch and complete the relevant checks and publish once for the combined batch.
 
-Workflow:
-1. **Create** new work items in `tasks/todo/`
-2. **Move** the work item to `tasks/in-progress/` when you start work
-3. **Update** the work item with notes, decisions, and findings while working
-4. **Run tests** relevant to the change(s)
-5. **Move** the work item to `tasks/done/` once it’s complete *and* all tests pass
-
-Work item files should be named descriptively (e.g., `001_PaxosMonotonicIds.md`) and contain:
-- Problem description
-- Proposed solution or approach
-- Implementation notes (updated during/after completion)
-
-## Testing Infrastructure
-
-This project uses multiple testing techniques to ensure correctness. **New functionality should ideally be tested using multiple techniques** (Unit, Integration, Simulation, and Property-Based tests where applicable).
-
-### Test Types
-
-#### 1. Unit Tests (`tests/RapidCluster.Unit.Tests/`)
-
-Isolated tests for individual components without external dependencies.
-
-**Patterns:**
-- Use mock/stub implementations for dependencies (e.g., `TestBroadcaster`)
-- Test single classes or methods in isolation
-- Fast execution, no I/O or network
-
-**Example:**
-```csharp
-[Fact]
-public async Task DeclaresSuccess_BeforeAllVotesReceived()
-{
-    var broadcaster = new TestBroadcaster();
-    var fastPaxos = new FastPaxos(myAddr, configurationId: 1, membershipSize: 5, broadcaster, NullLogger<FastPaxos>.Instance);
-    // ... test logic
-}
-```
-
-#### 2. Integration Tests (`tests/RapidCluster.Integration.Tests/`)
-
-End-to-end tests using real networking (gRPC over HTTP/2).
-
-**Key Classes:**
-- `TestCluster` - Manages node lifecycle, port allocation, logging
-- `TestClusterPortAllocator` - Allocates unique ports for test isolation
-
-**Patterns:**
-- Use `TestCluster` helper to create and manage nodes
-- Use `WaitForClusterSizeAsync()` for convergence checks
-- Tests implement `IAsyncDisposable` for cleanup
-- Logs are written to files and attached to test context
-
-**Example:**
-```csharp
-public sealed class ClusterIntegrationTests(ITestOutputHelper outputHelper) : IAsyncDisposable
-{
-    private readonly TestCluster _cluster = new(outputHelper);
-
-    [Fact]
-    public async Task ThreeNodesFormCluster()
-    {
-        var (seedApp, seed) = await _cluster.CreateSeedNodeAsync(seedAddress, TestContext.Current.CancellationToken);
-        var (joiner1App, joiner1) = await _cluster.CreateJoinerNodeAsync(joiner1Address, seedAddress, TestContext.Current.CancellationToken);
-        await TestCluster.WaitForClusterSizeAsync(seed, 3, TimeSpan.FromSeconds(10));
-    }
-}
-```
-
-#### 3. Simulation Tests (`tests/RapidCluster.Simulation.Tests/`)
-
-Deterministic tests using the **Clockwork** framework (`src/Clockwork/`). These tests control all sources of non-determinism (time, randomness, network) for reproducible distributed system testing.
-
-**Key Classes:**
-- `RapidSimulationCluster` - Main test harness extending `SimulationCluster<T>`
-- `RapidSimulationNode` - Simulated cluster node
-- `SimulationNetwork` - In-memory network with fault injection
-- `ChaosInjector` - Automated fault injection (crashes, partitions)
-- `InvariantChecker` - Validates cluster invariants
-
-**Clockwork Features:**
-- **Deterministic execution**: Same seed produces identical results
-- **Controlled time**: No real delays, time advances instantly
-- **Network simulation**: Partitions, message drops, latency injection
-- **Chaos testing**: Random fault injection with safety constraints
-
-**Patterns:**
-- Tests implement `IAsyncLifetime` with harness setup/teardown
-- Use fixed seeds for reproducibility (e.g., `const int TestSeed = 12345`)
-- Use `_harness.Run()` to drive async operations to completion
-- Use `_harness.WaitForConvergence()` for cluster state assertions
-- Use `_harness.RunForDuration()` to advance simulated time
-
-**Example:**
-```csharp
-public sealed class ClusterBasicTests : IAsyncLifetime
-{
-    private RapidSimulationCluster _harness = null!;
-    private const int TestSeed = 12345;
-
-    public ValueTask InitializeAsync()
-    {
-        _harness = new RapidSimulationCluster(seed: TestSeed);
-        return ValueTask.CompletedTask;
-    }
-
-    [Fact]
-    public void ThreeNodeClusterFormation()
-    {
-        var nodes = _harness.CreateCluster(size: 3);
-        Assert.All(nodes, node => Assert.Equal(3, node.MembershipSize));
-    }
-
-    [Fact]
-    public void InvariantsHoldUnderChaos()
-    {
-        var nodes = _harness.CreateCluster(size: 3);
-        var chaos = new ChaosInjector(_harness);
-        chaos.PartitionRate = 0.02;
-        chaos.RunChaos(steps: 20);
-        
-        var checker = new InvariantChecker(_harness);
-        Assert.True(checker.CheckAll());
-    }
-}
-```
-
-#### 4. Property-Based Tests (using CsCheck)
-
-Tests that verify properties hold across many randomly generated inputs. Uses the [CsCheck](https://github.com/AnthonyLloworthy/CsCheck) library.
-
-**Patterns:**
-- Use `Gen.*` to create data generators
-- Use `.Sample()` to run property checks
-- Properties should return `bool` indicating if the property holds
-- Create custom generators for domain types (e.g., `GenUniqueNodes`)
-
-**Example:**
-```csharp
-using CsCheck;
-
-[Fact]
-public void Property_CompareTo_Is_Transitive()
-{
-    Gen.Select(Gen.Int[0, 100], Gen.Int[0, 100], Gen.Int[0, 100],
-               Gen.Int[0, 100], Gen.Int[0, 100], Gen.Int[0, 100])
-        .Sample((r1, n1, r2, n2, r3, n3) =>
-        {
-            var rank1 = new Rank { Round = r1, NodeIndex = n1 };
-            var rank2 = new Rank { Round = r2, NodeIndex = n2 };
-            var rank3 = new Rank { Round = r3, NodeIndex = n3 };
-
-            // If rank1 <= rank2 and rank2 <= rank3, then rank1 <= rank3
-            if (rank1.CompareTo(rank2) <= 0 && rank2.CompareTo(rank3) <= 0)
-            {
-                return rank1.CompareTo(rank3) <= 0;
-            }
-            return true;
-        });
-}
-
-// Custom generator for unique nodes
-private static Gen<(int[], int[], long[])> GenUniqueNodes(int minCount, int maxCount) =>
-    Gen.Int[minCount, maxCount].SelectMany(count =>
-        Gen.Select(
-            Gen.Int[1, 255].Array[count].Where(a => a.Distinct().Count() == count),
-            Gen.Int[1000, 65535].Array[count],
-            Gen.Long.Array[count].Where(a => a.Distinct().Count() == count)));
-```
-
-### Testing Guidelines
-
-1. **New features should have multiple test types**: Unit tests for logic, simulation tests for distributed behavior, integration tests for real networking, and property-based tests for invariants.
-
-2. **Simulation tests are preferred** for distributed protocol testing because they are:
-   - Deterministic and reproducible
-   - Fast (no real I/O delays)
-   - Comprehensive (can test edge cases like partitions)
-
-3. **Use fixed, meaningful seeds** so failures reproduce directly from the test source.
-
-4. **Test naming**: Use underscores in test names for readability (e.g., `Property_CompareTo_Is_Transitive`).
-
-5. **Invariant checking**: Use `InvariantChecker` in simulation tests to verify safety properties under chaos.
-
-## Debugging Tips
-- **Log files**: Simulation tests produce log files that can be very large (multi-MB). When reading log files, always use tools to limit the amount of text read at once (e.g., `Get-Content -Tail 100` or `Get-Content -Head 100` in PowerShell, or use offset/limit parameters with Read tool).
+CI owns verification. Release runs on main changes to the canonical version file or manual dispatch, builds the three package projects and pushes their packages to NuGet. It does not depend on CI, poll feed indexing or run qualification tests; this separation is the owner's explicit instruction. A push or a local package is not delivery. Update consumers only after the published package is available; run their focused checks and preserve their own policies. Never bypass branch protections or publish an intermediate repair while known defects remain in the batch.

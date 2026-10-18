@@ -12,32 +12,36 @@
     <PackageVersion Include="ErrorProne.NET.Structs" Version="0.6.1-beta.1" />
     <PackageVersion Include="Roslynator.Analyzers" Version="4.12.11" />
     <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
+    <PackageVersion Include="Microsoft.Orleans.Server" Version="10.4.0" />
+    <PackageVersion Include="Microsoft.Orleans.Client" Version="10.4.0" />
+    <PackageVersion Include="Microsoft.Orleans.Sdk" Version="10.4.0" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="2.0.2" />
     <!-- Core packages -->
     <PackageVersion Include="CsCheck" Version="4.5.0" />
-    <PackageVersion Include="Google.Protobuf" Version="3.33.2" />
-    <PackageVersion Include="Grpc.AspNetCore" Version="2.71.0" />
+    <PackageVersion Include="Google.Protobuf" Version="3.36.1" />
+    <PackageVersion Include="Grpc.AspNetCore" Version="2.84.0" />
     <PackageVersion Include="Grpc.Core" Version="2.46.6" />
-    <PackageVersion Include="Grpc.Net.Client" Version="2.71.0" />
-    <PackageVersion Include="Grpc.Tools" Version="2.76.0" />
+    <PackageVersion Include="Grpc.Net.Client" Version="2.84.0" />
+    <PackageVersion Include="Grpc.Tools" Version="2.84.0" />
     <PackageVersion Include="MartinCostello.Logging.XUnit.v3" Version="0.7.0" />
-    <PackageVersion Include="MessagePack" Version="2.5.302" />
-    <PackageVersion Include="MessagePack.Annotations" Version="2.5.302" />
-    <PackageVersion Include="Microsoft.Extensions.Diagnostics" Version="10.0.1" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.1" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
+    <PackageVersion Include="MessagePack" Version="3.1.12" />
+    <PackageVersion Include="MessagePack.Annotations" Version="3.1.12" />
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.1.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.1" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.13" />
     <PackageVersion Include="System.CommandLine" Version="2.0.1" />
-    <PackageVersion Include="System.IO.Hashing" Version="10.0.1" />
+    <PackageVersion Include="System.IO.Hashing" Version="10.0.13" />
     <PackageVersion Include="System.Reactive" Version="6.1.0" />
     <PackageVersion Include="xunit.analyzers" Version="1.26.0" />
     <PackageVersion Include="xunit.v3.mtp-v2" Version="3.2.1" />
     <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.1.0" />
     <!-- Aspire packages -->
-    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.0.2" />
-    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.0.2" />
-    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.1.0" />
-    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.1.0" />
+    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.6.1" />
+    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.6.1" />
+    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.11.0" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.11.0" />
     <!-- OpenTelemetry packages -->
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />

@@ -1,75 +1,84 @@
 <Project>
-
-	<PropertyGroup>
-		<Authors>Reuben Bond</Authors>
-		<Copyright>Reuben Bond</Copyright>
-		<RepositoryType>git</RepositoryType>
-		<PublishRepositoryUrl>true</PublishRepositoryUrl>
-	</PropertyGroup>
-
-	<PropertyGroup>
-		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
-		<LangVersion>preview</LangVersion>
-		<Features>strict</Features>
-		<!-- Use latest warning level to catch all diagnostics -->
-		<WarningLevel>9999</WarningLevel>
-		<AnalysisLevel>preview</AnalysisLevel>
-		<AnalysisMode>All</AnalysisMode>
-		<EmbedUntrackedSources>true</EmbedUntrackedSources>
-		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
-		<DebugType>embedded</DebugType>
-		<IncludePackageReferencesDuringMarkupCompilation>true</IncludePackageReferencesDuringMarkupCompilation>
-		<IncludeSymbols>false</IncludeSymbols>
-		<IncludeSource>false</IncludeSource>
-		<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-		<GenerateDocumentationFile>true</GenerateDocumentationFile>
-		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-		<!-- Suppress missing XML documentation warnings - too noisy for operators/overrides -->
-		<NoWarn>$(NoWarn);CS1591</NoWarn>
-		<!-- Deterministic builds for reproducibility -->
-		<Deterministic>true</Deterministic>
-		<ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
-		<!-- Microsoft Testing Platform configuration -->
-		<UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
-	</PropertyGroup>
-
-	<!-- Global analyzers for all projects -->
-	<ItemGroup>
-		<PackageReference Include="Meziantou.Analyzer">
-			<PrivateAssets>all</PrivateAssets>
-			<IncludeAssets>analyzers</IncludeAssets>
-		</PackageReference>
-		<PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
-			<PrivateAssets>all</PrivateAssets>
-			<IncludeAssets>analyzers</IncludeAssets>
-		</PackageReference>
-		<PackageReference Include="AsyncFixer">
-			<PrivateAssets>all</PrivateAssets>
-			<IncludeAssets>analyzers</IncludeAssets>
-		</PackageReference>
-		<PackageReference Include="ErrorProne.NET.CoreAnalyzers">
-			<PrivateAssets>all</PrivateAssets>
-			<IncludeAssets>analyzers</IncludeAssets>
-		</PackageReference>
-		<PackageReference Include="ErrorProne.NET.Structs">
-			<PrivateAssets>all</PrivateAssets>
-			<IncludeAssets>analyzers</IncludeAssets>
-		</PackageReference>
-		<PackageReference Include="Roslynator.Analyzers">
-			<PrivateAssets>all</PrivateAssets>
-			<IncludeAssets>analyzers</IncludeAssets>
-		</PackageReference>
-		<PackageReference Include="StyleCop.Analyzers">
-			<PrivateAssets>all</PrivateAssets>
-			<IncludeAssets>analyzers</IncludeAssets>
-		</PackageReference>
-	</ItemGroup>
-
-	<!-- StyleCop configuration file -->
-	<ItemGroup>
-		<AdditionalFiles Include="$(MSBuildThisFileDirectory)stylecop.json" Link="stylecop.json" />
-	</ItemGroup>
-
+  <PropertyGroup>
+    <Authors>ManagedCode;Reuben Bond</Authors>
+    <Company>ManagedCode</Company>
+    <Version>10.4.0</Version>
+    <PackageVersion>$(Version)</PackageVersion>
+    <RepositoryUrl>https://github.com/managedcode/Orleans.RapidMembership</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/managedcode/Orleans.RapidMembership</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>logo.png</PackageIcon>
+    <Copyright>Copyright (c) 2025 Reuben Bond; Copyright (c) 2026 ManagedCode SAS</Copyright>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+  </PropertyGroup>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <Features>strict</Features>
+    <!-- Use latest warning level to catch all diagnostics -->
+    <WarningLevel>9999</WarningLevel>
+    <AnalysisLevel>preview</AnalysisLevel>
+    <AnalysisMode>All</AnalysisMode>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <DebugType>embedded</DebugType>
+    <IncludePackageReferencesDuringMarkupCompilation>true</IncludePackageReferencesDuringMarkupCompilation>
+    <IncludeSymbols>false</IncludeSymbols>
+    <IncludeSource>false</IncludeSource>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Suppress missing XML documentation warnings - too noisy for operators/overrides -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- Deterministic builds for reproducibility -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <!-- Microsoft Testing Platform configuration -->
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)LICENSE" Pack="true" PackagePath="/" />
+    <None Include="$(MSBuildThisFileDirectory)NOTICE" Pack="true" PackagePath="/" />
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="/" />
+    <None Include="$(MSBuildThisFileDirectory)logo.png" Pack="true" PackagePath="/" />
+  </ItemGroup>
+  <!-- Global analyzers for all projects -->
+  <ItemGroup>
+    <PackageReference Include="Meziantou.Analyzer">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="AsyncFixer">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="ErrorProne.NET.CoreAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="ErrorProne.NET.Structs">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Roslynator.Analyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="StyleCop.Analyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <!-- StyleCop configuration file -->
+  <ItemGroup>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)stylecop.json" Link="stylecop.json" />
+  </ItemGroup>
 </Project>

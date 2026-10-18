@@ -99,17 +99,10 @@ internal sealed partial class RapidClusterLifecycleService(
 
             LogStarted();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            if (ex is OperationCanceledException && cancellationToken.IsCancellationRequested)
-            {
-                // Ignore
-            }
-            else
-            {
-                LogError(ex);
-                throw;
-            }
+            LogError(ex);
+            throw;
         }
     }
 }

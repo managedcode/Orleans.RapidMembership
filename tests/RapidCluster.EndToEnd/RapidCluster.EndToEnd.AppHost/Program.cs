@@ -6,7 +6,7 @@ const int clusterSize = 5;
 
 // Create a unique bootstrap file path for this test run
 // All nodes will use this file to coordinate bootstrap
-var bootstrapFilePath = Path.Combine(Path.GetTempPath(), $"rapidcluster-e2e-{Guid.NewGuid():N}.json");
+var bootstrapFilePath = Path.GetFullPath(Path.Combine(builder.AppHostDirectory, "..", "..", "..", "artifacts", "rapid-aspire", $"bootstrap-{Guid.NewGuid():N}.json"));
 
 // Create individual cluster node resources instead of replicas
 // This allows each node to have references to all other nodes for peer discovery

@@ -31,8 +31,6 @@ namespace RapidCluster.Simulation.Tests.Infrastructure;
 internal sealed partial class RapidSimulationCluster : IAsyncDisposable
 {
     internal static readonly DateTimeOffset DefaultStartTime = DateTimeOffset.UnixEpoch;
-
-    private readonly SimulationCluster _cluster;
     private readonly SimulationLogManager _logManager;
     private readonly SimulationHarnessLogger _log;
     private readonly Dictionary<string, SimulationNodeContext> _nodeContexts = [];
@@ -53,7 +51,7 @@ internal sealed partial class RapidSimulationCluster : IAsyncDisposable
     /// </param>
     public RapidSimulationCluster(int seed, DateTimeOffset? startTime = null)
     {
-        _cluster = new SimulationCluster(
+        ClockworkCluster = new SimulationCluster(
             seed,
             startTime ?? DefaultStartTime,
             cancellationToken: TestContext.Current.CancellationToken);
@@ -84,47 +82,47 @@ internal sealed partial class RapidSimulationCluster : IAsyncDisposable
     /// <summary>
     /// Gets the seed used for deterministic simulation.
     /// </summary>
-    public int Seed => _cluster.Seed;
+    public int Seed => ClockworkCluster.Seed;
 
     /// <summary>
     /// Gets the root random source.
     /// </summary>
-    public SimulationRandom Random => _cluster.Random;
+    public SimulationRandom Random => ClockworkCluster.Random;
 
     /// <summary>
     /// Gets the deterministic seed authority.
     /// </summary>
-    public SimulationSeedAuthority SeedAuthority => _cluster.SeedAuthority;
+    public SimulationSeedAuthority SeedAuthority => ClockworkCluster.SeedAuthority;
 
     /// <summary>
     /// Gets the shared time provider.
     /// </summary>
-    public TimeProvider TimeProvider => _cluster.TimeProvider;
+    public TimeProvider TimeProvider => ClockworkCluster.TimeProvider;
 
     /// <summary>
     /// Gets the configured simulation start time.
     /// </summary>
-    public DateTimeOffset StartDateTime => _cluster.StartDateTime;
+    public DateTimeOffset StartDateTime => ClockworkCluster.StartDateTime;
 
     /// <summary>
     /// Gets the cluster scheduler lane.
     /// </summary>
-    public SimulationSchedulerLane TaskQueue => _cluster.SchedulerLane;
+    public SimulationSchedulerLane TaskQueue => ClockworkCluster.SchedulerLane;
 
     /// <summary>
     /// Gets the cluster task scheduler.
     /// </summary>
-    public SimulationTaskScheduler TaskScheduler => _cluster.TaskScheduler;
+    public SimulationTaskScheduler TaskScheduler => ClockworkCluster.TaskScheduler;
 
     /// <summary>
     /// Gets the single-threaded simulation guard.
     /// </summary>
-    public SingleThreadedGuard Guard => _cluster.Guard;
+    public SingleThreadedGuard Guard => ClockworkCluster.Guard;
 
     /// <summary>
     /// Gets the underlying Clockwork cluster for Clockwork extensions.
     /// </summary>
-    internal SimulationCluster ClockworkCluster => _cluster;
+    internal SimulationCluster ClockworkCluster { get; }
 
     /// <summary>
     /// Gets active RapidCluster nodes.
@@ -141,8 +139,8 @@ internal sealed partial class RapidSimulationCluster : IAsyncDisposable
     /// </summary>
     public TimeSpan MaxSimulatedTimeAdvance
     {
-        get => _cluster.MaxSimulatedTimeAdvance;
-        set => _cluster.MaxSimulatedTimeAdvance = value;
+        get => ClockworkCluster.MaxSimulatedTimeAdvance;
+        set => ClockworkCluster.MaxSimulatedTimeAdvance = value;
     }
 
     /// <summary>
@@ -237,7 +235,7 @@ internal sealed partial class RapidSimulationCluster : IAsyncDisposable
     /// <summary>
     /// Creates a deterministic random stream derived from the harness seed.
     /// </summary>
-    public SimulationRandom ForkRandom() => _cluster.ForkRandom();
+    public SimulationRandom ForkRandom() => ClockworkCluster.ForkRandom();
 
     /// <summary>
     /// Runs until a condition is met or the fixed iteration budget is exhausted.
@@ -246,7 +244,7 @@ internal sealed partial class RapidSimulationCluster : IAsyncDisposable
         Func<bool> condition,
         int maxIterations = 100_000) =>
         ObserveExecutionResult(
-            _cluster.RunUntil(
+            ClockworkCluster.RunUntil(
                 condition,
                 TestContext.Current.CancellationToken,
                 maxIterations));
@@ -258,7 +256,7 @@ internal sealed partial class RapidSimulationCluster : IAsyncDisposable
         Func<bool> condition,
         AdaptiveExecutionBudget budget) =>
         ObserveExecutionResult(
-            _cluster.RunUntil(
+            ClockworkCluster.RunUntil(
                 condition,
                 budget,
                 TestContext.Current.CancellationToken));
@@ -270,7 +268,7 @@ internal sealed partial class RapidSimulationCluster : IAsyncDisposable
         TimeSpan? maxTimeAdvance = null,
         int maxIterations = 100_000) =>
         ObserveExecutionResult(
-            _cluster.RunUntilIdle(
+            ClockworkCluster.RunUntilIdle(
                 TestContext.Current.CancellationToken,
                 maxTimeAdvance,
                 maxIterations));
@@ -282,7 +280,7 @@ internal sealed partial class RapidSimulationCluster : IAsyncDisposable
         AdaptiveExecutionBudget budget,
         TimeSpan? maxTimeAdvance = null) =>
         ObserveExecutionResult(
-            _cluster.RunUntilIdle(
+            ClockworkCluster.RunUntilIdle(
                 budget,
                 TestContext.Current.CancellationToken,
                 maxTimeAdvance));
@@ -293,7 +291,7 @@ internal sealed partial class RapidSimulationCluster : IAsyncDisposable
     public void RunToCompletion(
         Func<Task> taskFactory,
         int maxIterations = 1_000_000) =>
-        _cluster.RunToCompletion(
+        ClockworkCluster.RunToCompletion(
             taskFactory,
             TestContext.Current.CancellationToken,
             maxIterations);
@@ -304,7 +302,7 @@ internal sealed partial class RapidSimulationCluster : IAsyncDisposable
     public T RunToCompletion<T>(
         Func<Task<T>> taskFactory,
         int maxIterations = 1_000_000) =>
-        _cluster.RunToCompletion(
+        ClockworkCluster.RunToCompletion(
             taskFactory,
             TestContext.Current.CancellationToken,
             maxIterations);
@@ -315,7 +313,7 @@ internal sealed partial class RapidSimulationCluster : IAsyncDisposable
     public void RunToCompletion(
         Func<Task> taskFactory,
         AdaptiveExecutionBudget budget) =>
-        _cluster.RunToCompletion(
+        ClockworkCluster.RunToCompletion(
             taskFactory,
             budget,
             TestContext.Current.CancellationToken);
@@ -326,7 +324,7 @@ internal sealed partial class RapidSimulationCluster : IAsyncDisposable
     public T RunToCompletion<T>(
         Func<Task<T>> taskFactory,
         AdaptiveExecutionBudget budget) =>
-        _cluster.RunToCompletion(
+        ClockworkCluster.RunToCompletion(
             taskFactory,
             budget,
             TestContext.Current.CancellationToken);
@@ -338,7 +336,7 @@ internal sealed partial class RapidSimulationCluster : IAsyncDisposable
         TimeSpan duration,
         int maxIterations = 100_000) =>
         ObserveExecutionResult(
-            _cluster.RunFor(
+            ClockworkCluster.RunFor(
                 duration,
                 TestContext.Current.CancellationToken,
                 maxIterations));
@@ -379,7 +377,7 @@ internal sealed partial class RapidSimulationCluster : IAsyncDisposable
         }
         else
         {
-            node = _cluster.AddCustomNode(
+            node = ClockworkCluster.AddCustomNode(
                 networkAddress,
                 context => new RapidSimulationNode(
                     this,
@@ -1029,13 +1027,13 @@ internal sealed partial class RapidSimulationCluster : IAsyncDisposable
 
             if (nodes.Count > 0)
             {
-                _cluster.RunToCompletion(
+                ClockworkCluster.RunToCompletion(
                     () => Task.WhenAll(nodes.Select(node => node.DisposeAsync().AsTask())),
                     CancellationToken.None);
             }
 
             _nodes.Clear();
-            await _cluster.DisposeAsync();
+            await ClockworkCluster.DisposeAsync();
         }
         finally
         {

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><IsPackable>false</IsPackable><TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3.mtp-v2" />
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" />
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+    <PackageReference Include="Aspire.Hosting.Testing" />
+    <Using Include="Xunit" />
+    <ProjectReference Include="../ManagedCode.Orleans.RapidMembership.Node/ManagedCode.Orleans.RapidMembership.Node.csproj" />
+    <ProjectReference Include="../../src/ManagedCode.Orleans.RapidMembership/ManagedCode.Orleans.RapidMembership.csproj" />
+    <ProjectReference Include="../ManagedCode.Orleans.RapidMembership.AppHost/ManagedCode.Orleans.RapidMembership.AppHost.csproj" />
+  </ItemGroup>
+</Project>

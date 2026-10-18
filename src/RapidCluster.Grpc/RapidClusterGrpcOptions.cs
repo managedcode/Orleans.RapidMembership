@@ -21,6 +21,9 @@ public sealed class RapidClusterGrpcOptions
     /// </remarks>
     public bool UseHttps { get; set; }
 
+    /// <summary>Gets the metadata sent with every peer request.</summary>
+    public Dictionary<string, string> RequestHeaders { get; } = [with(StringComparer.Ordinal)];
+
     /// <summary>
     /// Gets or sets an optional callback for validating remote HTTPS certificates.
     /// </summary>
@@ -34,4 +37,7 @@ public sealed class RapidClusterGrpcOptions
     /// Gets or sets the timeout for gRPC requests. Default: 10 seconds.
     /// </summary>
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>Gets or sets the deadline for join requests that await membership consensus.</summary>
+    public TimeSpan JoinTimeout { get; set; } = TimeSpan.FromSeconds(10);
 }
