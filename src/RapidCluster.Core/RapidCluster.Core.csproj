@@ -1,38 +1,29 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
-<PropertyGroup>
-		<Description>RapidCluster - A distributed membership service for .NET. Fast, scalable, and stable failure detection and membership tracking for distributed systems.</Description>
-		<RootNamespace>RapidCluster</RootNamespace>
-		<PackageId>ManagedCode.Orleans.RapidMembership.Protocol</PackageId>
-
-		<PackageTags>distributed-systems;membership;failure-detection;consensus;cluster;microservices;grpc;paxos</PackageTags>
-		<PackageReadmeFile>README.md</PackageReadmeFile>
-	</PropertyGroup>
-
-	<ItemGroup>
-		<InternalsVisibleTo Include="RapidCluster.Grpc" />
-		<InternalsVisibleTo Include="RapidCluster.Unit.Tests" />
-		<InternalsVisibleTo Include="RapidCluster.Integration.Tests" />
-		<InternalsVisibleTo Include="RapidCluster.Simulation.Tests" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<PackageReference Include="Google.Protobuf" />
-		<PackageReference Include="Grpc.Tools">
-			<PrivateAssets>all</PrivateAssets>
-			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-		</PackageReference>
-		<PackageReference Include="Microsoft.Extensions.Diagnostics" />
-		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
-		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-		<PackageReference Include="System.IO.Hashing" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<Protobuf Include="Protos\rapid_types.proto" GrpcServices="None" />
-	</ItemGroup>
-
-	<ItemGroup>
-	</ItemGroup>
-
+  <PropertyGroup>
+    <Description>RAPID group membership protocol from Reuben Bond’s RapidCluster, used by ManagedCode.Orleans.RapidMembership.</Description>
+    <RootNamespace>RapidCluster</RootNamespace>
+    <PackageId>ManagedCode.Orleans.RapidMembership.Protocol</PackageId>
+    <PackageTags>dotnet;orleans;rapid;membership;failure-detection;consensus;paxos;managedcode</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="RapidCluster.Grpc" />
+    <InternalsVisibleTo Include="RapidCluster.Unit.Tests" />
+    <InternalsVisibleTo Include="RapidCluster.Integration.Tests" />
+    <InternalsVisibleTo Include="RapidCluster.Simulation.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Tools">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Diagnostics" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="System.IO.Hashing" />
+  </ItemGroup>
+  <ItemGroup>
+    <Protobuf Include="Protos\rapid_types.proto" GrpcServices="None" />
+  </ItemGroup>
 </Project>

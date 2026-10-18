@@ -16,9 +16,9 @@ _ = builder.Host.UseOrleans(silo =>
         builder.Configuration.GetValue<int>("GATEWAY_PORT"));
     _ = silo.Configure<ClusterMembershipOptions>(membership =>
     {
-        membership.ProbeTimeout = TimeSpan.FromSeconds(1);
-        membership.TableRefreshTimeout = TimeSpan.FromSeconds(1);
-        membership.IAmAliveTablePublishTimeout = TimeSpan.FromSeconds(1);
+        membership.ProbeTimeout = TimeSpan.FromSeconds(5);
+        membership.TableRefreshTimeout = TimeSpan.FromSeconds(5);
+        membership.IAmAliveTablePublishTimeout = TimeSpan.FromSeconds(30);
     });
     _ = silo.UseRapidMembership(options =>
     {
@@ -30,6 +30,7 @@ _ = builder.Host.UseOrleans(silo =>
         options.PeerTimeout = TimeSpan.FromSeconds(5);
     });
 });
+_ = builder.Services.Configure<Microsoft.Extensions.Hosting.HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromMinutes(3));
 var app = builder.Build();
 _ = app.MapGet("/state", async (RapidMembershipTable table, global::Orleans.Runtime.ILocalSiloDetails details, CancellationToken cancellationToken) =>
 {
@@ -48,4 +49,13 @@ _ = app.MapGet("/state", async (RapidMembershipTable table, global::Orleans.Runt
     };
 });
 _ = app.MapGet("/echo/{value}", (string value, IGrainFactory grains) => grains.GetGrain<IProbeGrain>("probe").Echo(value));
+_ = app.MapPost("/shutdown", (HttpContext context, IHostApplicationLifetime lifetime) =>
+{
+    context.Response.OnCompleted(() =>
+    {
+        lifetime.StopApplication();
+        return Task.CompletedTask;
+    });
+    return Results.Accepted();
+});
 app.Run();

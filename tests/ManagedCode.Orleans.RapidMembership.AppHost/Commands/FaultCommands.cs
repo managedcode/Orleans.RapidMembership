@@ -10,6 +10,7 @@ internal static class FaultCommands
 {
     public static void Apply(IResourceBuilder<ProjectResource> node)
     {
+        _ = node.WithHttpCommand("/shutdown", "Gracefully stop test silo", endpointName: "http", commandName: "shutdown");
         _ = node.WithCommand("crash", "Crash test silo", async context =>
         {
             var notifications = context.Services.GetRequiredService<ResourceNotificationService>();

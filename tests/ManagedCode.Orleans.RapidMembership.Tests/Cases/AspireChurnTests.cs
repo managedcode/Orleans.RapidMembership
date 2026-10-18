@@ -10,6 +10,30 @@ namespace ManagedCode.Orleans.RapidMembership.Tests.Cases;
 
 public sealed class AspireChurnTests(ITestOutputHelper output)
 {
+    [Fact]
+    public async Task RealSiloShutdownJoinsZeroExitAndRestartRecoversExternalClients()
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(3));
+        var token = timeout.Token;
+        await using var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.ManagedCode_Orleans_RapidMembership_AppHost>(
+            ["--DcpPublisher:RandomizePorts=false", "--TestCluster:Nodes=4"], token);
+        _ = builder.Services.AddLogging(logging => logging.SetMinimumLevel(LogLevel.Warning));
+        await using var app = await builder.BuildAsync(token);
+        await app.StartAsync(token);
+        await using var evidence = new ChurnEvidence(output, app);
+        var cluster = new AspireChurnCluster(app, evidence.Write);
+        await cluster.ChangeAsync([3], "resource-start", token);
+        _ = await cluster.ConvergeAsync([0, 1, 2, 3], token);
+        await using var clients = new ContinuousClients();
+        await clients.StartAsync(await cluster.EnvironmentAsync(token), token);
+        await CheckAsync("graceful-initial-4", [0, 1, 2, 3], cluster, clients, token);
+        await cluster.ChangeAsync([3], "shutdown", token);
+        await CheckAsync("graceful-surviving-3", [0, 1, 2], cluster, clients, token);
+        await cluster.ChangeAsync([3], "resource-start", token);
+        await CheckAsync("graceful-return-4", [0, 1, 2, 3], cluster, clients, token);
+    }
+
     [Fact, Trait("Category", "Scale")]
     public async Task FiftyRealSilosRecoverFromZeroAndConcurrentChurnWithContinuousClients()
     {
@@ -49,7 +73,7 @@ public sealed class AspireChurnTests(ITestOutputHelper output)
         await CheckAsync("cold-return-10", [.. Enumerable.Range(0, 10)], cluster, clients, token);
         await cluster.ChangeAsync(Enumerable.Range(10, 40), "resource-start", token);
         await CheckAsync("grow-50", [.. Enumerable.Range(0, 50)], cluster, clients, token);
-        await cluster.ChangeAsync(Enumerable.Range(25, 25), "resource-stop", token);
+        await cluster.ChangeAsync(Enumerable.Range(25, 25), "shutdown", token);
         await CheckAsync("graceful-to-25", [.. Enumerable.Range(0, 25)], cluster, clients, token);
         await cluster.ChangeAsync(Enumerable.Range(25, 25), "resource-start", token);
         await CheckAsync("graceful-return-50", [.. Enumerable.Range(0, 50)], cluster, clients, token);

@@ -771,8 +771,8 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
             },
         }, TestContext.Current.CancellationToken);
 
-        // Allow event loop to process without advancing time
-        await WaitForEventProcessingAsync();
+        // Observe actual classic-round delivery without advancing virtual time.
+        await broadcaster.ClassicRoundStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         // Should have started classic round IMMEDIATELY
         Assert.Contains(broadcasted,
@@ -941,18 +941,29 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
     /// </summary>
     private sealed class SingleFailureCapturingBroadcaster(ConcurrentQueue<RapidClusterRequest> broadcasted, Endpoint failedEndpoint) : IBroadcaster
     {
+        public TaskCompletionSource ClassicRoundStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public void SetMembership(IReadOnlyList<Endpoint> membership) { }
 
-        public void Broadcast(RapidClusterRequest request, CancellationToken cancellationToken) => broadcasted.Enqueue(request);
+        public void Broadcast(RapidClusterRequest request, CancellationToken cancellationToken) => Capture(request);
 
         public void Broadcast(RapidClusterRequest request, Rank? rank, BroadcastFailureCallback? onDeliveryFailure, CancellationToken cancellationToken)
         {
-            broadcasted.Enqueue(request);
+            Capture(request);
 
             // Report a single delivery failure for fast round
             if (rank is { Round: 1 })
             {
                 onDeliveryFailure?.Invoke(failedEndpoint, rank);
+            }
+        }
+
+        private void Capture(RapidClusterRequest request)
+        {
+            broadcasted.Enqueue(request);
+            if (request.ContentCase == RapidClusterRequest.ContentOneofCase.Phase1AMessage)
+            {
+                _ = ClassicRoundStarted.TrySetResult();
             }
         }
     }

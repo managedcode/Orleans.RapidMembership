@@ -22,6 +22,18 @@ internal sealed class AspireChurnCluster(DistributedApplication app, Action<stri
                 {
                     await app.ResourceNotifications.WaitForResourceAsync(Name(index), KnownResourceStates.Running, token);
                 }
+
+                if (command == "shutdown")
+                {
+                    while (!app.ResourceNotifications.TryGetCurrentState(Name(index), out var state)
+                        || state.Snapshot.State?.Text is not ("Exited" or "Finished"))
+                    {
+                        await Task.Delay(100, token);
+                    }
+
+                    Assert.True(app.ResourceNotifications.TryGetCurrentState(Name(index), out var exited));
+                    Assert.Equal(0, exited.Snapshot.ExitCode);
+                }
             });
     }
 

@@ -64,6 +64,7 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
 
     private MembershipView _membershipView = MembershipView.Empty;
     private int _disposed;
+    private int _stopRequested;
 
     // Fields used by consensus protocol
     private bool _announcedProposal;
@@ -1726,7 +1727,7 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
     /// </summary>
     private async Task RejoinClusterAsync(CancellationToken cancellationToken)
     {
-        if (_isRejoining || _disposed != 0)
+        if (_isRejoining || _disposed != 0 || Volatile.Read(ref _stopRequested) != 0)
         {
             _log.RejoinSkipped(_myAddr);
             return;
@@ -2408,8 +2409,8 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
     {
         _log.Stopping();
 
-        // Cancel any ongoing consensus immediately to avoid waiting for round timeouts
-        _consensusInstance?.Cancel();
+        // Remain a consensus participant until the departure is learned or bounded shutdown expires.
+        Volatile.Write(ref _stopRequested, 1);
 
         // Stop all failure detectors immediately to prevent probe noise during shutdown
         foreach (var fd in _failureDetectors)
@@ -2428,10 +2429,28 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
             var observers = _membershipView.GetObserversOf(_myAddr);
             _log.LeavingWithObservers(_myAddr, observers.Length, observers);
 
+            using var deadline = new CancellationTokenSource(_options.LeaveMessageTimeout, _sharedResources.TimeProvider);
+            using var leaving = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
             var leaveTasks = observers.Select(endpoint =>
-                _messagingClient.SendMessageBestEffortAsync(endpoint, leave, cancellationToken));
+                _messagingClient.SendMessageBestEffortAsync(endpoint, leave, leaving.Token));
 
-            _ = await Task.WhenAll(leaveTasks).WaitAsync(_options.LeaveMessageTimeout, _sharedResources.TimeProvider, cancellationToken);
+            _ = await Task.WhenAll(leaveTasks).WaitAsync(leaving.Token);
+            if (_membershipView.Size > 1)
+            {
+                await using var updates = _viewAccessor.Updates.GetAsyncEnumerator(leaving.Token);
+                while (await updates.MoveNextAsync())
+                {
+                    if (!updates.Current.IsHostPresent(_myAddr))
+                    {
+                        break;
+                    }
+                }
+
+                if (deadline.IsCancellationRequested && _membershipView.IsHostPresent(_myAddr))
+                {
+                    _log.TimeoutWhileLeaving();
+                }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -2447,7 +2466,9 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
             _log.NodeAlreadyRemoved();
         }
 
-        // Cancel background tasks
+        _consensusInstance?.Cancel();
+
+        // Cancel background tasks after departure participation has ended.
         await _stoppingCts.CancelAsync();
 
         // Wait for background tasks to complete
