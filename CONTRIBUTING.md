@@ -27,6 +27,8 @@ python3 eng/test-simulations.py --workers 2
 dotnet run --project tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests --configuration Release --no-build -- --timeout 600s --output Detailed --report-trx --results-directory artifacts/tests/aspire
 ```
 
+Coverage settings explicitly select static managed instrumentation with restoration on every platform. No product/generated sources are excluded.
+
 Add `--coverage --coverage-settings eng/coverage.config.xml --coverage-output-format cobertura --coverage-output membership.cobertura.xml` to a non-scale native test run for original coverage evidence. Run `python3 eng/verify-coverage.py artifacts/tests/membership/membership.cobertura.xml`: the complete provider assembly requires 80% line / 70% branch, and every listed critical source file requires 90% line. The gate retains its original report hash and does not exclude generated or product code. Scale tests start up to fifty real silo processes and four continuing Orleans clients; allow enough CPU and memory and avoid overlapping heavyweight build/test lanes. AppHost owns each process and teardown. The separate CI scale job owns scale qualification; Release runs independently.
 
 Simulations run the Clockwork-instrumented closure through the runner, which checks every discovered case against native TRX. `--group` is for focused diagnosis only; complete qualification runs without a group filter. Keep failure artifacts and seeds. Never suppress a failed case or reduce its assertions to pass a gate.

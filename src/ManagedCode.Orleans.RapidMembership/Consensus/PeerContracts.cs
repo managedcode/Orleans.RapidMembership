@@ -19,6 +19,9 @@ internal enum PeerAction
     Prepare,
     Accept,
     Commit,
+    Describe,
+    FreezeConfiguration,
+    InstallConfiguration,
 }
 
 [GenerateSerializer]
@@ -64,6 +67,14 @@ internal sealed class PeerRequest
     [Id(2)] public Ballot Ballot { get; set; }
 
     [Id(3)] public MembershipSnapshot? Snapshot { get; set; }
+
+    [Id(4)] public CoordinationConfiguration? Configuration { get; set; }
+
+    [Id(5)] public CoordinationConfiguration? PreviousConfiguration { get; set; }
+
+    [Id(6)] public System.Collections.Immutable.ImmutableArray<FrozenReplica> FrozenReplicas { get; set; } = [];
+
+    [Id(7)] public Guid Recipient { get; set; }
 }
 
 [GenerateSerializer]
@@ -74,6 +85,14 @@ internal sealed class PeerReply
 
     // Inspect/Prepare return complete state; Accept/Commit acknowledge with the current promise only.
     [Id(1)] public AcceptorState State { get; set; } = new();
+
+    [Id(2)] public CoordinationConfiguration? Configuration { get; set; }
+
+    [Id(3)] public CoordinationConfiguration? FrozenFor { get; set; }
+
+    [Id(4)] public Guid Incarnation { get; set; }
+
+    [Id(5)] public CoordinationConfiguration? ObservedConfiguration { get; set; }
 }
 
 [GenerateSerializer]

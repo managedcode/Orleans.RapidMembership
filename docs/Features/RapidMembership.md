@@ -15,7 +15,7 @@ The required provider implements Orleans 10.4 membership and gateway discovery o
 | RM-007 Continuing clients | Four existing clients issue nonce-checked calls through churn, stop succeeding at zero and recover without replacement. |
 | RM-008 Delivery | Retain native upstream and platform/scale gates, original artifacts and one authorized three-package release. Adopt the actual published package in KeyLoad. |
 | RM-009 Automatic discovery | Real UDP discovery finds actual TCP endpoints without configured IPs. External clients observe without becoming servers; disappeared peers expire; foreign clusters/secrets stay isolated. |
-| RM-010 Partition contract | Specify and test one-table/quorum behavior versus independently available partitioned clusters before table integration. This owner decision remains pending. |
+| RM-010 Partition contract | Follow RAPID consistent configurations and majority recovery. Require old/new majorities for atomic table handoff; reject minority writes, stale configurations and forgotten incarnations. Discovery expiry cannot reduce the quorum. |
 
 ## Principal real-process schedule
 

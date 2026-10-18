@@ -9,6 +9,8 @@ The required provider uses automatic peer discovery and keeps membership entirel
 | `Discovery/MulticastDiscovery` | Actual IPv4 multicast announcements, addresses learned from replies, bounded in-memory observations, expiry and joined socket shutdown. Implemented and tested with actual UDP/TCP sockets. |
 | `Discovery/DiscoveryPacket` | Fixed-size authenticated packets, service/cluster isolation and validation. Implemented. |
 | `RapidMembershipTable`, `RapidGatewayListProvider` | Native Orleans adapters. They still use the prior coordination implementation and must be rewired to automatic in-memory membership. |
+| `CoordinationConfiguration`, `ReplicaConfigurationFence`, `ConfigurationHandoff` | Canonical configurations, permanent old-view barriers, accepted/committed-state recovery and old/new quorum checks. Implemented as components; automatic runtime integration is open. |
+| `MemoryMembershipReplica`, `MembershipBallot` | Entirely RAM-backed serialized ballot/table ownership with incarnation fencing, bounded state, repeated-install safety and detached native messages. Implemented as components; automatic runtime integration is open. |
 | Provider consensus/hosting/transport | Atomic native table operations, incarnation identity and peer admission. The former fixed-voter/file-backed prototype is superseded; it must be replaced rather than retained as a second mode. |
 | `RapidCluster.Core`, `RapidCluster.Grpc` | Original upstream RAPID protocol and gRPC transport, with attributed owner repairs and retained native suites. |
 | Microsoft Orleans | Silo statuses, probes, directory, placement, activation lifecycle and real grain execution. |
@@ -23,7 +25,7 @@ Discovery does not provide atomic table CAS, voter reconfiguration or proof that
 
 A complete process loss discards membership state; a fresh group must form on restart. Application grain persistence is separate. A restarted process has a new incarnation and cannot present lost coordination promises as retained state.
 
-The owner decision about partition behavior remains open. A single consistent table cannot acknowledge through arbitrary quorum loss; allowing isolated survivors to form independently changes that contract. Do not select one silently or advertise both guarantees. Bootstrap, membership changes and partition recovery must follow the selected contract before the native adapters are qualified.
+The owner selected RAPID's consistent-configuration protocol. Classic consensus requires a majority. A table transition freezes a majority of the previous configuration, preserves the highest committed/accepted work, and requires installation on a majority of the new configuration before acknowledging table operations. Discovery expiry is not a reconfiguration decision. An isolated minority cannot acknowledge operations by electing itself as the same cluster. Bootstrap, incarnation fencing and actual network handoff still require runtime integration and native-process qualification.
 
 ## Qualification and delivery
 

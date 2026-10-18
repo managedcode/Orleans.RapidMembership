@@ -18,7 +18,7 @@ Microsoft Orleans owns silo lifecycle, status transitions, probes, placement, di
 
 ## Correctness contracts
 
-Preserve atomic native row/version ETags, truthful operation outcomes, bounded history and isolation. A new process incarnation cannot reuse lost coordination promises as though it retained them. Total process loss loses the in-memory membership table. Keep table consistency, bootstrap and partition guarantees explicit; the owner's partition-availability decision is pending, so do not silently weaken atomic CAS or claim arbitrary survivors can continue while also guaranteeing one table across partitions.
+Preserve atomic native row/version ETags, truthful operation outcomes, bounded history and isolation. A new process incarnation cannot reuse lost coordination promises as though it retained them. Total process loss loses the in-memory membership table. Follow RAPID's consistent-configuration protocol: require a majority for classic consensus and both old and new majorities for table handoff. Never shrink a quorum from discovery expiry, silently restart an isolated minority as the same cluster, or let a fresh incarnation reuse forgotten promises. Arbitrary survivors cannot continue without the required coordination quorum.
 
 Validate service/cluster identity and the shared secret before admitting peer work. Keep byte, row, admission, history, time, cancellation and discovery-peer bounds explicit. Do not log secrets or application payloads. No membership state files or directory configuration are permitted. Test reports and diagnostics remain ordinary ignored artifacts. Keep startup, failure and joined shutdown visible at their actual entry points.
 
@@ -50,7 +50,7 @@ The scale gate covers zero, ten, twenty and fifty silos, abrupt and graceful dep
 
 `python3 eng/test-simulations.py --workers 2` discovers the compiled instrumented inventory, executes all native cases in bounded groups, retains every theory row and reconciles original TRX names and outcomes with discovery. Missing, skipped, timed-out or failed cases fail qualification. Preserve reproducible seeds and Clockwork artifacts.
 
-Collect native coverage: changed code must meet 80% line / 70% branch; the sixteen critical provider source files require 90% line coverage through `eng/verify-coverage.py`. Failure, cancellation, concurrent writes and recovery assertions matter more than implementation-mirroring tests. Keep Linux, Windows and macOS CI, Linux scale qualification and CodeQL enabled.
+Collect native coverage: changed code must meet 80% line / 70% branch; the critical provider source files require 90% line coverage through `eng/verify-coverage.py`. Failure, cancellation, concurrent writes and recovery assertions matter more than implementation-mirroring tests. Keep Linux, Windows and macOS CI, Linux scale qualification and CodeQL enabled.
 
 ## Versions and delivery
 

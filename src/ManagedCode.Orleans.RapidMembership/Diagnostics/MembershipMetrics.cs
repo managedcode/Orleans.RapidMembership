@@ -15,6 +15,9 @@ internal static class MembershipMetrics
             PeerAction.Prepare => "prepare",
             PeerAction.Accept => "accept",
             PeerAction.Commit => "commit",
+            PeerAction.Describe => "describe",
+            PeerAction.FreezeConfiguration => "freeze-configuration",
+            PeerAction.InstallConfiguration => "install-configuration",
             _ => "invalid",
         }), new KeyValuePair<string, object?>("granted", granted));
 

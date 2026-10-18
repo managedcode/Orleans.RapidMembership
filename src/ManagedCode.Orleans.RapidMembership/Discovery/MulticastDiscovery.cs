@@ -49,7 +49,7 @@ internal sealed class MulticastDiscovery : IAsyncDisposable
         }
     }
 
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         ObjectDisposedException.ThrowIf(_disposed != 0, this);
@@ -81,8 +81,8 @@ internal sealed class MulticastDiscovery : IAsyncDisposable
             _socket.JoinMulticastGroup(Group, address);
         }
 
+        await AnnounceInterfacesAsync(interfaces, cancellationToken);
         _completion = Task.WhenAll(RunAsync(ReceiveAsync), RunAsync(token => AnnounceAsync(interfaces, token)));
-        return Task.CompletedTask;
     }
 
     private async Task ReceiveAsync(CancellationToken cancellationToken)
@@ -105,21 +105,43 @@ internal sealed class MulticastDiscovery : IAsyncDisposable
 
     private async Task AnnounceAsync(IPAddress[] interfaces, CancellationToken cancellationToken)
     {
-        var destination = new IPEndPoint(Group, _discoveryPort);
         while (true)
         {
-            if (_servicePort > 0)
-            {
-                var packet = _packets.Encode(NodeId, _servicePort, DateTimeOffset.UtcNow);
-                foreach (var address in interfaces)
-                {
-                    _socket!.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, address.GetAddressBytes());
-                    _ = await _socket.SendAsync(packet, destination, cancellationToken);
-                }
-            }
-
+            await AnnounceInterfacesAsync(interfaces, cancellationToken);
             RemoveExpired();
             await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+        }
+    }
+
+    private async Task AnnounceInterfacesAsync(IPAddress[] interfaces, CancellationToken cancellationToken)
+    {
+        if (_servicePort == 0)
+        {
+            return;
+        }
+
+        var packet = _packets.Encode(NodeId, _servicePort, DateTimeOffset.UtcNow);
+        var destination = new IPEndPoint(Group, _discoveryPort);
+        var sent = false;
+        SocketException? lastFailure = null;
+        foreach (var address in interfaces)
+        {
+            try
+            {
+                _socket!.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, address.GetAddressBytes());
+                _ = await _socket.SendAsync(packet, destination, cancellationToken);
+                sent = true;
+            }
+            catch (SocketException exception) when (exception.SocketErrorCode is SocketError.HostUnreachable
+                or SocketError.NetworkUnreachable or SocketError.AddressNotAvailable or SocketError.NetworkDown)
+            {
+                lastFailure = exception;
+            }
+        }
+
+        if (!sent)
+        {
+            throw new InvalidOperationException("No active interface can send multicast discovery announcements.", lastFailure);
         }
     }
 

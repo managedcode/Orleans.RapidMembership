@@ -32,7 +32,7 @@ The provider brings its protocol and transport dependencies transitively. Badges
 - Discover other participants automatically on the reachable local multicast network; do not require users to know their IP addresses.
 - Keep the membership table and coordination state entirely in memory. A complete loss of all processes forms a fresh membership table on restart.
 - Implement native Orleans membership and client gateway discovery. Orleans owns silo status, probing, directory, placement and grain execution.
-- Preserve atomic native row/version operations and describe partition behavior explicitly. Discovery by itself does not decide table consistency or make a disappearing voter quorum safe to shrink.
+- Follow RAPID's consistent configurations and majority recovery. Freeze an old majority and install on a new majority during table handoff; discovery expiry cannot reduce a quorum. A partition without the required quorum cannot acknowledge writes as the same cluster.
 - Retain bounded requests, cancellation, authentication, memory and joined shutdown. Membership state is separate from application grain storage.
 
 The configuration example will be published with the implemented in-memory API. The former IP/directory example has been removed because it does not satisfy this contract.
@@ -42,6 +42,12 @@ The configuration example will be published with the implemented in-memory API. 
 The current discovery module sends cluster-scoped, authenticated UDP multicast beacons on port **11113** by default. It obtains peer addresses from network responses and advertises the actual TCP service port. It stores observations only in RAM, expires departed peers and lets an external client observe without announcing itself as a server. This discovers peers on the participating multicast network; routed networks must actually carry that multicast traffic.
 
 Native socket tests start two real TCP listeners without configuring their IPs, discover them through UDP multicast and exchange nonce bytes with both discovered endpoints. They also check foreign-secret/cluster isolation, invalid packets and expiry after a node stops. These tests qualify discovery, not the unfinished automatic membership-table integration.
+
+## In-memory coordination implemented so far
+
+The RAM replica implements native row snapshots, ballot promises, process-incarnation fencing and old/new configuration handoff. It recovers accepted work, rejects stale or conflicting transfers, preserves promises on repeated installation and bounds requests and retained state. A frozen configuration cannot be retargeted to skip an intermediate configuration.
+
+These components have native serializer and state-transition tests. They are not yet connected to automatic host bootstrap and the silo/client transport; the existing adapters still use the earlier prototype. Real-process qualification of the corrected runtime remains open.
 
 ## Qualification and delivery
 

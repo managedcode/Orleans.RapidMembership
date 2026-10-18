@@ -1,6 +1,6 @@
 # ADR 0001: Automatic, entirely in-memory Orleans membership
 
-Status: Owner-approved requirements; runtime integration and partition decision pending.
+Status: Owner-approved automatic RAM requirements and RAPID consistency decision; runtime integration in progress.
 
 ## Context
 
@@ -12,10 +12,12 @@ Discover participants automatically through local-network UDP multicast and lear
 
 Expose native IMembershipTable and IGatewayListProvider contracts. Microsoft Orleans continues to own silo statuses, probes, directory, placement and grain execution. Keep authentication, cluster identity, bounded memory/requests, cancellation and joined cleanup. Total process loss creates fresh membership on restart; it does not preserve application grain data.
 
-## Open decision
+## Partition and handoff decision
 
-Specify whether network partitions preserve one consistent table by requiring a majority, or permit isolated surviving parts to operate as separate clusters. This determines reconfiguration and whether any arbitrary five survivors of twenty can continue. Discovery alone cannot safely provide both guarantees. Do not weaken atomic native CAS or implement a partition policy without resolving this choice.
+The owner requested the correct RAPID protocol behavior. Preserve one consistent configuration: use RAPID's fast consensus path and classic majority recovery, and require a majority of the old and new coordination configurations during membership-table handoff. Freeze old table proposals before recovering committed/accepted work and installing it in the new configuration. Identify each process incarnation separately; RAM loss cannot preserve a previous vote. Discovery expiry never authorizes a smaller voting group. A partition without the required quorum waits instead of acknowledging independent writes as the same cluster.
+
+These requirements follow sections 3-5 of the [original RAPID paper](https://www.usenix.org/system/files/conference/atc18/atc18-suresh.pdf). RAPID agrees membership views; the provider's separate atomic Orleans table needs the explicit state handoff. A smaller cohosted coordination group trades resilience for overhead; it does not provide arbitrary-survivor availability. Automatic multicast bootstrap is an extension, not an original RAPID guarantee of global discovery across arbitrary networks. Detecting and resolving independently formed cold-start groups remains an explicit qualification concern.
 
 ## Evidence
 
-Two native socket tests prove multicast peer discovery, actual TCP nonce exchange using discovered addresses, client observation, secret/cluster isolation, packet validation and departure expiry. The discovery component is not yet connected to the native membership adapters. Prior fixed-voter process and coverage results do not qualify the corrected provider. See the [work item](../../tasks/in-progress/001_OrleansRapidMembership.md) for current remaining gates.
+Native socket tests prove multicast peer discovery, actual TCP nonce exchange using discovered addresses, client observation, secret/cluster isolation, packet validation and departure expiry. The discovery component and RAM replica/handoff state machine are not yet connected to automatic native membership hosting. A frozen old configuration has exactly one successor; later views must recover that transfer before progressing, rather than reusing old evidence to skip it. Prior fixed-voter process and coverage results do not qualify the corrected provider. See the [work item](../../tasks/in-progress/001_OrleansRapidMembership.md) for current remaining gates.

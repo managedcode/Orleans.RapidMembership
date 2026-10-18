@@ -1,0 +1,165 @@
+using Orleans.Serialization;
+
+namespace ManagedCode.Orleans.RapidMembership.Consensus;
+
+internal sealed class MemoryMembershipReplica(
+    Guid incarnation, string identity, RapidMembershipOptions options,
+    Serializer<PeerRequest> requests, Serializer<PeerReply> replies, Serializer<MembershipSnapshot> snapshots) : IDisposable
+{
+    private readonly SemaphoreSlim _gate = new(1);
+    private readonly ReplicaConfigurationFence _configuration = new(incarnation);
+    private AcceptorState _state = new() { Identity = identity };
+
+    public async Task ObserveAsync(CoordinationConfiguration configuration, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            _configuration.Observe(configuration);
+        }
+        finally
+        {
+            _ = _gate.Release();
+        }
+    }
+
+    // Called only by the host which created a new native RAPID cluster, never through a peer request.
+    public async Task<bool> BootstrapAsync(CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            return _configuration.Bootstrap();
+        }
+        finally
+        {
+            _ = _gate.Release();
+        }
+    }
+
+    public async Task<PeerReply> ExchangeAsync(PeerRequest request, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var input = requests.SerializeToArray(request);
+            RequireBound(input.Length);
+            var detached = requests.Deserialize(input) ?? throw new InvalidDataException("Empty replica request.");
+            var granted = detached.Recipient == incarnation && Apply(detached);
+            Diagnostics.MembershipMetrics.Exchange(detached.Action, granted);
+            var output = replies.SerializeToArray(Reply(detached.Action, granted));
+            RequireBound(output.Length);
+            return replies.Deserialize(output) ?? throw new InvalidDataException("Empty replica reply.");
+        }
+        finally
+        {
+            _ = _gate.Release();
+        }
+    }
+
+    private bool Apply(PeerRequest request)
+    {
+        if (request.Action == PeerAction.Describe)
+        {
+            return true;
+        }
+
+        if (request.Configuration is not { } configuration)
+        {
+            return false;
+        }
+
+        if (request.Action == PeerAction.FreezeConfiguration)
+        {
+            return request.PreviousConfiguration is { } previous && _configuration.Freeze(previous, configuration);
+        }
+
+        if (request.Action == PeerAction.InstallConfiguration)
+        {
+            return request.PreviousConfiguration is { } previous && InstallConfiguration(previous, configuration, request);
+        }
+
+        if (!_configuration.Allows(configuration))
+        {
+            return false;
+        }
+
+        var next = new AcceptorState
+        {
+            Identity = _state.Identity,
+            Committed = _state.Committed,
+            Accepted = _state.Accepted,
+            Promised = _state.Promised,
+            AcceptedBallot = _state.AcceptedBallot,
+        };
+        var granted = MembershipBallot.Apply(next, request);
+        if (granted)
+        {
+            ValidateSnapshot(next.Committed);
+            if (next.Accepted is { } accepted)
+            {
+                ValidateSnapshot(accepted);
+            }
+
+            _state = next;
+        }
+
+        return granted;
+    }
+
+    private bool InstallConfiguration(CoordinationConfiguration previous, CoordinationConfiguration next, PeerRequest request)
+    {
+        if (!_configuration.CanInstall(previous, next))
+        {
+            return false;
+        }
+
+        if (next.Matches(_configuration.Current))
+        {
+            return true;
+        }
+
+        var recovered = ConfigurationHandoff.Recover(previous, next, request.FrozenReplicas, identity, snapshots);
+        ValidateSnapshot(recovered);
+        if (recovered.Index < _state.Committed.Index || recovered.Index == _state.Committed.Index
+            && !MembershipSnapshotEquality.AreEqual(recovered, _state.Committed))
+        {
+            return false;
+        }
+
+        _state = new AcceptorState { Identity = identity, Committed = recovered };
+        _configuration.Installed(previous, next);
+        return true;
+    }
+
+    private PeerReply Reply(PeerAction action, bool granted) => new()
+    {
+        Granted = granted,
+        Incarnation = incarnation,
+        Configuration = _configuration.Current,
+        FrozenFor = _configuration.FrozenFor,
+        ObservedConfiguration = _configuration.Observed,
+        State = granted && action is PeerAction.Describe or PeerAction.FreezeConfiguration or PeerAction.Inspect or PeerAction.Prepare
+            ? _state : new AcceptorState { Promised = _state.Promised },
+    };
+
+    private void ValidateSnapshot(MembershipSnapshot snapshot)
+    {
+        if (snapshot.Table.Members.Count > options.MaximumEntries || snapshot.Outcomes.Count > options.MaximumOperationHistory
+            || snapshots.SerializeToArray(snapshot).Length > options.MaximumSnapshotBytes)
+        {
+            throw new InvalidDataException("The replica snapshot exceeds the configured memory bounds.");
+        }
+    }
+
+    private void RequireBound(int length)
+    {
+        if (length > checked(options.MaximumSnapshotBytes * 3))
+        {
+            throw new InvalidDataException("The replica exchange exceeds the configured byte bound.");
+        }
+    }
+
+    public void Dispose() => _gate.Dispose();
+}
