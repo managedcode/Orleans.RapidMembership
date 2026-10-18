@@ -1,5 +1,7 @@
 # Testing and qualification
 
+The owner requires automatic discovery and entirely in-memory membership. The process/consensus inventory below belongs to the prior fixed-seed prototype until adapted; its old passes do not qualify the corrected runtime. The new MulticastDiscoveryTests use actual UDP discovery and TCP nonce exchanges without configured peer IPs, including isolation and disappearance.
+
 [CONTRIBUTING](../CONTRIBUTING.md) owns executable local commands. [Membership requirements](Features/RapidMembership.md) maps native contracts to cases. CI and Release are independent: CI verifies behavior and coverage; Release builds and pushes packages without waiting for CI or feed indexing.
 
 ## Main acceptance: actual Orleans processes and clients
@@ -25,11 +27,13 @@ AppHost owns startup, native resource commands and shutdown. Crash commands kill
 
 Real HTTP/2 consensus tests cover concurrent CAS, twenty/fifty independent writers, majority-accepted recovery before commit notification, identity/secret rejection, unavailable quorum, bounded history and cancellation. Durable acceptor tests protect promises, snapshot content and restart state. A native gRPC interceptor observes cancellation of an actual unfinished join; the same endpoint must answer a subsequent real request.
 
-Retained upstream unit, network, Clockwork and Aspire suites are distinct gates. Simulations discover every compiled case, retain all theory rows and reconcile native TRX outcomes. The runner verifies original Clockwork instrumentation manifests and application DLL hashes. The native MTP entry remains outside Clockwork's rewrite boundary as required by its build integration. Simulated faults do not substitute for actual silo/client tests.
+Retained upstream unit, network, Clockwork and Aspire suites are distinct gates. Each native simulation group allows thirty minutes with a thirty-one-minute external process bound; the matrix qualification job allows ninety minutes. Simulations discover every compiled case, retain all theory rows and reconcile native TRX outcomes. The runner verifies original Clockwork instrumentation manifests and application DLL hashes. The native MTP entry remains outside Clockwork's rewrite boundary as required by its build integration. Simulated faults do not substitute for actual silo/client tests.
 
 ## Coverage
 
-`eng/verify-coverage.py` reads the original native Cobertura report for `ManagedCode.Orleans.RapidMembership`. The whole assembly requires at least 80% line and 70% branch coverage, including its generated code. Thirteen critical source files each require 90% line coverage. The gate merges line observations for compiler-generated state machines by original source line and retains the input report SHA-256 in `coverage-gate.json`; it removes no executable product code.
+`eng/verify-coverage.py` reads the original native Cobertura report for `ManagedCode.Orleans.RapidMembership`. The whole assembly requires at least 80% line and 70% branch coverage, including its generated code. Sixteen critical source files each require 90% line coverage. The gate merges line observations for compiler-generated state machines by original source line and retains the input report SHA-256 in `coverage-gate.json`; it removes no executable product code.
+
+The native collector configuration enables static managed instrumentation with automatic restoration so small native API members are instrumented before JIT inlining. It adds no source exclusions and changes no threshold. Original reports remain the gate input.
 
 The provider percentage is not the coverage of the upstream protocol, transport, test nodes or an entire distributed process tree. CI retains separate original unit/network reports. Child silo execution is proved by process observations and real grain responses; a parent-process coverage report alone does not establish it.
 

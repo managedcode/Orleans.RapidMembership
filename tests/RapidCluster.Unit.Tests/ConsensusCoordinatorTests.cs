@@ -625,9 +625,8 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
             },
         }, TestContext.Current.CancellationToken);
 
-        // Allow event loop to process without advancing time significantly
-        // (only a few milliseconds to let async processing complete)
-        await WaitForEventProcessingAsync();
+        // Observe actual classic-round delivery without advancing virtual time.
+        await broadcaster.ClassicRoundStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         // Should have started classic round IMMEDIATELY (Phase1a broadcast indicates fallback)
         Assert.Contains(broadcasted,
@@ -822,8 +821,8 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
             },
         }, TestContext.Current.CancellationToken);
 
-        // Allow event loop to process
-        await WaitForEventProcessingAsync();
+        // Await the actual decision rather than assuming a fixed number of scheduler yields is sufficient.
+        _ = await coordinator.Decided.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         Assert.True(coordinator.Decided.IsCompleted);
         Assert.False(coordinator.Decided.IsFaulted);
@@ -899,8 +898,8 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
         // A can get at most 6, B can get at most 6
         // Neither can reach 7, should abandon IMMEDIATELY
 
-        // Allow event loop to process without advancing time
-        await WaitForEventProcessingAsync();
+        // Observe actual classic-round delivery without advancing virtual time.
+        await broadcaster.ClassicRoundStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         // Should have started classic round IMMEDIATELY
         Assert.Contains(broadcasted,
@@ -929,11 +928,22 @@ public class ConsensusCoordinatorTests : IAsyncLifetime
     /// </summary>
     private sealed class NonFailingCapturingBroadcaster(ConcurrentQueue<RapidClusterRequest> broadcasted) : IBroadcaster
     {
+        public TaskCompletionSource ClassicRoundStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public void SetMembership(IReadOnlyList<Endpoint> membership) { }
 
-        public void Broadcast(RapidClusterRequest request, CancellationToken cancellationToken) => broadcasted.Enqueue(request);
+        public void Broadcast(RapidClusterRequest request, CancellationToken cancellationToken) => Capture(request);
 
-        public void Broadcast(RapidClusterRequest request, Rank? rank, BroadcastFailureCallback? onDeliveryFailure, CancellationToken cancellationToken) => broadcasted.Enqueue(request); // No delivery failures reported
+        public void Broadcast(RapidClusterRequest request, Rank? rank, BroadcastFailureCallback? onDeliveryFailure, CancellationToken cancellationToken) => Capture(request);
+
+        private void Capture(RapidClusterRequest request)
+        {
+            broadcasted.Enqueue(request);
+            if (request.ContentCase == RapidClusterRequest.ContentOneofCase.Phase1AMessage)
+            {
+                _ = ClassicRoundStarted.TrySetResult();
+            }
+        }
     }
 
     /// <summary>

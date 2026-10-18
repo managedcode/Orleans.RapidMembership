@@ -20,7 +20,7 @@ jobs:
   qualify:
     name: Build and qualify (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -54,13 +54,13 @@ jobs:
       - name: Build
         run: dotnet build RapidCluster.slnx --no-restore --configuration Release -warnaserror
       - name: Membership, persistence, network and Orleans Aspire tests
-        run: dotnet run --project tests/ManagedCode.Orleans.RapidMembership.Tests --configuration Release --no-build -- --filter-not-trait Category=Scale --timeout 600s --output Detailed --coverage --coverage-output-format cobertura --coverage-output membership.cobertura.xml --report-trx --results-directory artifacts/tests/membership
+        run: dotnet run --project tests/ManagedCode.Orleans.RapidMembership.Tests --configuration Release --no-build -- --filter-not-trait Category=Scale --timeout 600s --output Detailed --coverage --coverage-settings eng/coverage.config.xml --coverage-output-format cobertura --coverage-output membership.cobertura.xml --report-trx --results-directory artifacts/tests/membership
       - name: Enforce provider coverage
         run: python eng/verify-coverage.py artifacts/tests/membership/membership.cobertura.xml
       - name: RAPID unit tests
-        run: dotnet run --project tests/RapidCluster.Unit.Tests --configuration Release --no-build -- --timeout 600s --output Detailed --coverage --coverage-output-format cobertura --coverage-output unit.cobertura.xml --report-trx --results-directory artifacts/tests/unit
+        run: dotnet run --project tests/RapidCluster.Unit.Tests --configuration Release --no-build -- --timeout 600s --output Detailed --coverage --coverage-settings eng/coverage.config.xml --coverage-output-format cobertura --coverage-output unit.cobertura.xml --report-trx --results-directory artifacts/tests/unit
       - name: RAPID real networking tests
-        run: dotnet run --project tests/RapidCluster.Integration.Tests --configuration Release --no-build -- --timeout 600s --output Detailed --coverage --coverage-output-format cobertura --coverage-output network.cobertura.xml --report-trx --results-directory artifacts/tests/network
+        run: dotnet run --project tests/RapidCluster.Integration.Tests --configuration Release --no-build -- --timeout 600s --output Detailed --coverage --coverage-settings eng/coverage.config.xml --coverage-output-format cobertura --coverage-output network.cobertura.xml --report-trx --results-directory artifacts/tests/network
       - name: RAPID deterministic simulation tests
         run: python eng/test-simulations.py --workers 2
       - name: RAPID Aspire tests

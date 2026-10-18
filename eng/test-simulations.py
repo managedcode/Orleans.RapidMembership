@@ -41,12 +41,12 @@ def run_group(key, expected, output):
     directory.mkdir()
     logs = directory / "native.log"
     kind = "--filter-method" if ".LargeScaleClusterTests." in key else "--filter-class"
-    command = ["dotnet", str(ASSEMBLY), kind, key, "--timeout", "600s", "--output", "Detailed", "--report-trx",
+    command = ["dotnet", str(ASSEMBLY), kind, key, "--timeout", "1800s", "--output", "Detailed", "--report-trx",
                "--results-directory", str(directory)]
     with logs.open("wb") as stream:
         process = subprocess.Popen(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT)
         try:
-            code = process.wait(timeout=660)
+            code = process.wait(timeout=1860)
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=30)

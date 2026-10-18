@@ -12,6 +12,7 @@ CRITICAL = (
     "Consensus/PeerContracts.cs", "Storage/VoterStorage.cs", "Operations/MembershipMutations.cs",
     "Operations/RapidGatewayListProvider.cs", "Hosting/MembershipHost.cs", "Transport/PeerTransport.cs",
     "Transport/MembershipPeerService.cs",
+    "Discovery/DiscoveryPacket.cs", "Discovery/DiscoveredPeer.cs", "Discovery/MulticastDiscovery.cs",
 )
 
 

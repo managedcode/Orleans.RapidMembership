@@ -6,9 +6,9 @@ This repository follows [Managed Code AI Framework (MCAF)](https://mcaf.managed-
 
 This is the ManagedCode fork of Reuben Bond's RapidCluster. Preserve the upstream MIT license, copyright, NOTICE, protocol implementation and original test suites. Do not relabel third-party source as an independent ManagedCode invention. Clockwork is an upstream Git submodule; do not modify it to obtain green results.
 
-Microsoft Orleans owns silo lifecycle, status transitions, probes, placement, directory and grain execution. The provider implements native `IMembershipTable` and `IGatewayListProvider`. RAPID observes the fixed seed voters; it never supplies atomic membership-table CAS or replaces the Orleans runtime.
+Microsoft Orleans owns silo lifecycle, status transitions, probes, placement, directory and grain execution. The provider implements native `IMembershipTable` and `IGatewayListProvider`. Peers discover one another automatically through local-network UDP multicast; require no seed IP list, advertised IP or storage directory. All membership and coordination state is in memory. RAPID observation does not by itself supply atomic membership-table CAS or replace the Orleans runtime.
 
-- `src/ManagedCode.Orleans.RapidMembership/`: provider, durable voter storage, majority consensus, admission and hosting.
+- `src/ManagedCode.Orleans.RapidMembership/`: provider, automatic discovery, in-memory coordination, admission and hosting.
 - `src/RapidCluster.Core/`: upstream RAPID protocol and native hosted lifecycle.
 - `src/RapidCluster.Grpc/`: upstream protocol transport.
 - `tests/ManagedCode.Orleans.RapidMembership.{AppHost,Node,Tests}/`: actual silo-process membership qualification.
@@ -18,9 +18,9 @@ Microsoft Orleans owns silo lifecycle, status transitions, probes, placement, di
 
 ## Correctness contracts
 
-Preserve durable promises, accepted values, committed snapshots, atomic native row/version ETags, bounded mutation-outcome history and quorum intersection. A successful acknowledgement requires the actual configured voter majority. Loss of that majority cannot be repaired by changing the voter list or discovering an arbitrary IP. Never convert cancellation, corruption or ambiguous commit outcomes into success or a fabricated CAS rejection.
+Preserve atomic native row/version ETags, truthful operation outcomes, bounded history and isolation. A new process incarnation cannot reuse lost coordination promises as though it retained them. Total process loss loses the in-memory membership table. Keep table consistency, bootstrap and partition guarantees explicit; the owner's partition-availability decision is pending, so do not silently weaken atomic CAS or claim arbitrary survivors can continue while also guaranteeing one table across partitions.
 
-Validate service/cluster identity, ordered voter configuration and shared secret before admitting peer work. Keep byte, row, admission, history, time and cancellation bounds explicit. Do not log secrets or application payloads. One process exclusively owns each voter directory. Keep startup, failure and joined shutdown visible at the actual owning entry point.
+Validate service/cluster identity and the shared secret before admitting peer work. Keep byte, row, admission, history, time, cancellation and discovery-peer bounds explicit. Do not log secrets or application payloads. No membership state files or directory configuration are permitted. Test reports and diagnostics remain ordinary ignored artifacts. Keep startup, failure and joined shutdown visible at their actual entry points.
 
 Do not add consumer-side workarounds for defects in an owned library. Fix them at the owner with focused failure and healthy-follow-up tests. Do not introduce runtime fallbacks, compatibility paths, fake success, or duplicate cluster runtimes without explicit owner approval.
 
@@ -50,7 +50,7 @@ The scale gate covers zero, ten, twenty and fifty silos, abrupt and graceful dep
 
 `python3 eng/test-simulations.py --workers 2` discovers the compiled instrumented inventory, executes all native cases in bounded groups, retains every theory row and reconciles original TRX names and outcomes with discovery. Missing, skipped, timed-out or failed cases fail qualification. Preserve reproducible seeds and Clockwork artifacts.
 
-Collect native coverage: changed code must meet 80% line / 70% branch; the thirteen critical provider source files require 90% line coverage through `eng/verify-coverage.py`. Failure, cancellation, concurrent writes and recovery assertions matter more than implementation-mirroring tests. Keep Linux, Windows and macOS CI, Linux scale qualification and CodeQL enabled.
+Collect native coverage: changed code must meet 80% line / 70% branch; the sixteen critical provider source files require 90% line coverage through `eng/verify-coverage.py`. Failure, cancellation, concurrent writes and recovery assertions matter more than implementation-mirroring tests. Keep Linux, Windows and macOS CI, Linux scale qualification and CodeQL enabled.
 
 ## Versions and delivery
 

@@ -1,42 +1,21 @@
-# ADR 0001: Durable membership inside fixed seed silos
+# ADR 0001: Automatic, entirely in-memory Orleans membership
 
-Status: Accepted design; initial delivery qualification in progress.
+Status: Owner-approved requirements; runtime integration and partition decision pending.
 
 ## Context
 
-The owner requested a ManagedCode fork of Reuben Bond's RapidCluster that replaces Azure membership for Orleans 10.4, discovers configured IP peers, survives dynamic silo churn and exposes a real native membership table. RAPID provides discovery, observation and agreement on a participant view. Orleans membership additionally requires atomic row/version compare-and-swap and durable coordination across restarts.
+The required ManagedCode fork of Reuben Bond's RapidCluster replaces external Azure membership for Orleans 10.4. Deployments do not know peer IPs and provide no membership directories. The earlier fixed-seed, disk-backed prototype does not satisfy those requirements and has not been published as a NuGet release.
 
 ## Decision
 
-Use RAPID for advisory observation of the fixed configured seed voters. Ordinary silos register through native Orleans membership and do not enlarge that RAPID group. Implement `IMembershipTable` and `IGatewayListProvider` over a durable majority Paxos register inside the same seed processes. Any caller may propose; there is no permanently designated table leader. Native Orleans still owns runtime membership transitions, probes, directory, placement and grains.
+Discover participants automatically through local-network UDP multicast and learn their addresses from actual responses. Keep the membership table, observations and coordination state entirely in RAM. Require no seed IP list, advertised IP or storage directory; do not preserve the disk-backed prototype as another runtime mode.
 
-```mermaid
-sequenceDiagram
-    participant Orleans
-    participant Proposer
-    participant Voters as Fixed seed majority
-    participant Disk as Local durable voter files
-    Orleans->>Proposer: Native row and table CAS
-    Proposer->>Voters: Inspect and prepare ballot
-    Voters->>Disk: Persist promise
-    Voters-->>Proposer: Promises and accepted values
-    Proposer->>Voters: Accept selected snapshot
-    Voters->>Disk: Persist accepted snapshot
-    Voters-->>Proposer: Majority acknowledgements
-    Proposer->>Voters: Repair committed snapshot
-    Proposer-->>Orleans: Original operation outcome
-```
+Expose native IMembershipTable and IGatewayListProvider contracts. Microsoft Orleans continues to own silo statuses, probes, directory, placement and grain execution. Keep authentication, cluster identity, bounded memory/requests, cancellation and joined cleanup. Total process loss creates fresh membership on restart; it does not preserve application grain data.
 
-Use the native generated Orleans serializer with explicit stable IDs and aliases for peer/durable contracts, carried in bounded protobuf envelopes. Admit peers only after identity/configuration/secret validation. Persist checksummed voter state with an exclusive directory lock and flushed atomic replacement. Preserve bounded durable mutation outcomes across internal retries; report an explicitly indeterminate result when its outcome has aged out.
+## Open decision
 
-Native RAPID hosted lifecycle starts after the membership listener binds. The durable table can operate once its fixed quorum is available, independently of stale advisory observations. This allows one returning voter to restore a lost majority without waiting for every former RAPID participant.
+Specify whether network partitions preserve one consistent table by requiring a majority, or permit isolated surviving parts to operate as separate clusters. This determines reconfiguration and whether any arbitrary five survivors of twenty can continue. Discovery alone cannot safely provide both guarantees. Do not weaken atomic native CAS or implement a partition policy without resolving this choice.
 
-## Consequences
+## Evidence
 
-Three seeds tolerate one unavailable voter; five tolerate two. Fifty silos do not require fifty table voters. Large ordinary-silo losses remain recoverable if the fixed voter majority survives. Loss of a majority deliberately prevents successful table operations. Changing seed order/membership online is unsupported; wiping voter state while peers can still run violates the persistence contract. A shared secret supplies admission, not encryption.
-
-Local process restarts and abrupt kills are qualified separately from arbitrary power loss. Application grain state is outside this provider. No external database, independent application cluster runtime, dynamic quorum shrink or consumer-side workaround is introduced.
-
-## Implementation and qualification
-
-The provider, durable quorum, native hosting and original upstream repair batch are implemented in this checkout. Focused consensus/native tests and real three-silo Aspire qualification have local evidence. Complete fifty-process churn, original simulation inventory, platform CI, NuGet publication and KeyLoad adoption are separate remaining acceptance gates; their original reports determine completion. See [requirements](../Features/RapidMembership.md) and the [work item](../../tasks/in-progress/001_OrleansRapidMembership.md).
+Two native socket tests prove multicast peer discovery, actual TCP nonce exchange using discovered addresses, client observation, secret/cluster isolation, packet validation and departure expiry. The discovery component is not yet connected to the native membership adapters. Prior fixed-voter process and coverage results do not qualify the corrected provider. See the [work item](../../tasks/in-progress/001_OrleansRapidMembership.md) for current remaining gates.

@@ -74,7 +74,7 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
         // Collector is started after node is created, so initial event may be missed
         var collector = CreateViewCollector(seedNode);
 
-        _ = _harness.RunUntilIdle();
+        _ = _harness.RunUntilIdle(TimeSpan.Zero);
 
         // Join a node - this should trigger a callback that the collector CAN see
         var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
@@ -133,7 +133,7 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
         var collector1 = CreateViewCollector(seedNode);
         var collector2 = CreateViewCollector(seedNode);
 
-        _ = _harness.RunUntilIdle();
+        _ = _harness.RunUntilIdle(TimeSpan.Zero);
         _ = _harness.JoinNode(nodeId: 1, seed: seedNode);
         _harness.WaitForConvergence();
 
@@ -161,7 +161,7 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
         var seedNode = _harness.StartCluster();
         var seedCollector = CreateViewCollector(seedNode);
 
-        _ = _harness.RunUntilIdle();
+        _ = _harness.RunUntilIdle(TimeSpan.Zero);
         CollectViews(seedCollector, seedCallbackLog);
         var seedInitialCount = seedCallbackLog.Count;
 
@@ -206,7 +206,7 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
         var callbackLog = new ConcurrentBag<MembershipView>();
         var collector = CreateViewCollector(seedNode);
 
-        _ = _harness.RunUntilIdle();
+        _ = _harness.RunUntilIdle(TimeSpan.Zero);
 
         var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
         _harness.WaitForConvergence();
@@ -236,7 +236,7 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
         var callbackLog = new ConcurrentBag<MembershipView>();
         var collector = CreateViewCollector(seedNode);
 
-        _ = _harness.RunUntilIdle();
+        _ = _harness.RunUntilIdle(TimeSpan.Zero);
 
         var joiner = _harness.JoinNode(nodeId: 1, seed: seedNode);
         _harness.WaitForConvergence();
@@ -332,7 +332,7 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
         var callbackLog = new ConcurrentBag<MembershipView>();
         var collector = CreateViewCollector(seedNode);
 
-        _ = _harness.RunUntilIdle();
+        _ = _harness.RunUntilIdle(TimeSpan.Zero);
 
         // First joiner - triggers first callback
         var joiner1 = _harness.JoinNode(nodeId: 1, seed: seedNode);
@@ -458,7 +458,7 @@ public sealed class SubscriptionDetailTests : IAsyncLifetime
         var seedNode = _harness.StartCluster();
         var collector = CreateViewCollector(seedNode);
 
-        _ = _harness.RunUntilIdle();
+        _ = _harness.RunUntilIdle(TimeSpan.Zero);
 
         // Trigger a membership change to get a callback
         _ = _harness.JoinNode(nodeId: 1, seed: seedNode);

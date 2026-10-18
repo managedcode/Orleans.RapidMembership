@@ -418,3 +418,6 @@ FodyWeavers.xsd
 *.msp
 
 packages.lock.json
+
+# Canonical native coverage collector settings.
+!eng/coverage.config.xml

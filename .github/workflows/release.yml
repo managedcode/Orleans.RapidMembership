@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [Directory.Build.props]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuget-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Pack and publish NuGet
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Read the canonical package version
+        shell: python
+        run: |
+          import xml.etree.ElementTree as ET
+          print('Package version:', ET.parse('Directory.Build.props').findtext('.//Version'))
+      - name: Restore package projects
+        run: dotnet restore src/ManagedCode.Orleans.RapidMembership/ManagedCode.Orleans.RapidMembership.csproj
+      - name: Build package projects
+        run: dotnet build src/ManagedCode.Orleans.RapidMembership/ManagedCode.Orleans.RapidMembership.csproj --no-restore --configuration Release -warnaserror
+      - name: Pack RAPID protocol
+        run: dotnet pack src/RapidCluster.Core --configuration Release --no-build --output artifacts/packages -warnaserror
+      - name: Pack gRPC transport
+        run: dotnet pack src/RapidCluster.Grpc --configuration Release --no-build --output artifacts/packages -warnaserror
+      - name: Pack Orleans provider
+        run: dotnet pack src/ManagedCode.Orleans.RapidMembership --configuration Release --no-build --output artifacts/packages -warnaserror
+      - name: Retain packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages-${{ github.sha }}
+          path: artifacts/packages/*.nupkg
+          if-no-files-found: error
+      - name: Push packages to NuGet
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$NUGET_API_KEY"
+          for package in artifacts/packages/*.nupkg; do
+            dotnet nuget push "$package" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+          done

@@ -9,7 +9,9 @@
 [![Downloads](https://img.shields.io/nuget/dt/ManagedCode.Orleans.RapidMembership.svg?style=flat-square)](https://www.nuget.org/packages/ManagedCode.Orleans.RapidMembership)
 [![License](https://img.shields.io/github/license/managedcode/Orleans.RapidMembership?style=flat-square)](https://github.com/managedcode/Orleans.RapidMembership/blob/main/LICENSE)
 
-Self-hosted membership tables and dynamic gateway discovery for Microsoft Orleans 10.4 on .NET 10, without Azure Storage or an external database.
+Automatic, in-memory membership and gateway discovery for Microsoft Orleans 10.4 on .NET 10, based on RapidCluster.
+
+**Development status:** the provider is being changed to discover peer addresses itself and keep all membership state in RAM. No seed IP list, advertised IP or storage directory is part of the required configuration. The fixed-seed, disk-backed provider in earlier checkpoints is superseded and has not been released to NuGet. The automatic in-memory provider is not yet qualified end to end.
 
 **Based on [RapidCluster by Reuben Bond](https://github.com/ReubenBond/RapidCluster).** This repository is a fork. The original RAPID implementation, protocol tests and Clockwork simulations are retained. Original MIT copyright and license are preserved in [LICENSE](https://github.com/managedcode/Orleans.RapidMembership/blob/main/LICENSE); [NOTICE](https://github.com/managedcode/Orleans.RapidMembership/blob/main/NOTICE) identifies the ManagedCode additions. The [RAPID protocol documentation](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/RAPID.md) describes the underlying peer discovery and observation protocol.
 
@@ -25,92 +27,28 @@ The provider brings its protocol and transport dependencies transitively. Badges
 
 [Architecture](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/Architecture.md) · [Testing and coverage](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/Testing.md) · [Membership requirements](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/Features/RapidMembership.md) · [Design decision](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/ADR/0001-self-hosted-membership.md) · [Contributing](https://github.com/managedcode/Orleans.RapidMembership/blob/main/CONTRIBUTING.md) · [Repository rules](https://github.com/managedcode/Orleans.RapidMembership/blob/main/AGENTS.md)
 
-## Contract
+## Required runtime contract
 
-RAPID discovers and observes the configured seed voters from explicit IP endpoints. Ordinary silos register through the native Orleans membership table and do not join the RAPID voting group. Orleans continues to own silo statuses, peer probes, activation placement and the grain directory. Reachability alone never authorizes membership: every peer exchange validates the service/cluster identity, voter configuration and shared secret.
+- Discover other participants automatically on the reachable local multicast network; do not require users to know their IP addresses.
+- Keep the membership table and coordination state entirely in memory. A complete loss of all processes forms a fresh membership table on restart.
+- Implement native Orleans membership and client gateway discovery. Orleans owns silo status, probing, directory, placement and grain execution.
+- Preserve atomic native row/version operations and describe partition behavior explicitly. Discovery by itself does not decide table consistency or make a disappearing voter quorum safe to shrink.
+- Retain bounded requests, cancellation, authentication, memory and joined shutdown. Membership state is separate from application grain storage.
 
-Orleans requires atomic row/version compare-and-swap, which a RAPID peer view alone does not provide. This provider hosts a durable majority Paxos membership table inside the seed silo processes. No permanently designated table leader is required: any caller can coordinate a proposal. Each voter records its promise and accepted value on its own disk before acknowledging. Reads cross a quorum barrier; writes atomically change the native row and table ETags. Heartbeats preserve the table version. Concurrent CAS attempts on one table version have one winner.
+The configuration example will be published with the implemented in-memory API. The former IP/directory example has been removed because it does not satisfy this contract.
 
-The fixed, ordered seed list defines the table voters. Three voters tolerate one unavailable voter; five tolerate two. Other silos join dynamically without becoming voters. A 20-to-5 abrupt reduction can remain available when the surviving five include a majority of the configured voters; losing a voter majority cannot be made safe by discovering more IPs. Loss of a majority prevents table reads and writes from succeeding. Membership does not persist application grain state.
+## Automatic discovery implemented so far
 
-## Configure a silo
+The current discovery module sends cluster-scoped, authenticated UDP multicast beacons on port **11113** by default. It obtains peer addresses from network responses and advertises the actual TCP service port. It stores observations only in RAM, expires departed peers and lets an external client observe without announcing itself as a server. This discovers peers on the participating multicast network; routed networks must actually carry that multicast traffic.
 
-```sh
-dotnet add package ManagedCode.Orleans.RapidMembership --version 10.4.0
-```
+Native socket tests start two real TCP listeners without configuring their IPs, discover them through UDP multicast and exchange nonce bytes with both discovered endpoints. They also check foreign-secret/cluster isolation, invalid packets and expiry after a node stops. These tests qualify discovery, not the unfinished automatic membership-table integration.
 
-```csharp
-using ManagedCode.Orleans.RapidMembership;
-using Orleans.Configuration;
+## Qualification and delivery
 
-builder.Host.UseOrleans(silo =>
-{
-    silo.Configure<ClusterOptions>(cluster =>
-    {
-        cluster.ServiceId = "my-service";
-        cluster.ClusterId = "production";
-    });
-    silo.UseRapidMembership(options =>
-    {
-        options.ListenEndpoint = "http://10.0.0.1:11112";
-        options.SeedEndpoints = [
-            "http://10.0.0.1:11112",
-            "http://10.0.0.2:11112",
-            "http://10.0.0.3:11112"];
-        options.StorageDirectory = "/var/lib/my-service/membership";
-        options.SharedSecret = configuration["MembershipSecret"]!;
-    });
-});
-```
+The primary acceptance remains actual Aspire-owned Orleans silo processes and continuing external Orleans clients: zero → ten → twenty → five, simultaneous ten-node joins/departures, complete loss and restart, cold fifty, graceful reduction/rejoin, and real grain execution on every live silo. Assertions use exact native silo identities and generations.
 
-Each voter advertises its own reachable literal IP and membership port. Ordinary silos identify their role with an endpoint outside the seed list and bind only their native Orleans and application endpoints. All participants use the same ordered seed list, service ID, cluster ID and a secret of at least 32 UTF-8 bytes. A single voter is supported for development; it has no voter-failure tolerance. An additional non-voter silo uses its own `ListenEndpoint` and the existing seed list.
+Original RAPID unit, network, Clockwork and Aspire suites are retained. Previous fixed-seed/durable-table results do not qualify automatic in-memory membership. CI and original artifacts determine each gate independently. No package publication or KeyLoad adoption has occurred.
 
-Each configured voter binds its own HTTP/2 membership socket before Orleans initializes its table. Non-voters validate availability against the same durable quorum without starting another RAPID participant. Voters use RAPID's native hosted lifecycle for advisory discovery; the durable table starts when its configured storage quorum is available, independently of a stale RAPID observation view. No endpoint mapping is required in the application's web server. The default membership port is **TCP 11112**. Orleans silo-to-silo traffic (commonly TCP 11111) and client gateway traffic (commonly TCP 30000) remain separate. Allow bidirectional connectivity between participants on their configured ports. HTTP/2 traffic must run on a trusted private network or an encrypted network tunnel; shared-secret admission does not encrypt traffic. No certificate-validation bypass is installed.
+All three package versions follow Orleans major/minor and the ManagedCode patch, initially **10.4.0**. CI owns verification. Release independently builds, packs and pushes the packages without waiting for CI or feed indexing. The version tag belongs to that completed release.
 
-There is no IP-range scan, broadcast, implicit merging of unrelated clusters or public Internet discovery. At least one seed must be reachable for RAPID join, and a majority of seed membership voters must be reachable for table operations.
-
-## Configure an external Orleans client
-
-```csharp
-builder.UseOrleansClient(client =>
-{
-    client.Configure<ClusterOptions>(cluster =>
-    {
-        cluster.ServiceId = "my-service";
-        cluster.ClusterId = "production";
-    });
-    client.UseRapidMembership(options =>
-    {
-        options.SeedEndpoints = [
-            "http://10.0.0.1:11112",
-            "http://10.0.0.2:11112",
-            "http://10.0.0.3:11112"];
-        options.SharedSecret = configuration["MembershipSecret"]!;
-    });
-});
-```
-
-Clients discover only active native Orleans gateway rows. They do not start a membership listener or become voters.
-
-## Operations and failure boundaries
-
-- Preserve every voter's `StorageDirectory` across process restarts. One process exclusively owns each directory. Corrupt state, a changed voter configuration or a different cluster identity fails closed.
-- Seed/voter reconfiguration is not supported online. Never change the voter list or delete/restore a voter directory while any participant from that cluster can still run. Start a separate cluster identity for a deliberately new deployment.
-- Local writes use flushed files and atomic replacement. Process-kill recovery and loss of one voter are qualification targets; they do not establish power-loss durability for arbitrary disks or filesystems.
-- `OperationTimeout`, `PeerTimeout`, `MaximumSnapshotBytes`, `MaximumEntries`, `MaximumOperationHistory` and `MaximumAdmissions` bound work. Cancellation stops observation and remaining exchanges; a timeout after quorum acceptance can leave a committed result, as with other distributed CAS providers. Read the table before deciding how to retry.
-- Mutation outcomes are retained in a bounded durable history (4,096 by default) so an internal retry can settle an already chosen write. If concurrent traffic evicts an unresolved outcome, the operation reports an indeterminate result and requires a fresh native row/version read; it never reports an invented CAS failure. Reads repair a committed snapshot to a majority and recover pending accepted proposals before returning when necessary.
-- RAPID's initial bootstrap coordinator is the first configured seed. It is not the membership-table leader. Table consensus has a separate fixed voter quorum, so a stale or divided RAPID view cannot create two independently writable tables.
-
-## Build and qualification
-
-```sh
-git submodule update --init --recursive
-dotnet restore RapidCluster.slnx
-dotnet format RapidCluster.slnx --exclude src/Clockwork --verify-no-changes
-dotnet build RapidCluster.slnx --no-restore --configuration Release -warnaserror
-dotnet run --project tests/ManagedCode.Orleans.RapidMembership.Tests --configuration Release --no-build -- --filter-not-trait Category=Scale --timeout 600s
-```
-
-The new tests cover real network CAS contention, recovery of a majority-accepted write before commit notification, unavailable quorum cancellation, identity/secret isolation and durable acceptor restart. Aspire runs three actual Orleans silo processes, a native Orleans client, grain calls, abrupt process loss and rejoin. An independent cold-start case forms all fifty real silos from zero and checks external grain calls on every silo. A separate real-process scale scenario starts from zero and exercises 10, 20, 5, concurrent ten-node joins and ten-node crashes, total cluster loss, recovery to 10, growth to 50, graceful reduction to 25 and return to 50. Four external Orleans clients keep issuing nonce-checked grain calls throughout; each live silo must agree on the exact active membership set and execute a grain call. Zero-node periods require bounded failures and subsequent recovery by the same clients. Run this gate with `dotnet run --project tests/ManagedCode.Orleans.RapidMembership.Tests --configuration Release --no-build -- --filter-trait Category=Scale --timeout 4500s --output Detailed --report-trx --results-directory artifacts/tests/churn`. Linux CI runs this gate independently of Release. Upstream unit, network, simulation and Aspire suites remain separate gates. `python3 eng/test-simulations.py --workers 2` executes the complete compiled simulation inventory in bounded native MTP processes and reconciles every original TRX result with discovery; cases are neither skipped nor reduced. CI artifacts, rather than this test inventory, establish which gates passed for a release.
-
-Version `major.minor.patch` tracks the Orleans major/minor line; the patch is the ManagedCode library revision. All three packages (`ManagedCode.Orleans.RapidMembership`, `.Protocol`, `.Grpc`) share one release version. CI runs qualification separately. Release builds and pushes the three packages directly to NuGet when the canonical version file changes on main or through manual dispatch; it does not wait for CI or poll NuGet indexing.
+See [architecture](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/Architecture.md), [requirements](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/Features/RapidMembership.md), [testing](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/Testing.md), [contributing](https://github.com/managedcode/Orleans.RapidMembership/blob/main/CONTRIBUTING.md) and the [current work item](https://github.com/managedcode/Orleans.RapidMembership/blob/main/tasks/in-progress/001_OrleansRapidMembership.md).
