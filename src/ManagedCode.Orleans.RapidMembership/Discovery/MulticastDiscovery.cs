@@ -12,10 +12,11 @@ internal sealed class MulticastDiscovery : IAsyncDisposable
     private readonly CancellationTokenSource _stopping = new();
     private readonly TimeProvider _timeProvider;
     private readonly DiscoveryPacket _packets;
-    private readonly DirectedDiscovery _directed;
+    private readonly IReadOnlyList<IPAddress> _addresses;
     private readonly int _servicePort;
     private readonly int _discoveryPort;
     private readonly int _maximumPeers;
+    private DirectedDiscovery? _directed;
     private UdpClient? _socket;
     private Task _completion = Task.CompletedTask;
     private int _started;
@@ -35,12 +36,12 @@ internal sealed class MulticastDiscovery : IAsyncDisposable
         _discoveryPort = discoveryPort;
         _maximumPeers = maximumPeers;
         NodeId = incarnation ?? Guid.NewGuid();
-        _directed = new DirectedDiscovery(DiscoveryAddressRange.Expand(discoveryNetworks ?? [], maximumAddresses), discoveryPort);
+        _addresses = DiscoveryAddressRange.Expand(discoveryNetworks ?? [], maximumAddresses);
     }
 
     public Guid NodeId { get; }
 
-    public bool InitialScanCompleted => _directed.InitialScanCompleted;
+    public bool InitialScanCompleted => _directed?.InitialScanCompleted ?? _addresses.Count == 0;
 
     public IReadOnlyList<DiscoveredPeer> Peers
     {
@@ -73,6 +74,7 @@ internal sealed class MulticastDiscovery : IAsyncDisposable
         _socket.Client.ReceiveBufferSize = 262144;
         _socket.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
         _socket.Client.Bind(new IPEndPoint(IPAddress.Any, _discoveryPort));
+        _directed = new DirectedDiscovery(_addresses, _discoveryPort);
         _socket.MulticastLoopback = true;
         _socket.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 1);
         var interfaces = MulticastInterfaces.Join(_socket, Group);
@@ -99,7 +101,7 @@ internal sealed class MulticastDiscovery : IAsyncDisposable
             {
                 try
                 {
-                    await _directed.ReplyAsync(_packets.Encode(NodeId, _servicePort, _timeProvider.GetUtcNow()),
+                    await _directed!.ReplyAsync(_packets.Encode(NodeId, _servicePort, _timeProvider.GetUtcNow()),
                         datagram.RemoteEndPoint, cancellationToken);
                 }
                 catch (SocketException exception) when (MulticastInterfaces.Unavailable(exception.SocketErrorCode))
@@ -152,7 +154,7 @@ internal sealed class MulticastDiscovery : IAsyncDisposable
 
     private async Task AnnounceRoundAsync(IPAddress[] interfaces, CancellationToken cancellationToken)
     {
-        var probed = await _directed.ProbeAsync(_packets.Encode(NodeId, 0, _timeProvider.GetUtcNow()),
+        var probed = await _directed!.ProbeAsync(_packets.Encode(NodeId, 0, _timeProvider.GetUtcNow()),
             _peers.Values.Select(peer => peer.Address), cancellationToken);
         if (_servicePort > 0)
         {
@@ -208,7 +210,7 @@ internal sealed class MulticastDiscovery : IAsyncDisposable
         finally
         {
             _socket?.Dispose();
-            _directed.Dispose();
+            _directed?.Dispose();
             _stopping.Dispose();
         }
     }

@@ -1,5 +1,3 @@
-using System.Net;
-using System.Net.Sockets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Orleans.Serialization;
@@ -16,16 +14,15 @@ public sealed class BootstrapLossTests
         var token = timeout.Token;
         var identity = Guid.NewGuid().ToString("N");
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
-        using var reservation = new UdpClient(0);
+        using var reservation = new DiscoveryPortReservation();
         var options = new RapidMembershipOptions
         {
-            DiscoveryPort = ((IPEndPoint)reservation.Client.LocalEndPoint!).Port,
+            DiscoveryPort = reservation.Port,
             SharedSecret = "0123456789abcdef0123456789abcdef",
             BootstrapDelay = TimeSpan.FromSeconds(2),
             PeerTimeout = TimeSpan.FromMinutes(1),
             TimeProvider = clock,
         };
-        reservation.Dispose();
         await using var services = new ServiceCollection().AddSerializer(builder => builder.AddAssembly(typeof(RapidMembershipOptions).Assembly))
             .BuildServiceProvider();
         using var transport = new PeerTransport(options, identity, services.GetRequiredService<Serializer<PeerRequest>>(),
@@ -33,6 +30,7 @@ public sealed class BootstrapLossTests
         await using var first = new PeerDirectory(options, identity, transport);
         await using var second = new PeerDirectory(options, identity, transport);
         await Task.WhenAll(first.StartServerAsync(token), second.StartServerAsync(token));
+        reservation.Dispose();
         while (first.Host!.Discovery.Peers.Count != 1 || second.Host!.Discovery.Peers.Count != 1)
         {
             clock.Advance(TimeSpan.FromMilliseconds(100));

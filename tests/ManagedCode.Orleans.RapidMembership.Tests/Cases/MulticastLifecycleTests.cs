@@ -17,9 +17,8 @@ public sealed class MulticastLifecycleTests
         using var secondListener = new TcpListener(IPAddress.Any, 0);
         firstListener.Start();
         secondListener.Start();
-        using var reservation = new UdpClient(0);
-        var discoveryPort = ((IPEndPoint)reservation.Client.LocalEndPoint!).Port;
-        reservation.Dispose();
+        using var reservation = new DiscoveryPortReservation();
+        var discoveryPort = reservation.Port;
         var identity = Guid.NewGuid().ToString("N");
         await using var first = new MulticastDiscovery(identity, Secret, ((IPEndPoint)firstListener.LocalEndpoint).Port, discoveryPort);
         await using var second = new MulticastDiscovery(identity, Secret, ((IPEndPoint)secondListener.LocalEndpoint).Port, discoveryPort);
@@ -37,6 +36,7 @@ public sealed class MulticastLifecycleTests
         Assert.Equal(first.NodeId, Assert.Single(observer.Peers).NodeId);
         _ = await Assert.ThrowsAsync<InvalidOperationException>(() => observer.StartAsync(token));
         await second.StartAsync(token);
+        reservation.Dispose();
         await Task.Delay(TimeSpan.FromSeconds(2), token);
         Assert.Equal(first.NodeId, Assert.Single(observer.Peers).NodeId);
         await first.DisposeAsync();

@@ -14,14 +14,14 @@ public sealed class MulticastSocketFailureTests
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
         using var tcp = new TcpListener(IPAddress.Any, 0);
         tcp.Start();
-        using var reservation = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
-        var port = ((IPEndPoint)reservation.Client.LocalEndPoint!).Port;
-        reservation.Dispose();
+        using var reservation = new DiscoveryPortReservation();
+        var port = reservation.Port;
         const string secret = "0123456789abcdef0123456789abcdef";
         await using var sender = new MulticastDiscovery("socket-failure", secret, ((IPEndPoint)tcp.LocalEndpoint).Port, port);
         await using var failed = new MulticastDiscovery("socket-failure", secret, 0, port);
         await failed.StartAsync(timeout.Token);
         await sender.StartAsync(timeout.Token);
+        reservation.Dispose();
         await WaitForPeerAsync(failed, sender.NodeId, timeout.Token);
         await MulticastDiscoveryTests.RequireReachableAsync(Assert.Single(failed.Peers), tcp, timeout.Token);
 

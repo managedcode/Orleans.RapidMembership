@@ -17,9 +17,8 @@ public sealed class MulticastDiscoveryTests
         using var secondListener = new TcpListener(IPAddress.Any, 0);
         firstListener.Start();
         secondListener.Start();
-        using var reservation = new UdpClient(0);
-        var discoveryPort = ((IPEndPoint)reservation.Client.LocalEndPoint!).Port;
-        reservation.Dispose();
+        using var reservation = new DiscoveryPortReservation();
+        var discoveryPort = reservation.Port;
         var identity = Guid.NewGuid().ToString("N");
         await using var first = new MulticastDiscovery(identity, Secret, ((IPEndPoint)firstListener.LocalEndpoint).Port, discoveryPort);
         await using var second = new MulticastDiscovery(identity, Secret, ((IPEndPoint)secondListener.LocalEndpoint).Port, discoveryPort);
@@ -31,6 +30,7 @@ public sealed class MulticastDiscoveryTests
         await client.StartAsync(token);
         await wrongSecret.StartAsync(token);
         await otherCluster.StartAsync(token);
+        reservation.Dispose();
         while (client.Peers.Count != 2 || first.Peers.Count != 1 || second.Peers.Count != 1)
         {
             await Task.Delay(50, token);

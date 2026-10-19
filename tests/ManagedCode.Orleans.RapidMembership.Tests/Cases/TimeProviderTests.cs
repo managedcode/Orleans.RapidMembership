@@ -17,14 +17,14 @@ public sealed class TimeProviderTests
         var token = watchdog.Token;
         var clock = new FakeTimeProvider(DateTimeOffset.UnixEpoch);
         using var sender = new UdpClient(AddressFamily.InterNetwork);
-        using var reservation = new UdpClient(0);
-        var port = ((IPEndPoint)reservation.Client.LocalEndPoint!).Port;
-        reservation.Dispose();
+        using var reservation = new DiscoveryPortReservation();
+        var port = reservation.Port;
         const string secret = "0123456789abcdef0123456789abcdef";
         var identity = Guid.NewGuid().ToString("N");
         var packets = new DiscoveryPacket(identity, secret);
         await using var discovery = new MulticastDiscovery(identity, secret, 0, port, maximumPeers: 1, timeProvider: clock);
         await discovery.StartAsync(token);
+        reservation.Dispose();
         var first = Guid.NewGuid();
         var datagram = packets.Encode(first, 11112, clock.GetUtcNow());
         _ = await sender.SendAsync(datagram, new IPEndPoint(IPAddress.Loopback, port), token);

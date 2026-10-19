@@ -5,9 +5,11 @@ using Grpc.Net.Client;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using RapidCluster;
+using RapidCluster.Discovery;
 using RapidCluster.Grpc;
 using RapidCluster.Messaging;
 
@@ -74,13 +76,9 @@ public sealed class LifecycleCancellationTests
     [Fact]
     public async Task DisposedMessagingClientClosesRealConnectionAndServerAcceptsNewClient()
     {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
         var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var builder = WebApplication.CreateSlimBuilder();
-        _ = builder.WebHost.ConfigureKestrel(server => server.Listen(IPAddress.Loopback, port, listen =>
+        _ = builder.WebHost.ConfigureKestrel(server => server.Listen(IPAddress.Loopback, 0, listen =>
         {
             listen.Protocols = HttpProtocols.Http2;
             _ = listen.Use(next => async connection =>
@@ -95,11 +93,14 @@ public sealed class LifecycleCancellationTests
                 }
             });
         }));
-        _ = builder.Services.AddRapidClusterManual().UseGrpcTransport().UseListenAddress(new IPEndPoint(IPAddress.Loopback, port));
+        _ = builder.Services.AddRapidClusterManual().UseGrpcTransport();
+        _ = builder.Services.AddSingleton<IListenAddressProvider>(services => new ServerListenAddressProvider(
+            services.GetRequiredService<IServer>(), preferHttps: false, preferredHost: "127.0.0.1"));
         await using var app = builder.Build();
         _ = app.MapRapidClusterMembershipService();
         var token = TestContext.Current.CancellationToken;
         await app.StartAsync(token);
+        var port = ((IPEndPoint)app.Services.GetRequiredService<IListenAddressProvider>().ListenAddress).Port;
         var messaging = app.Services.GetRequiredService<IMessagingClient>();
         var endpoint = new RapidCluster.Pb.Endpoint { Hostname = ByteString.CopyFromUtf8("127.0.0.1"), Port = port };
         var request = new RapidCluster.Pb.RapidClusterRequest

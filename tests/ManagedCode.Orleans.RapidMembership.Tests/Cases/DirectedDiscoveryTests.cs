@@ -70,13 +70,13 @@ public sealed class DirectedDiscoveryTests
         var expected = networkInterface ? available[0] : IPAddress.Loopback;
         using var listener = new TcpListener(IPAddress.Any, 0);
         listener.Start();
-        using var reservation = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
-        var port = ((IPEndPoint)reservation.Client.LocalEndPoint!).Port;
-        reservation.Dispose();
+        using var reservation = new DiscoveryPortReservation();
+        var port = reservation.Port;
         var identity = Guid.NewGuid().ToString("N");
         const string secret = "0123456789abcdef0123456789abcdef";
         await using var peer = new MulticastDiscovery(identity, secret, ((IPEndPoint)listener.LocalEndpoint).Port, port);
         await peer.StartAsync(timeout.Token);
+        reservation.Dispose();
         using var directed = new DirectedDiscovery(DiscoveryAddressRange.Expand([expected.ToString() + "/32"], 1), port);
         using var receiving = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
         var observed = new TaskCompletionSource<DiscoveredPeer>(TaskCreationOptions.RunContinuationsAsynchronously);

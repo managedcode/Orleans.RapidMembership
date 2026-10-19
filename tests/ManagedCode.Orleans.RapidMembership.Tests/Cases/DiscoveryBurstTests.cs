@@ -13,9 +13,8 @@ public sealed class DiscoveryBurstTests(ITestOutputHelper output)
         timeout.CancelAfter(TimeSpan.FromMinutes(2));
         var elapsed = System.Diagnostics.Stopwatch.StartNew();
         var token = timeout.Token;
-        using var reservation = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
-        var port = ((IPEndPoint)reservation.Client.LocalEndPoint!).Port;
-        reservation.Dispose();
+        using var reservation = new DiscoveryPortReservation();
+        var port = reservation.Port;
         var identity = Guid.NewGuid().ToString("N");
         var listeners = Enumerable.Range(0, 30).Select(_ => new TcpListener(IPAddress.Any, 0)).ToArray();
         var peers = new List<MulticastDiscovery>();
@@ -29,6 +28,7 @@ public sealed class DiscoveryBurstTests(ITestOutputHelper output)
             }
 
             await Task.WhenAll(peers.Select(peer => peer.StartAsync(token)));
+            reservation.Dispose();
             output.WriteLine(FormattableString.Invariant($"All 30 discovery listeners started after {elapsed.Elapsed}."));
             var expected = peers.Select(peer => peer.NodeId).Order().ToArray();
             while (peers.Any(peer => !peer.Peers.Select(value => value.NodeId).Append(peer.NodeId).Order().SequenceEqual(expected)))
