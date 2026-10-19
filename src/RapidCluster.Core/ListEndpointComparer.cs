@@ -100,10 +100,7 @@ internal sealed class MembershipProposalComparer : IEqualityComparer<MembershipP
         return x.Equals(y);
     }
 
-    public int GetHashCode(MembershipProposal obj)
-    {
-        return obj.GetHashCode();
-    }
+    public int GetHashCode(MembershipProposal obj) => obj.GetHashCode();
 
     /// <summary>
     /// Compares two proposals for ordering. Used to provide deterministic selection when
