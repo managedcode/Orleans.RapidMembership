@@ -23,6 +23,8 @@ internal sealed class ControllerRuntime : IAsyncDisposable
     private readonly MembershipHost _host;
     private readonly PeerDirectory _directory;
     private readonly CancellationTokenSource _stopping = new();
+    private readonly CancellationTokenSource _observing = new();
+    private readonly Task _control;
     private readonly Task _completion;
     private volatile bool _started;
     private volatile bool _created;
@@ -34,7 +36,8 @@ internal sealed class ControllerRuntime : IAsyncDisposable
     {
         _host = host;
         _directory = directory;
-        _completion = Task.WhenAll(RunAsync(ControlAsync), RunAsync(ObserveAsync));
+        _control = RunAsync(ControlAsync, _stopping.Token);
+        _completion = Task.WhenAll(_control, RunAsync(ObserveAsync, _observing.Token));
     }
 
     public bool IsParticipant => _started && !_retired && _observed?.Contains(_host.Incarnation) == true;
@@ -149,9 +152,8 @@ internal sealed class ControllerRuntime : IAsyncDisposable
 
     private async Task ObserveAsync(CancellationToken cancellationToken)
     {
-        while (true)
+        await foreach (var view in _host.Cluster.ViewUpdates.WithCancellation(cancellationToken))
         {
-            var view = _host.Cluster.CurrentView;
             if (!view.Members.IsDefaultOrEmpty && (_observed is null || view.ConfigurationId.Version > _observed.Version))
             {
                 var configuration = FromView(view);
@@ -163,8 +165,6 @@ internal sealed class ControllerRuntime : IAsyncDisposable
                     _ = await _host.Replica.BootstrapAsync(cancellationToken);
                 }
             }
-
-            await Task.Delay(TimeSpan.FromMilliseconds(20), _host.Options.TimeProvider, cancellationToken);
         }
     }
 
@@ -182,18 +182,19 @@ internal sealed class ControllerRuntime : IAsyncDisposable
         return configuration;
     }
 
-    private async Task RunAsync(Func<CancellationToken, Task> operation)
+    private async Task RunAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken)
     {
         try
         {
-            await operation(_stopping.Token);
+            await operation(cancellationToken);
         }
-        catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
         }
         catch
         {
             await _stopping.CancelAsync();
+            await _observing.CancelAsync();
             throw;
         }
     }
@@ -235,7 +236,6 @@ internal sealed class ControllerRuntime : IAsyncDisposable
             var configuration = FromView(view);
             if (!configuration.Contains(_host.Incarnation))
             {
-                await _host.Replica.ObserveAsync(configuration, cancellationToken);
                 await _directory.CompleteDepartureAsync(configuration, cancellationToken);
                 NativeLifecycle(_host.RuntimeLogger, "table handoff completed", null);
             }
@@ -247,21 +247,24 @@ internal sealed class ControllerRuntime : IAsyncDisposable
         await _stopping.CancelAsync();
         try
         {
-            await _completion;
+            await _control;
+            if (_started && !_retired && !_host.TransportIsStopping)
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                await DepartAsync(timeout.Token);
+            }
         }
         finally
         {
+            await _observing.CancelAsync();
             try
             {
-                if (_started && !_retired && !_host.TransportIsStopping)
-                {
-                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-                    await DepartAsync(timeout.Token);
-                }
+                await _completion;
             }
             finally
             {
                 _stopping.Dispose();
+                _observing.Dispose();
             }
         }
     }

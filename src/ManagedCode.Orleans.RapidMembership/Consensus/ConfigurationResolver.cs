@@ -27,12 +27,9 @@ internal sealed class ConfigurationResolver(PeerTransport transport)
         var candidates = descriptions.Where(reply => reply.Configuration is not null && reply.FrozenFor is not null
             && (ready is null || reply.FrozenFor.Version > ready.Version))
             .Select(reply => (Previous: reply.Configuration!, Next: reply.FrozenFor!)).ToList();
-        var latest = descriptions.Select(reply => reply.ObservedConfiguration).OfType<CoordinationConfiguration>()
-            .MaxBy(value => value.Version);
-        if (ready is not null && latest is not null && latest.Version > ready.Version)
-        {
-            candidates.Add((ready, latest));
-        }
+        candidates.AddRange(descriptions.Where(reply => reply.Configuration is not null && reply.NextConfiguration is not null
+            && (ready is null || reply.NextConfiguration.Version > ready.Version))
+            .Select(reply => (reply.Configuration!, reply.NextConfiguration!)));
 
         foreach (var (Previous, Next) in candidates.DistinctBy(value => value.Next.Version).OrderBy(value => value.Next.Version))
         {

@@ -3,11 +3,18 @@ namespace ManagedCode.Orleans.RapidMembership.Consensus;
 // The owning acceptor serializes these transitions together with its ballot and snapshot changes.
 internal sealed class ReplicaConfigurationFence(Guid incarnation)
 {
+    private const int MaximumPendingMembers = 10000;
+    private readonly SortedDictionary<long, CoordinationConfiguration> _pending = [];
+    private int _pendingMembers;
+
     public CoordinationConfiguration? Current { get; private set; }
 
     public CoordinationConfiguration? Observed { get; private set; }
 
     public CoordinationConfiguration? FrozenFor { get; private set; }
+
+    public CoordinationConfiguration? Next => Current is { Version: < long.MaxValue } current
+        && _pending.TryGetValue(current.Version + 1, out var next) ? next : null;
 
     public void Observe(CoordinationConfiguration configuration)
     {
@@ -17,6 +24,17 @@ internal sealed class ReplicaConfigurationFence(Guid incarnation)
             || previous.Version == configuration.Version && !previous.Matches(configuration)))
         {
             throw new InvalidOperationException("RAPID configurations cannot move backwards or switch cluster identity.");
+        }
+
+        if ((Current is null || configuration.Version > Current.Version) && !_pending.ContainsKey(configuration.Version))
+        {
+            if (_pendingMembers + configuration.Members.Length > MaximumPendingMembers)
+            {
+                throw new InvalidDataException("Pending RAPID views exceed the retained membership bound.");
+            }
+
+            _pending.Add(configuration.Version, configuration);
+            _pendingMembers += configuration.Members.Length;
         }
 
         Observed = configuration;
@@ -30,6 +48,7 @@ internal sealed class ReplicaConfigurationFence(Guid incarnation)
         }
 
         Current = configuration;
+        Prune();
         return true;
     }
 
@@ -51,7 +70,7 @@ internal sealed class ReplicaConfigurationFence(Guid incarnation)
             return frozen.Matches(next);
         }
 
-        if (!next.Matches(Observed))
+        if (!next.Matches(Next))
         {
             return false;
         }
@@ -67,8 +86,8 @@ internal sealed class ReplicaConfigurationFence(Guid incarnation)
             return false;
         }
 
-        // Repeated installation preserves newer promises. A validated old-majority certificate can
-        // supersede this replica's minority freeze without granting a second vote for the old view.
+        // Repeated installation preserves newer promises; validated old-majority evidence
+        // also lets a lagging replica catch up through each agreed configuration.
         return Current is { } current
             ? current.Matches(next) && FrozenFor is null || current.Matches(previous)
                 || current.ClusterId == previous.ClusterId && current.Version < previous.Version
@@ -84,6 +103,16 @@ internal sealed class ReplicaConfigurationFence(Guid incarnation)
 
         Current = next;
         FrozenFor = null;
+        Prune();
+    }
+
+    private void Prune()
+    {
+        foreach (var version in _pending.Keys.TakeWhile(version => version <= Current!.Version).ToArray())
+        {
+            _pendingMembers -= _pending[version].Members.Length;
+            _ = _pending.Remove(version);
+        }
     }
 
     // Installation still requires validated frozen-majority evidence; this only checks local eligibility.
@@ -95,6 +124,6 @@ internal sealed class ReplicaConfigurationFence(Guid incarnation)
     {
         previous.Validate();
         next.Validate();
-        return previous.ClusterId == next.ClusterId && next.Version > previous.Version;
+        return next.ImmediatelyFollows(previous);
     }
 }

@@ -22,6 +22,9 @@ internal sealed record CoordinationConfiguration(
     public bool Matches(CoordinationConfiguration? other) => other is not null
         && ClusterId == other.ClusterId && Version == other.Version && Members.SequenceEqual(other.Members);
 
+    public bool ImmediatelyFollows(CoordinationConfiguration previous) => ClusterId == previous.ClusterId
+        && previous.Version < long.MaxValue && Version == previous.Version + 1;
+
     public void Validate()
     {
         if (Version < 0 || Members.IsDefaultOrEmpty || Members.Length > 10000)

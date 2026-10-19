@@ -55,7 +55,7 @@ public sealed class MinorityHandoffTests
     }
 
     [Fact]
-    public async Task AMinorityFreezeCannotVoteTwiceButCanLearnTheOtherSuccessorChosenByAnOldMajority()
+    public async Task OldVotesFinishTheFirstAgreedSuccessorBeforeInstallingALaterView()
     {
         using var replicas = new MemoryReplicaSet();
         var initial = ConfigurationHandoffTests.Configuration(0, 1);
@@ -84,16 +84,22 @@ public sealed class MinorityHandoffTests
         })).Granted);
         await replicas.ObserveAsync(winner);
         var evidence = System.Collections.Immutable.ImmutableArray.CreateBuilder<FrozenReplica>();
-        foreach (var member in previous.Members.Skip(1))
+        foreach (var member in previous.Members)
         {
-            var frozen = await replicas.SendAsync(member, new PeerRequest
+            Assert.False((await replicas.SendAsync(member, new PeerRequest
             {
                 Action = PeerAction.FreezeConfiguration,
                 PreviousConfiguration = previous,
                 Configuration = winner,
+            })).Granted);
+            var frozen = await replicas.SendAsync(member, new PeerRequest
+            {
+                Action = PeerAction.FreezeConfiguration,
+                PreviousConfiguration = previous,
+                Configuration = minority,
             });
             Assert.True(frozen.Granted);
-            evidence.Add(new FrozenReplica(member.Incarnation, previous, winner, frozen.State));
+            evidence.Add(new FrozenReplica(member.Incarnation, previous, minority, frozen.State));
         }
 
         Assert.False((await replicas.SendAsync(previous.Members[0], new PeerRequest
@@ -102,7 +108,8 @@ public sealed class MinorityHandoffTests
             PreviousConfiguration = previous,
             Configuration = winner,
         })).Granted);
-        await replicas.InstallAsync(previous, winner, evidence.ToImmutable());
+        await replicas.InstallAsync(previous, minority, evidence.ToImmutable());
+        await replicas.InstallAsync(minority, winner, await replicas.FreezeAsync(minority, winner));
         foreach (var member in winner.Members)
         {
             var read = await replicas.SendAsync(member, new PeerRequest { Action = PeerAction.Inspect, Configuration = winner });

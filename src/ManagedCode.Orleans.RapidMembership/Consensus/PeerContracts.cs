@@ -107,6 +107,8 @@ internal sealed class PeerReply
     [Id(10)] public string BootstrapCandidate { get; set; } = string.Empty;
 
     [Id(11)] public bool IsDeparting { get; set; }
+
+    [Id(12)] public CoordinationConfiguration? NextConfiguration { get; set; }
 }
 
 [GenerateSerializer]

@@ -14,7 +14,7 @@ internal sealed class GroupKnowledge
     {
         var configurations = replies.SelectMany(reply => new[]
         {
-            reply.Configuration, reply.ObservedConfiguration, reply.KnownConfiguration,
+            reply.Configuration, reply.ObservedConfiguration, reply.KnownConfiguration, reply.NextConfiguration,
         }).OfType<CoordinationConfiguration>().ToArray();
         var roots = configurations.Select(value => value.ClusterId).Distinct().ToArray();
         if (roots.Length > 1 || server && _root is { } root && roots.Any(value => value != root))

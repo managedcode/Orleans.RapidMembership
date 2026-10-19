@@ -46,7 +46,7 @@ internal static class ConfigurationHandoff
     {
         previous.Validate();
         next.Validate();
-        if (previous.ClusterId != next.ClusterId || previous.Version >= next.Version
+        if (!next.ImmediatelyFollows(previous)
             || frozen.IsDefaultOrEmpty || frozen.Length < previous.Quorum || frozen.Length > previous.Members.Length)
         {
             throw new InvalidDataException("Handoff requires a frozen majority of the previous configuration.");
