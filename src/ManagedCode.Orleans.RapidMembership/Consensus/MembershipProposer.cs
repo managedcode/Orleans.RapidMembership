@@ -61,7 +61,9 @@ internal sealed class MembershipProposer(PeerTransport transport, RapidMembershi
                 throw new InvalidOperationException("Membership operation outcome was evicted before settlement; re-read the native membership row and version.");
             }
 
-            if (settled || mutation is null && observed.All(reply => reply.State.Accepted is null))
+            // Accepted work within the committed prefix needs repair, not another consensus slot.
+            if (settled || mutation is null && observed.All(reply =>
+                reply.State.Accepted is not { } pending || pending.Index <= previous.Index))
             {
                 var repair = await transport.ExchangeAsync(new PeerRequest
                 {

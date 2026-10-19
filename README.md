@@ -11,7 +11,7 @@
 
 Automatic, in-memory membership and gateway discovery for Microsoft Orleans 10.4 on .NET 10, based on RapidCluster.
 
-**Development status:** automatic discovery, RAM replicas, configuration handoff and native Orleans hosting are implemented. Final platform, coverage and zero-to-thirty process qualification remain open. No package has been released to NuGet.
+**Verification and delivery:** actual Orleans silo/client scenarios, protocol/network suites and native coverage gates run in [CI](https://github.com/managedcode/Orleans.RapidMembership/actions/workflows/ci.yml). The NuGet badge reports the published version; [testing requirements](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/Testing.md) describe the scenarios and qualification scope.
 
 **Based on [RapidCluster by Reuben Bond](https://github.com/ReubenBond/RapidCluster).** This repository is a fork. The original RAPID implementation, protocol tests and Clockwork simulations are retained. Original MIT copyright and license are preserved in [LICENSE](https://github.com/managedcode/Orleans.RapidMembership/blob/main/LICENSE); [NOTICE](https://github.com/managedcode/Orleans.RapidMembership/blob/main/NOTICE) identifies the ManagedCode additions. The [RAPID protocol documentation](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/RAPID.md) describes the underlying peer discovery and observation protocol.
 
