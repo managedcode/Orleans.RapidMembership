@@ -119,6 +119,44 @@ internal sealed class ContinuousClients(Action<string>? report = null) : IAsyncD
         }
     }
 
+    public async Task<ProbeReply> CrashActivationAsync(string[] eligible, CancellationToken cancellationToken)
+    {
+        var client = _hosts[0].Services.GetRequiredService<IClusterClient>();
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var grain = client.GetGrain<IProbeGrain>("crash-target:" + Guid.NewGuid().ToString("N"));
+            var nonce = Guid.NewGuid().ToString("N");
+            var before = await grain.Observe(nonce).WaitAsync(cancellationToken);
+            Assert.Equal(nonce, before.Value);
+            if (!eligible.Contains(before.Silo, StringComparer.Ordinal))
+            {
+                continue;
+            }
+
+            var failure = await Record.ExceptionAsync(() => grain.CrashProcess(before.Silo).WaitAsync(cancellationToken));
+            Assert.True(failure is OrleansException or TimeoutException, $"Expected a failed crash RPC; received {failure?.GetType().Name ?? "success"}.");
+            ProbeReply after;
+            while (true)
+            {
+                try
+                {
+                    after = await grain.Observe(nonce).WaitAsync(cancellationToken);
+                    break;
+                }
+                catch (Exception exception) when (exception is OrleansException or TimeoutException)
+                {
+                    await Task.Delay(200, cancellationToken);
+                }
+            }
+
+            Assert.Equal(nonce, after.Value);
+            Assert.NotEqual(before.Activation, after.Activation);
+            Assert.NotEqual(before.Silo, after.Silo);
+            return before;
+        }
+    }
+
     public Task<string[][]> RequireHostsAsync(string[] expected, CancellationToken cancellationToken)
         => Task.WhenAll(_hosts.Select(host => ReadHostsAsync(host.Services.GetRequiredService<IClusterClient>(), expected, cancellationToken)));
 

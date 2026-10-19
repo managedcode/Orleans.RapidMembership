@@ -21,6 +21,8 @@ public sealed class RapidClusterGrpcOptions
     /// </remarks>
     public bool UseHttps { get; set; }
 
+    internal bool UseLoopbackForLocalListeners { get; set; }
+
     /// <summary>Gets the metadata sent with every peer request.</summary>
     public Dictionary<string, string> RequestHeaders { get; } = [with(StringComparer.Ordinal)];
 

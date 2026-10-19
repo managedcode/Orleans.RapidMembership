@@ -47,8 +47,8 @@ internal sealed class PeerDirectory(RapidMembershipOptions options, string ident
 
     public async Task WaitForFormationAsync(CancellationToken cancellationToken)
     {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopping.Token);
-        deadline.CancelAfter(options.StartupTimeout);
+        using var timer = new CancellationTokenSource(options.StartupTimeout, options.TimeProvider);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopping.Token, timer.Token);
         while (true)
         {
             var descriptions = await RefreshAsync(deadline.Token);
@@ -59,7 +59,7 @@ internal sealed class PeerDirectory(RapidMembershipOptions options, string ident
                 return;
             }
 
-            await Task.Delay(50, deadline.Token);
+            await Task.Delay(TimeSpan.FromMilliseconds(50), options.TimeProvider, deadline.Token);
         }
     }
 
@@ -73,7 +73,7 @@ internal sealed class PeerDirectory(RapidMembershipOptions options, string ident
                 return configuration;
             }
 
-            await Task.Delay(50, cancellationToken);
+            await Task.Delay(TimeSpan.FromMilliseconds(50), options.TimeProvider, cancellationToken);
         }
     }
 
@@ -84,14 +84,14 @@ internal sealed class PeerDirectory(RapidMembershipOptions options, string ident
         try
         {
             Host?.ThrowIfFaulted();
-            if (!force && DateTimeOffset.UtcNow - _refreshed < TimeSpan.FromMilliseconds(500))
+            if (!force && options.TimeProvider.GetUtcNow() - _refreshed < TimeSpan.FromMilliseconds(500))
             {
                 return _descriptions;
             }
 
             await StartObserverAsync(linked.Token);
             var peers = Host?.Discovery.Peers ?? _observer!.Peers;
-            IEnumerable<CoordinationMember> targets = _selection.Select(peers, _knowledge.Configuration, Host?.Self, force, DateTimeOffset.UtcNow);
+            IEnumerable<CoordinationMember> targets = _selection.Select(peers, _knowledge.Configuration, Host?.Self, force, options.TimeProvider.GetUtcNow());
 
             if (Host is { } host)
             {
@@ -108,7 +108,7 @@ internal sealed class PeerDirectory(RapidMembershipOptions options, string ident
             _selection.Observe(_descriptions);
             _knowledge.Learn(_descriptions, Host is not null);
             _resolved = await _resolver.ResolveAsync(_descriptions, linked.Token);
-            _refreshed = DateTimeOffset.UtcNow;
+            _refreshed = options.TimeProvider.GetUtcNow();
             return _descriptions;
         }
         finally
@@ -125,7 +125,7 @@ internal sealed class PeerDirectory(RapidMembershipOptions options, string ident
             if (Host is null && _observer is null)
             {
                 _observer = new MulticastDiscovery(identity, options.SharedSecret, 0, options.DiscoveryPort, options.MaximumPeers,
-                    options.DiscoveryNetworks, options.MaximumDiscoveryAddresses);
+                    options.DiscoveryNetworks, options.MaximumDiscoveryAddresses, timeProvider: options.TimeProvider);
                 try
                 {
                     await _observer.StartAsync(cancellationToken);
@@ -157,7 +157,7 @@ internal sealed class PeerDirectory(RapidMembershipOptions options, string ident
                 return;
             }
 
-            await Task.Delay(50, cancellationToken);
+            await Task.Delay(TimeSpan.FromMilliseconds(50), options.TimeProvider, cancellationToken);
         }
     }
 

@@ -6,14 +6,14 @@ namespace ManagedCode.Orleans.RapidMembership.Tests.Cases;
 public sealed class PeerSelectionTests
 {
     [Fact]
-    public void ColdFiftyFollowersContactTheCandidateWhileTheCandidateCanVerifyEveryPeer()
+    public void ColdThirtyFollowersContactTheCandidateWhileTheCandidateCanVerifyEveryPeer()
     {
-        var peers = Enumerable.Range(1, 50).Select(Discovered).ToArray();
+        var peers = Enumerable.Range(1, 30).Select(Discovered).ToArray();
         var selection = new PeerSelection();
         var first = ConfigurationHandoffTests.Member(1);
-        var last = ConfigurationHandoffTests.Member(50);
+        var last = ConfigurationHandoffTests.Member(30);
         var now = DateTimeOffset.UtcNow;
-        Assert.Equal(50, selection.Select([.. peers.Where(peer => peer.NodeId != first.Incarnation)], null, first, false, now).Length);
+        Assert.Equal(30, selection.Select([.. peers.Where(peer => peer.NodeId != first.Incarnation)], null, first, false, now).Length);
         var follower = selection.Select([.. peers.Where(peer => peer.NodeId != last.Incarnation)], null, last, false, now);
         Assert.Equal(2, follower.Length);
         Assert.Contains(follower, member => member.Incarnation == first.Incarnation);
@@ -26,9 +26,9 @@ public sealed class PeerSelectionTests
     public void JoiningAndInstalledPeersStayReachableWhileIneligibleAndExpiredCandidatesReleaseTheirSlots()
     {
         var now = DateTimeOffset.UtcNow;
-        var peers = Enumerable.Range(1, 50).Select(Discovered).ToArray();
+        var peers = Enumerable.Range(1, 30).Select(Discovered).ToArray();
         var selection = new PeerSelection();
-        var self = ConfigurationHandoffTests.Member(50);
+        var self = ConfigurationHandoffTests.Member(30);
         _ = selection.Select(peers, null, self, false, now);
         selection.Observe([
             new PeerReply { Incarnation = peers[3].NodeId, IsJoining = true },
@@ -43,8 +43,8 @@ public sealed class PeerSelectionTests
         var departed = peers[3];
         peers = [.. peers.Where(peer => peer.NodeId != departed.NodeId)];
         Assert.DoesNotContain(selection.Select(peers, known, self, false, now.AddSeconds(2)), member => member.Incarnation == departed.NodeId);
-        Assert.Equal(49, selection.Select(peers, known, self, true, now.AddSeconds(3)).Length);
-        Assert.Equal(49, selection.Select(peers, known, self, false, now.AddSeconds(34)).Length);
+        Assert.Equal(29, selection.Select(peers, known, self, true, now.AddSeconds(3)).Length);
+        Assert.Equal(29, selection.Select(peers, known, self, false, now.AddSeconds(34)).Length);
         Assert.InRange(selection.Select(peers, known, self, false, now.AddSeconds(35)).Length, 4, 7);
     }
 

@@ -15,8 +15,8 @@ internal sealed class MembershipProposer(PeerTransport transport, RapidMembershi
     public async Task<MembershipSnapshot> ExecuteAsync(Func<MembershipTableData, MembershipTableData?>? mutation, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopping.Token);
-        deadline.CancelAfter(options.OperationTimeout);
+        using var timer = new CancellationTokenSource(options.OperationTimeout, options.TimeProvider);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopping.Token, timer.Token);
         await _admission.WaitAsync(deadline.Token);
         try
         {
@@ -184,10 +184,11 @@ internal sealed class MembershipProposer(PeerTransport transport, RapidMembershi
         }
     }
 
-    private static Task RetryAsync(int conflicts, CancellationToken cancellationToken)
+    private Task RetryAsync(int conflicts, CancellationToken cancellationToken)
     {
         var ceiling = Math.Min(1000, 20 << Math.Min(conflicts, 6));
-        return Task.Delay(System.Security.Cryptography.RandomNumberGenerator.GetInt32(10, ceiling), cancellationToken);
+        return Task.Delay(TimeSpan.FromMilliseconds(System.Security.Cryptography.RandomNumberGenerator.GetInt32(10, ceiling)),
+            options.TimeProvider, cancellationToken);
     }
 
     public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();

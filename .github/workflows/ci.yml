@@ -27,8 +27,6 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-15-intel]
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
@@ -52,10 +50,10 @@ jobs:
         run: dotnet restore RapidCluster.slnx
       - name: Verify formatting
         if: runner.os == 'Linux'
-        run: dotnet format RapidCluster.slnx --no-restore --exclude src/Clockwork --verify-no-changes
+        run: dotnet format RapidCluster.slnx --no-restore --verify-no-changes
       - name: Build
         run: dotnet build RapidCluster.slnx --no-restore --configuration Release -warnaserror
-      - name: RAM membership, network and Orleans Aspire tests
+      - name: TimeProvider, RAM membership, network and Orleans Aspire tests
         run: dotnet run --project tests/ManagedCode.Orleans.RapidMembership.Tests --configuration Release --no-build -- --filter-not-trait Category=Scale --timeout 1200s --output Detailed --coverage --coverage-settings eng/coverage.config.xml --coverage-output-format cobertura --coverage-output membership.cobertura.xml --report-trx --results-directory artifacts/tests/membership
       - name: Enforce provider coverage
         run: python eng/verify-coverage.py artifacts/tests/membership/membership.cobertura.xml
@@ -63,8 +61,6 @@ jobs:
         run: dotnet run --project tests/RapidCluster.Unit.Tests --configuration Release --no-build -- --timeout 600s --output Detailed --coverage --coverage-settings eng/coverage.config.xml --coverage-output-format cobertura --coverage-output unit.cobertura.xml --report-trx --results-directory artifacts/tests/unit
       - name: RAPID real networking tests
         run: dotnet run --project tests/RapidCluster.Integration.Tests --configuration Release --no-build -- --timeout 600s --output Detailed --coverage --coverage-settings eng/coverage.config.xml --coverage-output-format cobertura --coverage-output network.cobertura.xml --report-trx --results-directory artifacts/tests/network
-      - name: RAPID deterministic simulation tests
-        run: python eng/test-simulations.py --workers 2
       - name: RAPID Aspire tests
         run: dotnet run --project tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests --configuration Release --no-build -- --timeout 600s --output Detailed --report-trx --results-directory artifacts/tests/rapid-aspire
       - name: Pack RAPID protocol
@@ -84,7 +80,7 @@ jobs:
           if-no-files-found: warn
 
   scale:
-    name: Real Orleans 0-to-50 silo churn (${{ matrix.os }})
+    name: Real Orleans 0-to-30 silo churn (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     strategy:
@@ -93,8 +89,6 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-15-intel]
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'

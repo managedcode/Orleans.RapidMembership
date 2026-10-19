@@ -18,4 +18,4 @@ Everything membership-related stays in RAM. Complete process loss permits fresh 
 
 ## Qualification
 
-Retained upstream unit, real-network, deterministic Clockwork and Aspire suites exercise the original protocol. `eng/test-simulations.py` discovers the instrumented native inventory and reconciles every original result. They do not replace actual Orleans silo-process and continuing-client qualification. [Testing](Testing.md) identifies those separate gates and [CONTRIBUTING](../CONTRIBUTING.md) owns executable commands.
+Retained upstream unit, real-network, deterministic Clockwork and Aspire suites exercise the original protocol. `eng/test-simulations.py` discovers the instrumented native inventory and reconciles every original result. Clockwork is supplemental in RapidCluster.UpstreamSimulation.slnx; the owner selected native TimeProvider tests and actual Orleans silo-process/continuing-client qualification for provider CI. [Testing](Testing.md) identifies those separate gates and [CONTRIBUTING](../CONTRIBUTING.md) owns executable commands.

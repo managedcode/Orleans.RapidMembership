@@ -159,7 +159,7 @@ internal sealed class AspireChurnCluster(DistributedApplication app, Action<stri
         return configuration.EnvironmentVariables.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
     }
 
-    public async Task RequireEmptyAsync(CancellationToken cancellationToken, int resources = 50)
+    public async Task RequireEmptyAsync(CancellationToken cancellationToken, int resources = 30)
     {
         while (Enumerable.Range(0, resources).Any(index =>
             !app.ResourceNotifications.TryGetCurrentState(Name(index), out var current)
@@ -167,6 +167,22 @@ internal sealed class AspireChurnCluster(DistributedApplication app, Action<stri
         {
             await Task.Delay(100, cancellationToken);
         }
+    }
+
+    public async Task<string> IdentityAsync(int index, CancellationToken cancellationToken)
+        => (await ReadAsync(index, cancellationToken)).Self;
+
+    public async Task RequireCrashedAsync(int index, CancellationToken cancellationToken)
+    {
+        while (!app.ResourceNotifications.TryGetCurrentState(Name(index), out var state)
+            || state.Snapshot.State?.Text is not ("Exited" or "Finished"))
+        {
+            await Task.Delay(100, cancellationToken);
+        }
+
+        Assert.True(app.ResourceNotifications.TryGetCurrentState(Name(index), out var exited));
+        _ = Assert.NotNull(exited.Snapshot.ExitCode);
+        Assert.NotEqual(0, exited.Snapshot.ExitCode);
     }
 
     private static string Name(int index) => "silo-" + index.ToString(CultureInfo.InvariantCulture);

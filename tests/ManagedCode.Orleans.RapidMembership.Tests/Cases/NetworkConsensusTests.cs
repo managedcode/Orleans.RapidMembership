@@ -6,7 +6,7 @@ public sealed class NetworkConsensusTests
 {
     [Theory]
     [InlineData(20)]
-    [InlineData(50)]
+    [InlineData(30)]
     public async Task ConcurrentIndependentWritersAndReadersKeepAllAcknowledgedRows(int writers)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));

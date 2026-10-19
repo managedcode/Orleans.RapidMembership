@@ -51,7 +51,7 @@ internal sealed class ControllerRuntime : IAsyncDisposable
 
     private async Task ControlAsync(CancellationToken cancellationToken)
     {
-        await Task.Delay(_host.Options.BootstrapDelay, cancellationToken);
+        await Task.Delay(_host.Options.BootstrapDelay, _host.Options.TimeProvider, cancellationToken);
         while (true)
         {
             var descriptions = await _directory.RefreshAsync(cancellationToken);
@@ -92,7 +92,7 @@ internal sealed class ControllerRuntime : IAsyncDisposable
                 _host.Participation.IsJoining = description.Configuration?.Contains(_host.Incarnation) != true;
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+            await Task.Delay(TimeSpan.FromSeconds(1), _host.Options.TimeProvider, cancellationToken);
         }
     }
 
@@ -117,7 +117,7 @@ internal sealed class ControllerRuntime : IAsyncDisposable
         var candidate = lowest.ToString("N");
         if (!_host.Discovery.InitialScanCompleted || !string.Equals(_host.Participation.BootstrapCandidate, candidate, StringComparison.Ordinal))
         {
-            _bootstrapObserved = DateTimeOffset.UtcNow;
+            _bootstrapObserved = _host.Options.TimeProvider.GetUtcNow();
         }
 
         _host.Participation.BootstrapCandidate = candidate;
@@ -134,7 +134,7 @@ internal sealed class ControllerRuntime : IAsyncDisposable
 
         return !_host.Knowledge.HasObservedCluster && lowest == _host.Incarnation
             && _host.Discovery.InitialScanCompleted
-            && DateTimeOffset.UtcNow - _bootstrapObserved >= _host.Options.BootstrapDelay
+            && _host.Options.TimeProvider.GetUtcNow() - _bootstrapObserved >= _host.Options.BootstrapDelay
             && !descriptions.Any(reply => reply.IsJoining)
             && agreed == peers.Length;
     }
@@ -164,7 +164,7 @@ internal sealed class ControllerRuntime : IAsyncDisposable
                 }
             }
 
-            await Task.Delay(20, cancellationToken);
+            await Task.Delay(TimeSpan.FromMilliseconds(20), _host.Options.TimeProvider, cancellationToken);
         }
     }
 
@@ -207,7 +207,7 @@ internal sealed class ControllerRuntime : IAsyncDisposable
             return;
         }
 
-        using var deadline = new CancellationTokenSource(_host.Options.OperationTimeout);
+        using var deadline = new CancellationTokenSource(_host.Options.OperationTimeout, _host.Options.TimeProvider);
         while (true)
         {
             var descriptions = await _directory.RefreshAsync(deadline.Token, force: true);
@@ -220,7 +220,7 @@ internal sealed class ControllerRuntime : IAsyncDisposable
                 return;
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(1), deadline.Token);
+            await Task.Delay(TimeSpan.FromSeconds(1), _host.Options.TimeProvider, deadline.Token);
         }
     }
 

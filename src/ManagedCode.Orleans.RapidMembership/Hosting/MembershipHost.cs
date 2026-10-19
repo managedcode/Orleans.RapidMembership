@@ -50,9 +50,10 @@ internal sealed class MembershipHost : IAsyncDisposable
         {
             rapid.Metadata["membership-incarnation"] = Incarnation.ToByteArray();
             rapid.BootstrapClusterId = new ClusterId(BitConverter.ToInt64(Incarnation.ToByteArray()) | 1);
-        })
+        }, options.TimeProvider)
             .UseGrpcTransport(grpc =>
             {
+                grpc.UseLoopbackForLocalListeners = true;
                 grpc.Timeout = options.PeerTimeout;
                 grpc.JoinTimeout = options.OperationTimeout;
                 grpc.RequestHeaders.Add(PeerTransport.IdentityHeader, identity);
@@ -135,7 +136,7 @@ internal sealed class MembershipHost : IAsyncDisposable
         var endpoint = new UriBuilder(Uri.UriSchemeHttp, bound.Address.ToString(), bound.Port).Uri;
         Self = new CoordinationMember(Incarnation, endpoint.GetLeftPart(UriPartial.Authority));
         Discovery = new MulticastDiscovery(Identity, Options.SharedSecret, endpoint.Port, Options.DiscoveryPort, Options.MaximumPeers,
-            Options.DiscoveryNetworks, Options.MaximumDiscoveryAddresses, Incarnation);
+            Options.DiscoveryNetworks, Options.MaximumDiscoveryAddresses, Incarnation, Options.TimeProvider);
         await Discovery.StartAsync(cancellationToken);
     }
 

@@ -24,9 +24,10 @@ internal sealed class DirectedDiscovery(IReadOnlyList<IPAddress> addresses, int 
             {
                 receive(await _socket.ReceiveAsync(cancellationToken));
             }
-            catch (SocketException exception) when (exception.SocketErrorCode is SocketError.ConnectionReset or SocketError.ConnectionRefused)
+            catch (SocketException exception) when (exception.SocketErrorCode is SocketError.ConnectionReset or SocketError.ConnectionRefused
+                or SocketError.HostDown or SocketError.HostUnreachable or SocketError.NetworkUnreachable)
             {
-                // ICMP rejection reports an absent listener and does not stop other probes.
+                // Unreachable destinations and ICMP rejection do not stop other probes.
             }
         }
     }

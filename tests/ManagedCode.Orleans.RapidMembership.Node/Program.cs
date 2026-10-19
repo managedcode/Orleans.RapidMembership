@@ -16,7 +16,10 @@ _ = builder.Host.UseOrleans(silo =>
         builder.Configuration.GetValue<int>("GATEWAY_PORT"));
     _ = silo.Configure<ClusterMembershipOptions>(membership =>
     {
-        membership.ProbeTimeout = TimeSpan.FromSeconds(5);
+        membership.ProbeTimeout = TimeSpan.FromSeconds(20);
+        membership.MinProbeTimeout = TimeSpan.FromSeconds(10);
+        membership.MaxProbeTimeout = TimeSpan.FromSeconds(40);
+        membership.MaxJoinAttemptTime = TimeSpan.FromMinutes(10);
         membership.TableRefreshTimeout = TimeSpan.FromSeconds(5);
         membership.IAmAliveTablePublishTimeout = TimeSpan.FromSeconds(30);
     });

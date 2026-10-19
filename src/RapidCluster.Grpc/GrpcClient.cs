@@ -238,7 +238,13 @@ internal sealed partial class GrpcClient(
                 EnableMultipleHttp2Connections = true,
             };
             handler.SslOptions.RemoteCertificateValidationCallback = _grpcOptions.RemoteCertificateValidationCallback;
-            var channel = GrpcChannel.ForAddress($"{scheme}://{key}", new GrpcChannelOptions
+            var destination = new Uri($"{scheme}://{key}");
+            if (_grpcOptions.UseLoopbackForLocalListeners)
+            {
+                destination = LocalPeerAddress.ForLocalListener(destination);
+            }
+
+            var channel = GrpcChannel.ForAddress(destination, new GrpcChannelOptions
             {
                 HttpHandler = handler,
                 DisposeHttpClient = true,

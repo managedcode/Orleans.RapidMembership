@@ -11,7 +11,7 @@
 
 Automatic, in-memory membership and gateway discovery for Microsoft Orleans 10.4 on .NET 10, based on RapidCluster.
 
-**Development status:** automatic discovery, RAM replicas, configuration handoff and native Orleans hosting are implemented. Final platform, coverage and zero-to-fifty process qualification remain open. No package has been released to NuGet.
+**Development status:** automatic discovery, RAM replicas, configuration handoff and native Orleans hosting are implemented. Final platform, coverage and zero-to-thirty process qualification remain open. No package has been released to NuGet.
 
 **Based on [RapidCluster by Reuben Bond](https://github.com/ReubenBond/RapidCluster).** This repository is a fork. The original RAPID implementation, protocol tests and Clockwork simulations are retained. Original MIT copyright and license are preserved in [LICENSE](https://github.com/managedcode/Orleans.RapidMembership/blob/main/LICENSE); [NOTICE](https://github.com/managedcode/Orleans.RapidMembership/blob/main/NOTICE) identifies the ManagedCode additions. The [RAPID protocol documentation](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/RAPID.md) describes the underlying peer discovery and observation protocol.
 
@@ -88,9 +88,9 @@ Initial formation has a separate five-minute `StartupTimeout`; ordinary table op
 
 ## Qualification and delivery
 
-The primary acceptance remains actual Aspire-owned Orleans silo processes and continuing external Orleans clients: zero → ten → twenty → five, simultaneous ten-node joins/departures, complete loss and restart, cold fifty, graceful reduction/rejoin, and real grain execution on every live silo. Assertions use exact native silo identities and generations. After each live topology change, every external client also calls native Orleans `IManagementGrain.GetHosts(true)` and verifies the complete active set. Separate Windows, Linux and macOS GitHub jobs run the full scenario.
+The primary acceptance remains actual Aspire-owned Orleans silo processes and continuing external Orleans clients: zero → ten → twenty → five, simultaneous ten-node joins/departures, complete loss and restart, cold thirty, graceful reduction/rejoin, and real grain execution on every live silo. Assertions use exact native silo identities and generations. After each live topology change, every external client also calls native Orleans `IManagementGrain.GetHosts(true)` and verifies the complete active set. Separate Windows, Linux and macOS GitHub jobs run the full scenario.
 
-Original RAPID unit, network, Clockwork and Aspire suites are retained. Previous fixed-seed/durable-table results do not qualify automatic in-memory membership. CI and original artifacts determine each gate independently; repository work items retain qualification and delivery evidence.
+Original RAPID unit, network, Clockwork and Aspire suites are retained. Previous fixed-seed/durable-table results do not qualify automatic in-memory membership. Provider qualification uses native TimeProvider/FakeTimeProvider and real Orleans processes. The unchanged Clockwork suite is supplemental in RapidCluster.UpstreamSimulation.slnx. CI and original artifacts determine each native gate independently; repository work items retain qualification and delivery evidence.
 
 All three package versions follow Orleans major/minor and the ManagedCode patch, initially **10.4.0**. CI owns verification. Release independently builds, packs and pushes the packages without waiting for CI or feed indexing. The version tag belongs to that completed release.
 

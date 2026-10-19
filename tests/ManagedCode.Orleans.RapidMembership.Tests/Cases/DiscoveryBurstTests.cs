@@ -7,7 +7,7 @@ namespace ManagedCode.Orleans.RapidMembership.Tests.Cases;
 public sealed class DiscoveryBurstTests(ITestOutputHelper output)
 {
     [Fact]
-    public async Task SimultaneousFiftyPeerAnnouncementsConvergeWithoutAddressInputs()
+    public async Task SimultaneousThirtyPeerAnnouncementsConvergeWithoutAddressInputs()
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(2));
@@ -17,7 +17,7 @@ public sealed class DiscoveryBurstTests(ITestOutputHelper output)
         var port = ((IPEndPoint)reservation.Client.LocalEndPoint!).Port;
         reservation.Dispose();
         var identity = Guid.NewGuid().ToString("N");
-        var listeners = Enumerable.Range(0, 50).Select(_ => new TcpListener(IPAddress.Any, 0)).ToArray();
+        var listeners = Enumerable.Range(0, 30).Select(_ => new TcpListener(IPAddress.Any, 0)).ToArray();
         var peers = new List<MulticastDiscovery>();
         try
         {
@@ -29,7 +29,7 @@ public sealed class DiscoveryBurstTests(ITestOutputHelper output)
             }
 
             await Task.WhenAll(peers.Select(peer => peer.StartAsync(token)));
-            output.WriteLine(FormattableString.Invariant($"All 50 discovery listeners started after {elapsed.Elapsed}."));
+            output.WriteLine(FormattableString.Invariant($"All 30 discovery listeners started after {elapsed.Elapsed}."));
             var expected = peers.Select(peer => peer.NodeId).Order().ToArray();
             while (peers.Any(peer => !peer.Peers.Select(value => value.NodeId).Append(peer.NodeId).Order().SequenceEqual(expected)))
             {

@@ -4,3 +4,5 @@ global using ManagedCode.Orleans.RapidMembership.Operations;
 global using ManagedCode.Orleans.RapidMembership.Tests.Cases;
 global using ManagedCode.Orleans.RapidMembership.Tests.Support;
 global using ManagedCode.Orleans.RapidMembership.Transport;
+
+[assembly: Xunit.CollectionBehavior(MaxParallelThreads = 4)]

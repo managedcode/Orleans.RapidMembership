@@ -16,7 +16,8 @@ public sealed class NativeHostTests
     [InlineData("127.0.0.1-127.0.0.2")]
     public async Task PublicRegistrationsStartARealSiloAndExternalClientWithAutomaticInMemoryMembership(string network)
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(2));
         var listeners = Enumerable.Range(0, 3).Select(_ => new TcpListener(IPAddress.Loopback, 0)).ToArray();
         foreach (var listener in listeners)
         {
@@ -43,9 +44,9 @@ public sealed class NativeHostTests
             });
         });
         using var siloHost = siloBuilder.Build();
-        await siloHost.StartAsync(timeout.Token);
         try
         {
+            await siloHost.StartAsync(timeout.Token);
             var clientBuilder = Host.CreateApplicationBuilder();
             _ = clientBuilder.UseOrleansClient(client =>
             {

@@ -10,6 +10,7 @@ internal sealed class MulticastDiscovery : IAsyncDisposable
     private readonly ConcurrentDictionary<Guid, DiscoveredPeer> _peers = [];
     private readonly Lock _observations = new();
     private readonly CancellationTokenSource _stopping = new();
+    private readonly TimeProvider _timeProvider;
     private readonly DiscoveryPacket _packets;
     private readonly DirectedDiscovery _directed;
     private readonly int _servicePort;
@@ -21,13 +22,14 @@ internal sealed class MulticastDiscovery : IAsyncDisposable
     private int _disposed;
 
     public MulticastDiscovery(string identity, string sharedSecret, int servicePort, int discoveryPort = 11113, int maximumPeers = 10000,
-        IReadOnlyList<string>? discoveryNetworks = null, int maximumAddresses = 4096, Guid? incarnation = null)
+        IReadOnlyList<string>? discoveryNetworks = null, int maximumAddresses = 4096, Guid? incarnation = null, TimeProvider? timeProvider = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(servicePort);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(servicePort, 65535);
         ArgumentOutOfRangeException.ThrowIfLessThan(discoveryPort, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(discoveryPort, 65535);
         ArgumentOutOfRangeException.ThrowIfLessThan(maximumPeers, 1);
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _packets = new DiscoveryPacket(identity, sharedSecret);
         _servicePort = servicePort;
         _discoveryPort = discoveryPort;
@@ -97,7 +99,7 @@ internal sealed class MulticastDiscovery : IAsyncDisposable
             {
                 try
                 {
-                    await _directed.ReplyAsync(_packets.Encode(NodeId, _servicePort, DateTimeOffset.UtcNow),
+                    await _directed.ReplyAsync(_packets.Encode(NodeId, _servicePort, _timeProvider.GetUtcNow()),
                         datagram.RemoteEndPoint, cancellationToken);
                 }
                 catch (SocketException exception) when (MulticastInterfaces.Unavailable(exception.SocketErrorCode))
@@ -110,7 +112,7 @@ internal sealed class MulticastDiscovery : IAsyncDisposable
 
     private bool ObserveDatagram(UdpReceiveResult datagram)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         if (!_packets.TryDecode(datagram.Buffer, now, out var nodeId, out var port) || nodeId == NodeId)
         {
             return false;
@@ -144,18 +146,18 @@ internal sealed class MulticastDiscovery : IAsyncDisposable
         {
             await AnnounceRoundAsync(interfaces, cancellationToken);
             RemoveExpired();
-            await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+            await Task.Delay(TimeSpan.FromSeconds(1), _timeProvider, cancellationToken);
         }
     }
 
     private async Task AnnounceRoundAsync(IPAddress[] interfaces, CancellationToken cancellationToken)
     {
-        var probed = await _directed.ProbeAsync(_packets.Encode(NodeId, 0, DateTimeOffset.UtcNow),
+        var probed = await _directed.ProbeAsync(_packets.Encode(NodeId, 0, _timeProvider.GetUtcNow()),
             _peers.Values.Select(peer => peer.Address), cancellationToken);
         if (_servicePort > 0)
         {
             var announced = await MulticastInterfaces.SendAsync(_socket!, interfaces,
-                _packets.Encode(NodeId, _servicePort, DateTimeOffset.UtcNow), new IPEndPoint(Group, _discoveryPort), cancellationToken);
+                _packets.Encode(NodeId, _servicePort, _timeProvider.GetUtcNow()), new IPEndPoint(Group, _discoveryPort), cancellationToken);
             if (!announced && !probed)
             {
                 throw new InvalidOperationException("No active interface can send discovery announcements or probes.");
@@ -181,7 +183,7 @@ internal sealed class MulticastDiscovery : IAsyncDisposable
 
     private void RemoveExpired()
     {
-        var cutoff = DateTimeOffset.UtcNow.AddSeconds(-30);
+        var cutoff = _timeProvider.GetUtcNow().AddSeconds(-30);
         foreach (var peer in _peers)
         {
             if (peer.Value.LastSeen < cutoff)

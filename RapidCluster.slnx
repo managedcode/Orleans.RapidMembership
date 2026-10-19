@@ -17,10 +17,6 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/ManagedCode.Orleans.RapidMembership/ManagedCode.Orleans.RapidMembership.csproj" />
-    <Project Path="src/Clockwork/src/Clockwork/Clockwork.csproj" />
-    <Project Path="src/Clockwork/src/Clockwork.Instrumentation/Clockwork.Instrumentation.csproj" />
-    <Project Path="src/Clockwork/src/Clockwork.Instrumentation.Build/Clockwork.Instrumentation.Build.csproj" />
-    <Project Path="src/Clockwork/src/Clockwork.Testing/Clockwork.Testing.csproj" />
     <Project Path="src/RapidCluster.Core/RapidCluster.Core.csproj" />
     <Project Path="src/RapidCluster.Grpc/RapidCluster.Grpc.csproj" />
   </Folder>
@@ -30,8 +26,6 @@
     <Project Path="tests/ManagedCode.Orleans.RapidMembership.AppHost/ManagedCode.Orleans.RapidMembership.AppHost.csproj" />
     <Project Path="tests/RapidCluster.Unit.Tests/RapidCluster.Unit.Tests.csproj" />
     <Project Path="tests/RapidCluster.Integration.Tests/RapidCluster.Integration.Tests.csproj" />
-    <Project Path="tests/RapidCluster.Simulation.Fixtures/RapidCluster.Simulation.Fixtures.csproj" />
-    <Project Path="tests/RapidCluster.Simulation.Tests/RapidCluster.Simulation.Tests.csproj" />
   </Folder>
   <Folder Name="/tests/RapidCluster.EndToEnd/">
     <Project Path="tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.AppHost/RapidCluster.EndToEnd.AppHost.csproj" />

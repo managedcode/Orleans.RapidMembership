@@ -36,7 +36,9 @@ public static class RapidMembershipExtensions
     private static void Register(IServiceCollection services, Action<RapidMembershipOptions> configure, bool server)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        _ = services.AddOptions<RapidMembershipOptions>().Configure(configure);
+        services.TryAddSingleton(TimeProvider.System);
+        _ = services.AddOptions<RapidMembershipOptions>().Configure(configure)
+            .Configure<TimeProvider>((options, clock) => options.TimeProvider = clock);
         _ = services.AddSerializer(serializer => serializer.AddAssembly(typeof(RapidMembershipOptions).Assembly));
         services.TryAddSingleton(provider =>
         {

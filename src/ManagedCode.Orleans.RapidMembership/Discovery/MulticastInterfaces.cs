@@ -59,12 +59,9 @@ internal static class MulticastInterfaces
     private static bool Unavailable(SocketException exception, IPAddress address) => Unavailable(exception.SocketErrorCode)
         || OperatingSystem.IsLinux() && exception.SocketErrorCode == SocketError.SocketError && !IsAssigned(address);
 
-    internal static bool IsAssigned(IPAddress address) => NetworkInterface.GetAllNetworkInterfaces()
-        .Where(network => network.OperationalStatus == OperationalStatus.Up)
-        .SelectMany(network => network.GetIPProperties().UnicastAddresses)
-        .Any(unicast => unicast.Address.Equals(address));
+    internal static bool IsAssigned(IPAddress address) => global::RapidCluster.Grpc.LocalPeerAddress.IsAssigned(address);
 
-    internal static bool Unavailable(SocketError error) => error is SocketError.HostUnreachable or SocketError.NetworkUnreachable
+    internal static bool Unavailable(SocketError error) => error is SocketError.HostDown or SocketError.HostUnreachable or SocketError.NetworkUnreachable
         or SocketError.AddressNotAvailable or SocketError.NetworkDown or SocketError.AccessDenied
         or SocketError.ConnectionRefused or SocketError.ConnectionReset;
 }

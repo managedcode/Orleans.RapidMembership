@@ -53,6 +53,8 @@ public sealed class RapidMembershipOptions
     /// <summary>Gets or sets the maximum concurrently admitted peer exchanges.</summary>
     public int MaximumAdmissions { get; set; } = 32;
 
+    internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
+
     internal string AdmissionToken => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(SharedSecret)));
 
     internal static string Identity(ClusterOptions cluster) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(

@@ -8,6 +8,9 @@ public interface IProbeGrain : IGrainWithStringKey
     [Alias("Echo")]
     Task<string> Echo(string value);
 
+    [Alias("CrashProcess")]
+    Task CrashProcess(string expectedSilo);
+
     [Alias("Observe")]
     Task<ProbeReply> Observe(string value);
 }

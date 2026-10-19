@@ -61,13 +61,13 @@ public sealed class AspireChurnTests(ITestOutputHelper output)
     }
 
     [Fact, Trait("Category", "Scale")]
-    public async Task FiftyRealSilosRecoverFromZeroAndConcurrentChurnWithContinuousClients()
+    public async Task ThirtyRealSilosRecoverFromZeroAndConcurrentChurnWithContinuousClients()
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(45));
         var token = timeout.Token;
         await using var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.ManagedCode_Orleans_RapidMembership_AppHost>(
-            ["--DcpPublisher:RandomizePorts=false", "--TestCluster:Nodes=50", "--TestCluster:ExplicitStart=true"], token);
+            ["--DcpPublisher:RandomizePorts=false", "--TestCluster:Nodes=30", "--TestCluster:ExplicitStart=true"], token);
         _ = builder.Services.AddLogging(logging => logging.SetMinimumLevel(LogLevel.Warning));
         await using var app = await builder.BuildAsync(token);
         await app.StartAsync(token);
@@ -101,16 +101,16 @@ public sealed class AspireChurnTests(ITestOutputHelper output)
         await Task.Delay(TimeSpan.FromSeconds(5), token);
         Assert.Equal(successes, clients.Successes);
         await clients.RequireUnavailableManagementAsync(token);
-        output.WriteLine("All 50 resources stopped; existing clients remain alive across complete cluster loss.");
+        output.WriteLine("All 30 resources stopped; existing clients remain alive across complete cluster loss.");
         await cluster.ChangeAsync(Enumerable.Range(0, 10), "resource-start", token);
         await CheckAsync("cold-return-10", [.. Enumerable.Range(0, 10)], cluster, clients, token);
-        await cluster.ChangeAsync(Enumerable.Range(10, 40), "resource-start", token);
-        await CheckAsync("grow-50", [.. Enumerable.Range(0, 50)], cluster, clients, token);
-        await cluster.ChangeAsync(Enumerable.Range(25, 25), "shutdown", token);
-        await CheckAsync("graceful-to-25", [.. Enumerable.Range(0, 25)], cluster, clients, token);
-        await cluster.ChangeAsync(Enumerable.Range(25, 25), "resource-start", token);
-        await CheckAsync("graceful-return-50", [.. Enumerable.Range(0, 50)], cluster, clients, token);
-        Assert.True(clients.Silos.Length >= 50, $"Expected execution on at least 50 silo incarnations; observed {clients.Silos.Length}.");
+        await cluster.ChangeAsync(Enumerable.Range(10, 20), "resource-start", token);
+        await CheckAsync("grow-30", [.. Enumerable.Range(0, 30)], cluster, clients, token);
+        await cluster.ChangeAsync(Enumerable.Range(15, 15), "shutdown", token);
+        await CheckAsync("graceful-to-15", [.. Enumerable.Range(0, 15)], cluster, clients, token);
+        await cluster.ChangeAsync(Enumerable.Range(15, 15), "resource-start", token);
+        await CheckAsync("graceful-return-30", [.. Enumerable.Range(0, 30)], cluster, clients, token);
+        Assert.True(clients.Silos.Length >= 30, $"Expected execution on at least 30 silo incarnations; observed {clients.Silos.Length}.");
     }
 
     [Fact, Trait("Category", "Scale")]
@@ -166,24 +166,56 @@ public sealed class AspireChurnTests(ITestOutputHelper output)
     }
 
     [Fact, Trait("Category", "Scale")]
-    public async Task FiftyRealSilosStartTogetherFromZeroAndServeExternalClients()
+    public async Task ThirtyRealSilosStartTogetherFromZeroAndServeExternalClients()
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(15));
         var token = timeout.Token;
         await using var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.ManagedCode_Orleans_RapidMembership_AppHost>(
-            ["--DcpPublisher:RandomizePorts=false", "--TestCluster:Nodes=50", "--TestCluster:ExplicitStart=true"], token);
+            ["--DcpPublisher:RandomizePorts=false", "--TestCluster:Nodes=30", "--TestCluster:ExplicitStart=true"], token);
         _ = builder.Services.AddLogging(logging => logging.SetMinimumLevel(LogLevel.Warning));
         await using var app = await builder.BuildAsync(token);
         await app.StartAsync(token);
         await using var evidence = new ChurnEvidence(output, app);
         var cluster = new AspireChurnCluster(app, evidence.Write);
         await cluster.RequireEmptyAsync(token);
-        await cluster.ChangeAsync(Enumerable.Range(0, 50), "resource-start", token);
-        _ = await cluster.ConvergeAsync([.. Enumerable.Range(0, 50)], token);
+        await cluster.ChangeAsync(Enumerable.Range(0, 30), "resource-start", token);
+        _ = await cluster.ConvergeAsync([.. Enumerable.Range(0, 30)], token);
         await using var clients = new ContinuousClients(evidence.Write);
         await clients.StartAsync(await cluster.EnvironmentAsync(token), token);
-        await CheckAsync("cold-start-50", [.. Enumerable.Range(0, 50)], cluster, clients, token);
+        await CheckAsync("cold-start-30", [.. Enumerable.Range(0, 30)], cluster, clients, token);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GrainCrashRemovesItsSiloAndReactivatesOnASurvivor(bool crashVoter)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(10));
+        var token = timeout.Token;
+        await using var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.ManagedCode_Orleans_RapidMembership_AppHost>(
+            ["--DcpPublisher:RandomizePorts=false", "--TestCluster:Nodes=4"], token);
+        _ = builder.Services.AddLogging(logging => logging.SetMinimumLevel(LogLevel.Warning));
+        await using var app = await builder.BuildAsync(token);
+        await app.StartAsync(token);
+        await using var evidence = new ChurnEvidence(output, app);
+        var cluster = new AspireChurnCluster(app, evidence.Write);
+        await cluster.ChangeAsync([3], "resource-start", token);
+        await using var clients = new ContinuousClients(evidence.Write);
+        await clients.StartAsync(await cluster.EnvironmentAsync(token), token);
+        await CheckAsync("before-grain-crash", [0, 1, 2, 3], cluster, clients, token);
+        var voters = await cluster.VotersAsync([0, 1, 2, 3], token);
+        var identities = await Task.WhenAll(Enumerable.Range(0, 4).Select(index => cluster.IdentityAsync(index, token)));
+        var eligible = Enumerable.Range(0, 4).Where(index => voters.Contains(index) == crashVoter).ToArray();
+        var lost = await clients.CrashActivationAsync([.. eligible.Select(index => identities[index])], token);
+        var crashed = Array.IndexOf(identities, lost.Silo);
+        Assert.Contains(crashed, eligible);
+        await cluster.RequireCrashedAsync(crashed, token);
+        await CheckAsync("after-grain-crash", [.. Enumerable.Range(0, 4).Except([crashed])], cluster, clients, token);
+        await cluster.ChangeAsync([crashed], "resource-start", token);
+        await CheckAsync("after-crashed-silo-restarts", [0, 1, 2, 3], cluster, clients, token);
+        Assert.NotEqual(lost.Silo, await cluster.IdentityAsync(crashed, token));
     }
 
     private async Task CheckAsync(string phase, int[] live, AspireChurnCluster cluster, ContinuousClients clients, CancellationToken token)

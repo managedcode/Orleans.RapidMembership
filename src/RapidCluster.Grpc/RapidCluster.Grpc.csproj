@@ -7,6 +7,8 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="RapidCluster.Unit.Tests" />
+    <InternalsVisibleTo Include="ManagedCode.Orleans.RapidMembership" />
+    <InternalsVisibleTo Include="ManagedCode.Orleans.RapidMembership.Tests" />
     <InternalsVisibleTo Include="RapidCluster.Integration.Tests" />
     <InternalsVisibleTo Include="RapidCluster.Simulation.Tests" />
   </ItemGroup>

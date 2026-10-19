@@ -7,10 +7,9 @@ Read [AGENTS.md](AGENTS.md) and the affected project rules first. This fork pres
 Install the Aspire CLI matching the pinned AppHost SDK (13.6.1) and prepare its bundle before building multiple AppHost projects. CI runs the paired CLI setup once before the solution build.
 
 ```sh
-git submodule update --init --recursive
 dotnet restore RapidCluster.slnx
-dotnet format RapidCluster.slnx --no-restore --exclude src/Clockwork
-dotnet format RapidCluster.slnx --no-restore --exclude src/Clockwork --verify-no-changes
+dotnet format RapidCluster.slnx --no-restore
+dotnet format RapidCluster.slnx --no-restore --verify-no-changes
 dotnet build RapidCluster.slnx --no-restore --configuration Release -warnaserror
 ```
 
@@ -23,15 +22,23 @@ dotnet run --project tests/ManagedCode.Orleans.RapidMembership.Tests --configura
 dotnet run --project tests/ManagedCode.Orleans.RapidMembership.Tests --configuration Release --no-build -- --filter-trait Category=Scale --timeout 4500s --output Detailed --report-trx --results-directory artifacts/tests/churn
 dotnet run --project tests/RapidCluster.Unit.Tests --configuration Release --no-build -- --timeout 600s --output Detailed --report-trx --results-directory artifacts/tests/unit
 dotnet run --project tests/RapidCluster.Integration.Tests --configuration Release --no-build -- --timeout 600s --output Detailed --report-trx --results-directory artifacts/tests/network
-python3 eng/test-simulations.py --workers 2
 dotnet run --project tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests --configuration Release --no-build -- --timeout 600s --output Detailed --report-trx --results-directory artifacts/tests/aspire
 ```
 
 Coverage settings explicitly select static managed instrumentation with restoration on every platform. No product/generated sources are excluded.
 
-Add `--coverage --coverage-settings eng/coverage.config.xml --coverage-output-format cobertura --coverage-output membership.cobertura.xml` to a non-scale native test run for original coverage evidence. Run `python3 eng/verify-coverage.py artifacts/tests/membership/membership.cobertura.xml`: the complete provider assembly requires 80% line / 70% branch, and every listed critical source file requires 90% line. The gate retains its original report hash and does not exclude generated or product code. Scale tests start up to fifty real silo processes and four continuing Orleans clients; allow enough CPU and memory and avoid overlapping heavyweight build/test lanes. AppHost owns each process and teardown. Separate Windows, Linux and macOS CI jobs each run the complete scale scenario with their own actual silo processes, clients and original artifacts; Release runs independently.
+Add `--coverage --coverage-settings eng/coverage.config.xml --coverage-output-format cobertura --coverage-output membership.cobertura.xml` to a non-scale native test run for original coverage evidence. Run `python3 eng/verify-coverage.py artifacts/tests/membership/membership.cobertura.xml`: the complete provider assembly requires 80% line / 70% branch, and every listed critical source file requires 90% line. The gate retains its original report hash and does not exclude generated or product code. Scale tests start up to thirty real silo processes and four continuing Orleans clients; allow enough CPU and memory and avoid overlapping heavyweight build/test lanes. AppHost owns each process and teardown. Separate Windows, Linux and macOS CI jobs each run the complete scale scenario with their own actual silo processes, clients and original artifacts; Release runs independently.
 
-Simulations run the Clockwork-instrumented closure through the runner, which checks every discovered case against native TRX. `--group` is for focused diagnosis only; complete qualification runs without a group filter. Keep failure artifacts and seeds. Never suppress a failed case or reduce its assertions to pass a gate.
+Provider timing tests use native TimeProvider and FakeTimeProvider, including real UDP expiry and HTTP/2 cancellation followed by healthy requests. The default solution and CI require no Clockwork build or instrumentation. The unchanged upstream simulation suite remains separately runnable for supplemental protocol research:
+
+```sh
+git submodule update --init --recursive
+dotnet restore RapidCluster.UpstreamSimulation.slnx
+dotnet build RapidCluster.UpstreamSimulation.slnx --no-restore --configuration Release -warnaserror
+python3 eng/test-simulations.py --workers 2
+```
+
+Do not overlap that build with the native solution lane. Retain its original failures, complete case inventory and seeds. Its Clockwork race tracker has a confirmed memory limitation in the batched 200-node case; it is not a provider acceptance gate. See [ADR-0002](docs/ADR/0002-native-time-provider-qualification.md).
 
 ## Review and delivery
 

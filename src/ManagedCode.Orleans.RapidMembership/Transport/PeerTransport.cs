@@ -84,10 +84,12 @@ internal sealed class PeerTransport(
             throw new InvalidDataException("The outgoing peer exchange exceeds its byte bound.");
         }
 
+        using var timer = new CancellationTokenSource(options.PeerTimeout, options.TimeProvider);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timer.Token);
         try
         {
             using var call = new MembershipPeer.MembershipPeerClient(channel).ExchangeAsync(
-                new PeerPayload { Content = ByteString.CopyFrom(bytes) }, _headers, DateTime.UtcNow + options.PeerTimeout, cancellationToken);
+                new PeerPayload { Content = ByteString.CopyFrom(bytes) }, _headers, cancellationToken: linked.Token);
             var payload = await call.ResponseAsync;
             var reply = replies.Deserialize(payload.Content.Span);
             return reply?.Incarnation == member.Incarnation ? reply : null;
@@ -96,7 +98,7 @@ internal sealed class PeerTransport(
         {
             return null;
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (linked.IsCancellationRequested)
         {
             return null;
         }
@@ -116,7 +118,7 @@ internal sealed class PeerTransport(
                 throw new InvalidOperationException("The peer channel bound was reached.");
             }
 
-            var channel = GrpcChannel.ForAddress(member.Endpoint, new GrpcChannelOptions
+            var channel = GrpcChannel.ForAddress(global::RapidCluster.Grpc.LocalPeerAddress.ForLocalListener(new Uri(member.Endpoint)), new GrpcChannelOptions
             {
                 MaxReceiveMessageSize = options.MaximumExchangeBytes,
                 MaxSendMessageSize = options.MaximumExchangeBytes,
