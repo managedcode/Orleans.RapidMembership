@@ -14,11 +14,14 @@ internal sealed class MemoryReplicaSet : IDisposable
     public RapidMembershipOptions Options { get; } = new() { MaximumSnapshotBytes = 4096, MaximumExchangeBytes = 12288, MaximumEntries = 2, MaximumOperationHistory = 8 };
 
     public MemoryMembershipReplica Add(CoordinationMember member)
+        => Add(member.Incarnation);
+
+    public MemoryMembershipReplica Add(Guid incarnation)
     {
-        var replica = new MemoryMembershipReplica(member.Incarnation, "cluster", Options,
+        var replica = new MemoryMembershipReplica(incarnation, "cluster", Options,
             _services.GetRequiredService<Serializer<PeerRequest>>(), _services.GetRequiredService<Serializer<PeerReply>>(),
             _services.GetRequiredService<Serializer<MembershipSnapshot>>());
-        _replicas.Add(member.Incarnation, replica);
+        _replicas.Add(incarnation, replica);
         return replica;
     }
 

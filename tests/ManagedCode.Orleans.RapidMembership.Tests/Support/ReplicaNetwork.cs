@@ -1,8 +1,9 @@
 using System.Net;
-using System.Net.Sockets;
 using ManagedCode.Orleans.RapidMembership.Discovery;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Orleans.Serialization;
@@ -66,14 +67,10 @@ internal sealed class ReplicaNetwork : IAsyncDisposable
 
     private async Task AddAsync(CancellationToken cancellationToken)
     {
-        using var reservation = new TcpListener(IPAddress.Loopback, 0);
-        reservation.Start();
-        var port = ((IPEndPoint)reservation.LocalEndpoint).Port;
-        var member = new CoordinationMember(Guid.NewGuid(), new UriBuilder(Uri.UriSchemeHttp, "127.0.0.1", port).Uri.GetLeftPart(UriPartial.Authority));
-        var replica = Replicas.Add(member);
-        _members.Add(member);
+        var incarnation = Guid.NewGuid();
+        var replica = Replicas.Add(incarnation);
         var builder = WebApplication.CreateSlimBuilder();
-        _ = builder.WebHost.ConfigureKestrel(server => server.Listen(IPAddress.Loopback, port, listen => listen.Protocols = HttpProtocols.Http2));
+        _ = builder.WebHost.ConfigureKestrel(server => server.Listen(IPAddress.Loopback, 0, listen => listen.Protocols = HttpProtocols.Http2));
         _ = builder.Services.AddSerializer(serializer => serializer.AddAssembly(typeof(RapidMembershipOptions).Assembly));
         _ = builder.Services.AddGrpc();
         _configure?.Invoke(builder.Services);
@@ -83,8 +80,9 @@ internal sealed class ReplicaNetwork : IAsyncDisposable
         var app = builder.Build();
         _servers.Add(app);
         _ = app.MapGrpcService<MembershipPeerService>();
-        reservation.Stop();
         await app.StartAsync(cancellationToken);
+        var bound = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+        _members.Add(new CoordinationMember(incarnation, new Uri(bound).GetLeftPart(UriPartial.Authority)));
     }
 
     public async ValueTask DisposeAsync()
