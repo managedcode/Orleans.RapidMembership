@@ -88,7 +88,7 @@ Initial formation has a separate five-minute `StartupTimeout`; ordinary table op
 
 ## Qualification and delivery
 
-The primary acceptance remains actual Aspire-owned Orleans silo processes and continuing external Orleans clients: zero → ten → twenty → five, simultaneous ten-node joins/departures, complete loss and restart, cold fifty, graceful reduction/rejoin, and real grain execution on every live silo. Assertions use exact native silo identities and generations.
+The primary acceptance remains actual Aspire-owned Orleans silo processes and continuing external Orleans clients: zero → ten → twenty → five, simultaneous ten-node joins/departures, complete loss and restart, cold fifty, graceful reduction/rejoin, and real grain execution on every live silo. Assertions use exact native silo identities and generations. After each live topology change, every external client also calls native Orleans `IManagementGrain.GetHosts(true)` and verifies the complete active set. Separate Windows, Linux and macOS GitHub jobs run the full scenario.
 
 Original RAPID unit, network, Clockwork and Aspire suites are retained. Previous fixed-seed/durable-table results do not qualify automatic in-memory membership. CI and original artifacts determine each gate independently; repository work items retain qualification and delivery evidence.
 

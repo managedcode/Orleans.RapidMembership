@@ -23,6 +23,20 @@ public sealed class DeferredMembershipChangesTests
         Assert.Empty(changes);
     }
 
+    [Fact]
+    public void ARejoinedEndpointDoesNotInheritThePreviousIncarnationsDeferredRemoval()
+    {
+        var previous = Members(1, 2, 3);
+        var learned = Members(1, 2, 3);
+        _ = learned.Remove(Node(2));
+        _ = learned.Add(Utils.HostFromParts("127.0.0.1", 2, 99));
+        var changes = new SortedSet<Endpoint>(ProtobufEndpointComparer.Instance) { Node(2) };
+
+        MembershipService.RetainUnappliedChanges(changes, previous, learned);
+
+        Assert.Empty(changes);
+    }
+
     private static Endpoint Node(int port) => Utils.HostFromParts("127.0.0.1", port);
 
     private static HashSet<Endpoint> Members(params int[] ports)

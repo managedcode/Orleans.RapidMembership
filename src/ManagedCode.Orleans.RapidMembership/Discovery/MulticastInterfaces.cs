@@ -6,9 +6,6 @@ namespace ManagedCode.Orleans.RapidMembership.Discovery;
 
 internal static class MulticastInterfaces
 {
-    // Linux ENODEV is reported as SocketError.SocketError when an interface disappears before joining.
-    private const int LinuxNoSuchDevice = 19;
-
     public static IPAddress[] Join(UdpClient socket, IPAddress group)
     {
         var addresses = NetworkInterface.GetAllNetworkInterfaces()
@@ -29,7 +26,7 @@ internal static class MulticastInterfaces
                 socket.JoinMulticastGroup(group, address);
                 joined.Add(address);
             }
-            catch (SocketException exception) when (Unavailable(exception))
+            catch (SocketException exception) when (Unavailable(exception, address))
             {
                 // Other interfaces and authenticated directed probes remain independently usable.
             }
@@ -50,7 +47,7 @@ internal static class MulticastInterfaces
                 _ = await socket.SendAsync(packet, destination, cancellationToken);
                 sent = true;
             }
-            catch (SocketException exception) when (Unavailable(exception))
+            catch (SocketException exception) when (Unavailable(exception, address))
             {
                 // Failure on one route does not invalidate successful sends on another interface.
             }
@@ -59,8 +56,13 @@ internal static class MulticastInterfaces
         return sent;
     }
 
-    internal static bool Unavailable(SocketException exception) => Unavailable(exception.SocketErrorCode)
-        || OperatingSystem.IsLinux() && exception.NativeErrorCode == LinuxNoSuchDevice;
+    private static bool Unavailable(SocketException exception, IPAddress address) => Unavailable(exception.SocketErrorCode)
+        || OperatingSystem.IsLinux() && exception.SocketErrorCode == SocketError.SocketError && !IsAssigned(address);
+
+    internal static bool IsAssigned(IPAddress address) => NetworkInterface.GetAllNetworkInterfaces()
+        .Where(network => network.OperationalStatus == OperationalStatus.Up)
+        .SelectMany(network => network.GetIPProperties().UnicastAddresses)
+        .Any(unicast => unicast.Address.Equals(address));
 
     internal static bool Unavailable(SocketError error) => error is SocketError.HostUnreachable or SocketError.NetworkUnreachable
         or SocketError.AddressNotAvailable or SocketError.NetworkDown or SocketError.AccessDenied

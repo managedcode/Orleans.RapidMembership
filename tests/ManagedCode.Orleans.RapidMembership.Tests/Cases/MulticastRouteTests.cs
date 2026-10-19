@@ -41,6 +41,8 @@ public sealed class MulticastRouteTests
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
         var group = IPAddress.Parse("239.192.44.44");
         var unavailable = IPAddress.Parse("192.0.2.254");
+        Assert.False(MulticastInterfaces.IsAssigned(unavailable));
+        Assert.True(MulticastInterfaces.IsAssigned(IPAddress.Loopback));
         using var receiver = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
         receiver.JoinMulticastGroup(group, IPAddress.Loopback);
         using var sender = new UdpClient(new IPEndPoint(IPAddress.Any, 0)) { MulticastLoopback = true };

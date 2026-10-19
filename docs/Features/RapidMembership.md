@@ -21,7 +21,7 @@ The required provider implements Orleans 10.4 membership and gateway discovery o
 
 Use actual Aspire AddProject silo processes and actual external Orleans clients. Exercise zero → ten → twenty → five, return to twenty, concurrent ten joins and ten crashes, full loss to zero, restart ten, grow to fifty, graceful reduction to twenty-five and return to fifty. Independently start fifty directly from zero.
 
-Every live node must report the complete expected native address/generation set; matching counts alone cannot pass. Every live silo must execute a grain call and every continuing client must progress in each live phase. The zero phase drains in-flight work and verifies absence of further successful calls. Complete loss creates fresh in-memory membership rather than reopening voter files.
+Every live node must report the complete expected native address/generation set; matching counts alone cannot pass. After each live topology change, every external client calls native Orleans IManagementGrain.GetHosts(true) and must see that same exact active set. The zero phase requires management RPC to be unavailable. Windows, Linux and macOS each run the full scenario in a separate GitHub job. Every live silo must execute a grain call and every continuing client must progress in each live phase. The zero phase drains in-flight work and verifies absence of further successful calls. Complete loss creates fresh in-memory membership rather than reopening voter files.
 
 The tests now use discovered peers, entirely in-memory membership and actual coordinator identities. Prior fixed-seed results do not qualify the corrected behavior. Preserve their actual fault injection, exact identity assertions, client operations and joined cleanup.
 

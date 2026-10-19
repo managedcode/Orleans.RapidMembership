@@ -705,6 +705,9 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
         // Update the view (metadata is embedded in MemberInfo within the view)
         _membershipView = newView;
 
+        // Every view update rebases deferred intent, including views learned from another participant.
+        RetainUnappliedChanges(_deferredProposals, oldMembers, new HashSet<Endpoint>(newView.Members, EndpointAddressComparer.Instance));
+
         // Update cut detector for the new view.
         _cutDetector.UpdateView(_membershipView);
 
@@ -1575,9 +1578,6 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
             // Build the new immutable view with incremented version
             var newView = builder.Build(_membershipView.ConfigurationId);
 
-            // Deferred detections describe changes to the old view, not toggles against a later view.
-            RetainUnappliedChanges(_deferredProposals, currentMembers, proposedMembers);
-
             _log.DecideViewChangeCleanup();
 
             // Use SetMembershipView to apply all changes (including notifying waiting joiners)
@@ -1614,7 +1614,9 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
     }
 
     internal static void RetainUnappliedChanges(SortedSet<Endpoint> changes, HashSet<Endpoint> previousMembers, HashSet<Endpoint> nextMembers)
-        => changes.RemoveWhere(endpoint => previousMembers.Contains(endpoint) != nextMembers.Contains(endpoint));
+        => changes.RemoveWhere(endpoint => previousMembers.Contains(endpoint) != nextMembers.Contains(endpoint)
+            || previousMembers.TryGetValue(endpoint, out var previous) && nextMembers.TryGetValue(endpoint, out var next)
+                && previous.NodeId != next.NodeId);
 
     /// <summary>
     /// Gets the list of endpoints currently in the membership view.

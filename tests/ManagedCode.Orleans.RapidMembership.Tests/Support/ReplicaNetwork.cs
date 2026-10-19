@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using ManagedCode.Orleans.RapidMembership.Discovery;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -15,9 +16,13 @@ internal sealed class ReplicaNetwork : IAsyncDisposable
 
     private readonly List<WebApplication> _servers = [];
     private readonly List<CoordinationMember> _members = [];
+    private readonly List<MulticastDiscovery> _discoveries = [];
+    private readonly Action<IServiceCollection>? _configure;
 
-    private ReplicaNetwork()
+    private ReplicaNetwork(Action<IServiceCollection>? configure)
     {
+        _configure = configure;
+        Replicas.Options.SharedSecret = Guid.NewGuid().ToString("N");
         Transport = new PeerTransport(Replicas.Options, "cluster",
         _services.GetRequiredService<Serializer<PeerRequest>>(), _services.GetRequiredService<Serializer<PeerReply>>());
     }
@@ -28,9 +33,9 @@ internal sealed class ReplicaNetwork : IAsyncDisposable
 
     public CoordinationMember[] Members => [.. _members.OrderBy(member => member.Incarnation)];
 
-    public static async Task<ReplicaNetwork> StartAsync(CancellationToken cancellationToken)
+    public static async Task<ReplicaNetwork> StartAsync(CancellationToken cancellationToken, Action<IServiceCollection>? configure = null)
     {
-        var network = new ReplicaNetwork();
+        var network = new ReplicaNetwork(configure);
         try
         {
             for (var index = 0; index < 3; index++)
@@ -47,6 +52,18 @@ internal sealed class ReplicaNetwork : IAsyncDisposable
         }
     }
 
+    public async Task<PeerDirectory> AnnounceAsync(CancellationToken cancellationToken)
+    {
+        foreach (var member in Members)
+        {
+            var discovery = new MulticastDiscovery("cluster", Replicas.Options.SharedSecret, new Uri(member.Endpoint).Port, incarnation: member.Incarnation);
+            _discoveries.Add(discovery);
+            await discovery.StartAsync(cancellationToken);
+        }
+
+        return new PeerDirectory(Replicas.Options, "cluster", Transport);
+    }
+
     private async Task AddAsync(CancellationToken cancellationToken)
     {
         using var reservation = new TcpListener(IPAddress.Loopback, 0);
@@ -59,6 +76,7 @@ internal sealed class ReplicaNetwork : IAsyncDisposable
         _ = builder.WebHost.ConfigureKestrel(server => server.Listen(IPAddress.Loopback, port, listen => listen.Protocols = HttpProtocols.Http2));
         _ = builder.Services.AddSerializer(serializer => serializer.AddAssembly(typeof(RapidMembershipOptions).Assembly));
         _ = builder.Services.AddGrpc();
+        _configure?.Invoke(builder.Services);
         _ = builder.Services.AddSingleton(replica);
         _ = builder.Services.AddSingleton(new GroupKnowledge());
         _ = builder.Services.AddSingleton(new HostParticipation());
@@ -89,8 +107,15 @@ internal sealed class ReplicaNetwork : IAsyncDisposable
         }
         finally
         {
-            Replicas.Dispose();
-            await _services.DisposeAsync();
+            try
+            {
+                await Task.WhenAll(_discoveries.Select(discovery => discovery.DisposeAsync().AsTask()));
+            }
+            finally
+            {
+                Replicas.Dispose();
+                await _services.DisposeAsync();
+            }
         }
     }
 }

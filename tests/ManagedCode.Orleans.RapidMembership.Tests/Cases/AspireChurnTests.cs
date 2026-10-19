@@ -100,6 +100,7 @@ public sealed class AspireChurnTests(ITestOutputHelper output)
         var successes = clients.Successes;
         await Task.Delay(TimeSpan.FromSeconds(5), token);
         Assert.Equal(successes, clients.Successes);
+        await clients.RequireUnavailableManagementAsync(token);
         output.WriteLine("All 50 resources stopped; existing clients remain alive across complete cluster loss.");
         await cluster.ChangeAsync(Enumerable.Range(0, 10), "resource-start", token);
         await CheckAsync("cold-return-10", [.. Enumerable.Range(0, 10)], cluster, clients, token);
@@ -196,9 +197,13 @@ public sealed class AspireChurnTests(ITestOutputHelper output)
             await clients.RequireProgressAsync(deadline.Token);
         }
 
+        var managementHosts = await clients.RequireHostsAsync(members, deadline.Token);
+        Assert.All(managementHosts, known => Assert.Equal(members, known));
         output.WriteLine(JsonSerializer.Serialize(new
         {
             phase,
+            managementHosts,
+            ManagementActive = managementHosts.Select(known => known.Length).ToArray(),
             live,
             members,
             clients.Successes,

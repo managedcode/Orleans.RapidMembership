@@ -44,13 +44,13 @@ dotnet build RapidCluster.slnx --no-restore --configuration Release -warnaserror
 
 Every build invocation uses `-warnaserror`. Run tests through their native xUnit v3 / Microsoft.Testing.Platform entry points with `--configuration Release --no-build -- --output Detailed --report-trx`. Do not replace the retained framework or invent test counts. See [CONTRIBUTING.md](CONTRIBUTING.md) and `.github/workflows/ci.yml` for exact suites.
 
-Focused provider tests use real native operations and HTTP/2 transports. Aspire owns real process startup, readiness, discovered endpoints, resource commands and joined cleanup. Abrupt fault tests must actually kill the target process; graceful stopping is a separate case. Keep native external clients making real nonce-checked grain calls during membership changes. Assert exact active silo identities and generations on every surviving node, eventual recovery, execution coverage and resource cleanup.
+Focused provider tests use real native operations and HTTP/2 transports. Aspire owns real process startup, readiness, discovered endpoints, resource commands and joined cleanup. Abrupt fault tests must actually kill the target process; graceful stopping is a separate case. Keep native external clients making real nonce-checked grain calls during membership changes. Assert exact active silo identities and generations on every surviving node, eventual recovery, execution coverage and resource cleanup. After each live topology change, each external client must call native Orleans IManagementGrain.GetHosts(true) and verify the exact expected active address/generation set. With no running silos, management RPC must be unavailable.
 
 The scale gate covers zero, ten, twenty and fifty silos, abrupt and graceful departures, simultaneous joins/departures, full process loss, client reconnection and loss/restoration of a voter majority. All configured cases remain mandatory. Protocol simulations do not substitute for actual Orleans processes.
 
 `python3 eng/test-simulations.py --workers 2` discovers the compiled instrumented inventory, executes all native cases in bounded groups, retains every theory row and reconciles original TRX names and outcomes with discovery. Missing, skipped, timed-out or failed cases fail qualification. Preserve reproducible seeds and Clockwork artifacts.
 
-Collect native coverage: changed code must meet 80% line / 70% branch; the critical provider source files require 90% line coverage through `eng/verify-coverage.py`. Failure, cancellation, concurrent writes and recovery assertions matter more than implementation-mirroring tests. Keep Linux, Windows and macOS CI, Linux scale qualification and CodeQL enabled.
+Collect native coverage: changed code must meet 80% line / 70% branch; the critical provider source files require 90% line coverage through `eng/verify-coverage.py`. Failure, cancellation, concurrent writes and recovery assertions matter more than implementation-mirroring tests. Keep Linux, Windows and macOS CI, full zero-to-fifty scale qualification on each of those three operating systems, and CodeQL enabled.
 
 ## Versions and delivery
 

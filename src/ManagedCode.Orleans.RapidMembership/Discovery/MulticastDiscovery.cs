@@ -100,7 +100,7 @@ internal sealed class MulticastDiscovery : IAsyncDisposable
                     await _directed.ReplyAsync(_packets.Encode(NodeId, _servicePort, DateTimeOffset.UtcNow),
                         datagram.RemoteEndPoint, cancellationToken);
                 }
-                catch (SocketException exception) when (MulticastInterfaces.Unavailable(exception))
+                catch (SocketException exception) when (MulticastInterfaces.Unavailable(exception.SocketErrorCode))
                 {
                     // The probing process or its return route may have disappeared before the response.
                 }

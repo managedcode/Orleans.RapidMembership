@@ -119,6 +119,54 @@ internal sealed class ContinuousClients(Action<string>? report = null) : IAsyncD
         }
     }
 
+    public Task<string[][]> RequireHostsAsync(string[] expected, CancellationToken cancellationToken)
+        => Task.WhenAll(_hosts.Select(host => ReadHostsAsync(host.Services.GetRequiredService<IClusterClient>(), expected, cancellationToken)));
+
+    private static async Task<string[]> ReadHostsAsync(IClusterClient client, string[] expected, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            Dictionary<SiloAddress, SiloStatus> hosts;
+            try
+            {
+                hosts = await client.GetGrain<IManagementGrain>(0).GetHosts(true, cancellationToken);
+            }
+            catch (Exception exception) when (exception is OrleansException or TimeoutException)
+            {
+                await Task.Delay(200, cancellationToken);
+                continue;
+            }
+
+            Assert.All(hosts.Values, status => Assert.Equal(SiloStatus.Active, status));
+            var active = hosts.Keys.Select(address => address.ToString()).Order(StringComparer.Ordinal).ToArray();
+            if (expected.SequenceEqual(active, StringComparer.Ordinal))
+            {
+                return active;
+            }
+
+            await Task.Delay(200, cancellationToken);
+        }
+    }
+
+    public Task RequireUnavailableManagementAsync(CancellationToken cancellationToken)
+        => Task.WhenAll(_hosts.Select(async host =>
+        {
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            deadline.CancelAfter(TimeSpan.FromSeconds(10));
+            Exception? rejected = null;
+            try
+            {
+                _ = await host.Services.GetRequiredService<IClusterClient>().GetGrain<IManagementGrain>(0).GetHosts(true, deadline.Token);
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested
+                && exception is OrleansException or TimeoutException or OperationCanceledException)
+            {
+                rejected = exception;
+            }
+
+            Assert.NotNull(rejected);
+        }));
+
     public async ValueTask DisposeAsync()
     {
         await _stop.CancelAsync();
