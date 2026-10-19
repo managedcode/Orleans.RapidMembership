@@ -17,9 +17,12 @@ public sealed class MulticastRouteTests
         var socket = (UdpClient)typeof(DirectedDiscovery).GetField("_socket",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(directed)!;
         socket.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.DontRoute, true);
+        socket.EnableBroadcast = false;
         var nonce = Guid.NewGuid().ToByteArray();
         Assert.True(await directed.ProbeAsync(nonce, [], timeout.Token));
         Assert.Equal(nonce, (await listener.ReceiveAsync(timeout.Token)).Buffer);
+        socket.EnableBroadcast = true;
+        Assert.True(await directed.ProbeAsync(nonce, [], timeout.Token));
         var delivered = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var receiving = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
         var receive = directed.ReceiveAsync(packet => delivered.TrySetResult(packet.Buffer), receiving.Token);

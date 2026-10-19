@@ -6,6 +6,9 @@ namespace ManagedCode.Orleans.RapidMembership.Discovery;
 
 internal static class MulticastInterfaces
 {
+    // Linux ENODEV is reported as SocketError.SocketError when an interface disappears before joining.
+    private const int LinuxNoSuchDevice = 19;
+
     public static IPAddress[] Join(UdpClient socket, IPAddress group)
     {
         var addresses = NetworkInterface.GetAllNetworkInterfaces()
@@ -26,7 +29,7 @@ internal static class MulticastInterfaces
                 socket.JoinMulticastGroup(group, address);
                 joined.Add(address);
             }
-            catch (SocketException exception) when (Unavailable(exception.SocketErrorCode))
+            catch (SocketException exception) when (Unavailable(exception))
             {
                 // Other interfaces and authenticated directed probes remain independently usable.
             }
@@ -47,7 +50,7 @@ internal static class MulticastInterfaces
                 _ = await socket.SendAsync(packet, destination, cancellationToken);
                 sent = true;
             }
-            catch (SocketException exception) when (Unavailable(exception.SocketErrorCode))
+            catch (SocketException exception) when (Unavailable(exception))
             {
                 // Failure on one route does not invalidate successful sends on another interface.
             }
@@ -55,6 +58,9 @@ internal static class MulticastInterfaces
 
         return sent;
     }
+
+    internal static bool Unavailable(SocketException exception) => Unavailable(exception.SocketErrorCode)
+        || OperatingSystem.IsLinux() && exception.NativeErrorCode == LinuxNoSuchDevice;
 
     internal static bool Unavailable(SocketError error) => error is SocketError.HostUnreachable or SocketError.NetworkUnreachable
         or SocketError.AddressNotAvailable or SocketError.NetworkDown or SocketError.AccessDenied

@@ -49,7 +49,7 @@ internal sealed class DirectedDiscovery(IReadOnlyList<IPAddress> addresses, int 
                 _ = await _socket.SendAsync(packet, new IPEndPoint(address, port), cancellationToken);
                 sent = true;
             }
-            catch (SocketException exception) when (MulticastInterfaces.Unavailable(exception.SocketErrorCode))
+            catch (SocketException exception) when (MulticastInterfaces.Unavailable(exception))
             {
                 // A failed probe is an unavailable address; it grants no membership or quorum acknowledgement.
             }

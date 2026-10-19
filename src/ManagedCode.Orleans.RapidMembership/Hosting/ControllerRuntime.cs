@@ -17,6 +17,9 @@ internal sealed class ControllerRuntime : IAsyncDisposable
     private static readonly Action<ILogger, string, Exception?> NativeLifecycle = LoggerMessage.Define<string>(
         LogLevel.Information, new EventId(3, "NativeLifecycle"), "RAPID controller lifecycle: {Stage}.");
 
+    private static readonly Action<ILogger, long, int, Exception?> NativeView = LoggerMessage.Define<long, int>(
+        LogLevel.Information, new EventId(4, "NativeView"), "RAPID native view {Version} contains {Members} coordinators.");
+
     private readonly MembershipHost _host;
     private readonly PeerDirectory _directory;
     private readonly CancellationTokenSource _stopping = new();
@@ -72,8 +75,7 @@ internal sealed class ControllerRuntime : IAsyncDisposable
             }
 
             if (_started && !_retired && _observed is { Members.Length: > 3 } excess
-                && !descriptions.Any(reply => reply.IsDeparting)
-                && excess.Members[^1].Incarnation == _host.Incarnation)
+                && CanRetire(excess, _host.Incarnation, descriptions))
             {
                 await DepartAsync(cancellationToken);
                 _retired = true;
@@ -93,6 +95,12 @@ internal sealed class ControllerRuntime : IAsyncDisposable
             await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
         }
     }
+
+    internal static bool CanRetire(CoordinationConfiguration configuration, Guid incarnation, IReadOnlyList<PeerReply> descriptions)
+        => configuration.Members.Length > 3 && configuration.Members[^1].Incarnation == incarnation
+            && !descriptions.Any(reply => reply.IsDeparting)
+            && configuration.Members.All(member => descriptions.Any(reply => reply.Incarnation == member.Incarnation
+                && reply.Granted && configuration.Matches(reply.Configuration)));
 
     private bool CanBootstrap(IReadOnlyList<PeerReply> descriptions)
     {
@@ -149,6 +157,7 @@ internal sealed class ControllerRuntime : IAsyncDisposable
                 var configuration = FromView(view);
                 await _host.Replica.ObserveAsync(configuration, cancellationToken);
                 _observed = configuration;
+                NativeView(_host.RuntimeLogger, configuration.Version, configuration.Members.Length, null);
                 if (_created && configuration.Members.Length == 1)
                 {
                     _ = await _host.Replica.BootstrapAsync(cancellationToken);

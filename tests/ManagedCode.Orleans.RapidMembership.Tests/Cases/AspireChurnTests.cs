@@ -25,7 +25,7 @@ public sealed class AspireChurnTests(ITestOutputHelper output)
         var cluster = new AspireChurnCluster(app, evidence.Write);
         await cluster.ChangeAsync(Enumerable.Range(3, 3), "resource-start", token);
         _ = await cluster.ConvergeAsync([0, 1, 2, 3, 4, 5], token);
-        await using var clients = new ContinuousClients();
+        await using var clients = new ContinuousClients(evidence.Write);
         await clients.StartAsync(await cluster.EnvironmentAsync(token), token);
         await CheckAsync("all-coordinators-before-departure", [0, 1, 2, 3, 4, 5], cluster, clients, token);
         var controllers = await cluster.VotersAsync([0, 1, 2, 3, 4, 5], token);
@@ -51,7 +51,7 @@ public sealed class AspireChurnTests(ITestOutputHelper output)
         var cluster = new AspireChurnCluster(app, evidence.Write);
         await cluster.ChangeAsync([3], "resource-start", token);
         _ = await cluster.ConvergeAsync([0, 1, 2, 3], token);
-        await using var clients = new ContinuousClients();
+        await using var clients = new ContinuousClients(evidence.Write);
         await clients.StartAsync(await cluster.EnvironmentAsync(token), token);
         await CheckAsync("graceful-initial-4", [0, 1, 2, 3], cluster, clients, token);
         await cluster.ChangeAsync([3], "shutdown", token);
@@ -76,7 +76,7 @@ public sealed class AspireChurnTests(ITestOutputHelper output)
         await cluster.RequireEmptyAsync(token);
         await cluster.ChangeAsync(Enumerable.Range(0, 10), "resource-start", token);
         _ = await cluster.ConvergeAsync([.. Enumerable.Range(0, 10)], token);
-        await using var clients = new ContinuousClients();
+        await using var clients = new ContinuousClients(evidence.Write);
         await clients.StartAsync(await cluster.EnvironmentAsync(token), token);
         await CheckAsync("initial-10", [.. Enumerable.Range(0, 10)], cluster, clients, token);
         await cluster.ChangeAsync(Enumerable.Range(10, 10), "resource-start", token);
@@ -127,7 +127,7 @@ public sealed class AspireChurnTests(ITestOutputHelper output)
         var cluster = new AspireChurnCluster(app, evidence.Write);
         await cluster.ChangeAsync(Enumerable.Range(3, 7), "resource-start", token);
         var environment = await cluster.EnvironmentAsync(token);
-        await using var clients = new ContinuousClients();
+        await using var clients = new ContinuousClients(evidence.Write);
         await clients.StartAsync(environment, token);
         await CheckAsync("quorum-initial-10", [.. Enumerable.Range(0, 10)], cluster, clients, token);
         var initialMembers = await cluster.ConvergeAsync([.. Enumerable.Range(0, 10)], token);
@@ -180,7 +180,7 @@ public sealed class AspireChurnTests(ITestOutputHelper output)
         await cluster.RequireEmptyAsync(token);
         await cluster.ChangeAsync(Enumerable.Range(0, 50), "resource-start", token);
         _ = await cluster.ConvergeAsync([.. Enumerable.Range(0, 50)], token);
-        await using var clients = new ContinuousClients();
+        await using var clients = new ContinuousClients(evidence.Write);
         await clients.StartAsync(await cluster.EnvironmentAsync(token), token);
         await CheckAsync("cold-start-50", [.. Enumerable.Range(0, 50)], cluster, clients, token);
     }

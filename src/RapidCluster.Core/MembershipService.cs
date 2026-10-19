@@ -1145,10 +1145,16 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
     /// Must NOT be called while holding _membershipUpdateLock.
     /// </summary>
     /// <param name="proposals">The list of endpoints to propose for addition/removal.</param>
-    private void StartConsensusForProposals(List<Endpoint> proposals)
+    /// <param name="expectedConfiguration">The configuration against which the changes were computed.</param>
+    private void StartConsensusForProposals(List<Endpoint> proposals, ConfigurationId expectedConfiguration)
     {
         lock (_membershipUpdateLock)
         {
+            if (_membershipView.ConfigurationId != expectedConfiguration)
+            {
+                return;
+            }
+
             // Double-check that consensus is not already running
             // (another thread could have started it between our check and acquiring the lock)
             if (_announcedProposal)
@@ -1569,6 +1575,9 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
             // Build the new immutable view with incremented version
             var newView = builder.Build(_membershipView.ConfigurationId);
 
+            // Deferred detections describe changes to the old view, not toggles against a later view.
+            RetainUnappliedChanges(_deferredProposals, currentMembers, proposedMembers);
+
             _log.DecideViewChangeCleanup();
 
             // Use SetMembershipView to apply all changes (including notifying waiting joiners)
@@ -1600,9 +1609,12 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
         if (deferredProposalsToProcess != null)
         {
             _log.ProcessingDeferredProposals(deferredProposalsToProcess.Count);
-            StartConsensusForProposals(deferredProposalsToProcess);
+            StartConsensusForProposals(deferredProposalsToProcess, decidingConfigurationId.Next());
         }
     }
+
+    internal static void RetainUnappliedChanges(SortedSet<Endpoint> changes, HashSet<Endpoint> previousMembers, HashSet<Endpoint> nextMembers)
+        => changes.RemoveWhere(endpoint => previousMembers.Contains(endpoint) != nextMembers.Contains(endpoint));
 
     /// <summary>
     /// Gets the list of endpoints currently in the membership view.

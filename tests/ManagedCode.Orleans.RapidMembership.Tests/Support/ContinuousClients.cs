@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Text.Json;
 using ManagedCode.Orleans.RapidMembership.Node.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -10,7 +11,7 @@ using Orleans.Runtime;
 
 namespace ManagedCode.Orleans.RapidMembership.Tests.Support;
 
-internal sealed class ContinuousClients : IAsyncDisposable
+internal sealed class ContinuousClients(Action<string>? report = null) : IAsyncDisposable
 {
     private readonly List<IHost> _hosts = [];
     private readonly List<Task> _workers = [];
@@ -51,6 +52,20 @@ internal sealed class ContinuousClients : IAsyncDisposable
             _hosts.Add(host);
             await host.StartAsync(cancellationToken);
             _workers.Add(RunAsync(host.Services.GetRequiredService<IClusterClient>(), i, _stop.Token));
+        }
+
+        if (report is not null)
+        {
+            _workers.Add(ReportAsync(report, _stop.Token));
+        }
+    }
+
+    private async Task ReportAsync(Action<string> write, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            write(JsonSerializer.Serialize(new { Timestamp = DateTimeOffset.UtcNow, Successes, Failures, ExecutingSilos = Silos }));
+            await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
         }
     }
 
