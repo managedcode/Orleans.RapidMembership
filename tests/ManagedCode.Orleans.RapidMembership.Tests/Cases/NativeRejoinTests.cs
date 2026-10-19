@@ -20,7 +20,7 @@ public sealed class NativeRejoinTests
         var proposer = cluster.Proposer();
         Assert.True((await proposer.ExecuteAsync(table => MembershipMutations.Write(table,
             MutationTests.Entry(1), null, table.Version.Next()), timeout.Token)).Applied);
-        using var channel = GrpcChannel.ForAddress(cluster.Configuration.Members[1].Endpoint);
+        using var channel = GrpcChannel.ForAddress(global::RapidCluster.Grpc.LocalPeerAddress.ForLocalListener(new Uri(cluster.Configuration.Members[1].Endpoint)));
         var options = new RapidMembershipOptions { SharedSecret = "0123456789abcdef0123456789abcdef" };
         var identity = RapidMembershipOptions.Identity(new ClusterOptions { ClusterId = cluster.ClusterId, ServiceId = "network-provider-tests" });
         using var call = new global::RapidCluster.Pb.MembershipService.MembershipServiceClient(channel).SendRequestAsync(
@@ -31,7 +31,7 @@ public sealed class NativeRejoinTests
                     Sender = new global::RapidCluster.Pb.Endpoint { Hostname = ByteString.CopyFromUtf8(endpoint.Host), Port = endpoint.Port },
                 },
             }, new Metadata { { PeerTransport.IdentityHeader, identity }, { PeerTransport.SecretHeader, options.AdmissionToken } },
-            DateTime.UtcNow.AddSeconds(5), timeout.Token);
+            cancellationToken: timeout.Token);
         _ = await call.ResponseAsync;
         while (true)
         {
