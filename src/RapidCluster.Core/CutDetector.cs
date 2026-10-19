@@ -100,9 +100,6 @@ internal sealed partial class CutDetector
     [LoggerMessage(Level = LogLevel.Debug, Message = "UpdateView: updating from config {OldConfig} to {NewConfig}, K: {OldK} -> {NewK}, preserving {PreservedCount} pending proposals")]
     private partial void LogUpdateView(long OldConfig, long NewConfig, int OldK, int NewK, int PreservedCount);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "UpdateView: removing reports for node {Node} (reason: {Reason})")]
-    private partial void LogRemoveReports(LoggableEndpoint Node, string Reason);
-
     /// <summary>
     /// Initializes a new instance of the <see cref="CutDetector"/> class.
     /// Creates a CutDetector with specified configuration options.
@@ -392,7 +389,7 @@ internal sealed partial class CutDetector
 
     /// <summary>
     /// Updates the cut detector for a new membership view.
-    /// Preserves pending join proposals for nodes not yet in the new membership.
+    /// Discards reports from the previous configuration before accepting fresh observer evidence.
     /// </summary>
     /// <param name="newView">The new membership view.</param>
     /// <remarks>
@@ -411,78 +408,18 @@ internal sealed partial class CutDetector
             var oldK = _membershipView.RingCount;
             var newK = newView.RingCount;
 
-            // Identify nodes to remove from tracking
-            var nodesToRemove = new List<Endpoint>();
-            foreach (var (node, _) in _reportsPerHost)
-            {
-                // Remove if node is now in membership (join completed)
-                if (newView.IsHostPresent(node))
-                {
-                    nodesToRemove.Add(node);
-                    LogRemoveReports(new LoggableEndpoint(node), "now in membership");
-                }
-
-                // Note: We keep reports for nodes not in membership (still joining)
-                // DOWN reports are kept as they may still be relevant for failure detection
-            }
-
-            foreach (var node in nodesToRemove)
-            {
-                _ = _reportsPerHost.Remove(node);
-                _ = _preProposal.Remove(node);
-                _ = _proposal.Remove(node);
-            }
-
-            // Update view and compute effective thresholds
+            // Reports describe observer assignments in one configuration, even when the ring count stays the same.
+            _reportsPerHost.Clear();
+            _preProposal.Clear();
+            _proposal.Clear();
+            _updatesInProgress = 0;
+            _seenLinkDownEvents = false;
             _membershipView = newView;
             ComputeEffectiveThresholds(newView.Size);
 
             LogCreated(ObserversPerSubject, _highWaterMark, _lowWaterMark, newView.Size,
                 IsSimpleMode ? "simple" : "watermark");
-
-            // If K changed, the ring assignments have changed.
-            // - When K decreases: Reports for ring numbers >= newK are invalid
-            // - When K increases: ALL existing reports are invalid because the observer
-            //   for each ring number may have changed (different node assignment per ring)
-            if (newK != oldK)
-            {
-                // Clear all reports since ring assignments have changed
-                _reportsPerHost.Clear();
-                LogUpdateView(oldConfig, newConfig, oldK, newK, 0);
-                return;
-            }
-
-            // Recalculate updatesInProgress based on new thresholds
-            _updatesInProgress = 0;
-            _preProposal.Clear();
-            _proposal.Clear();
-
-            foreach (var (node, reports) in _reportsPerHost)
-            {
-                var count = reports.Count;
-                if (IsSimpleMode)
-                {
-                    if (count > 0 && count < _highWaterMark)
-                    {
-                        _ = _preProposal.Add(node);
-                    }
-                }
-                else
-                {
-                    if (count >= _lowWaterMark && count < _highWaterMark)
-                    {
-                        _ = _preProposal.Add(node);
-                        _updatesInProgress++;
-                    }
-                    else if (count >= _highWaterMark)
-                    {
-                        _ = _proposal.Add(node);
-                    }
-                }
-            }
-
-            var preservedCount = _reportsPerHost.Count;
-            LogUpdateView(oldConfig, newConfig, oldK, newK, preservedCount);
+            LogUpdateView(oldConfig, newConfig, oldK, newK, 0);
         }
     }
 

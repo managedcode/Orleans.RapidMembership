@@ -1,3 +1,4 @@
+using Google.Protobuf;
 using RapidCluster.Pb;
 
 namespace RapidCluster;
@@ -96,31 +97,12 @@ internal sealed class MembershipProposalComparer : IEqualityComparer<MembershipP
         if (ReferenceEquals(x, y)) return true;
         if (x is null || y is null) return false;
 
-        // Compare by configurationId and member endpoints
-        if (x.ConfigurationId.ToConfigurationId() != y.ConfigurationId.ToConfigurationId()) return false;
-        if (x.Members.Count != y.Members.Count) return false;
-
-        for (var i = 0; i < x.Members.Count; i++)
-        {
-            if (ProtobufEndpointComparer.Instance.Compare(x.Members[i], y.Members[i]) != 0)
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return x.Equals(y);
     }
 
     public int GetHashCode(MembershipProposal obj)
     {
-        var hash = new HashCode();
-        hash.Add(obj.ConfigurationId);
-        foreach (var member in obj.Members)
-        {
-            hash.Add(member?.GetHashCode() ?? 0);
-        }
-
-        return hash.ToHashCode();
+        return obj.GetHashCode();
     }
 
     /// <summary>
@@ -158,6 +140,16 @@ internal sealed class MembershipProposalComparer : IEqualityComparer<MembershipP
             if (endpointCompare != 0) return endpointCompare;
         }
 
-        return 0;
+        // Metadata and the node-ID high-water mark are part of the decided value too.
+        return x.Equals(y) ? 0 : Serialize(x).AsSpan().SequenceCompareTo(Serialize(y));
+    }
+
+    private static byte[] Serialize(MembershipProposal proposal)
+    {
+        var bytes = new byte[proposal.CalculateSize()];
+        using var output = new CodedOutputStream(bytes) { Deterministic = true };
+        proposal.WriteTo(output);
+        output.CheckNoSpaceLeft();
+        return bytes;
     }
 }

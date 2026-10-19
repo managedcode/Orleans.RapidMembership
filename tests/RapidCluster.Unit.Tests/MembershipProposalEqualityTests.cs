@@ -331,11 +331,9 @@ public class MembershipProposalEqualityTests
     }
 
     [Fact]
-    public void Comparer_IgnoresMaxNodeIdAndMetadata_ButBuiltInDoesNot()
+    public void Comparer_AndBuiltInBothPreserveTheNodeIdHighWaterMark()
     {
-        // This documents an important behavioral difference:
-        // - MembershipProposalComparer only considers ConfigurationId and Members
-        // - Built-in Equals considers ALL fields including MaxNodeId and Metadata
+        // Both comparisons preserve the complete decided value, including its node-ID history.
         var endpoint = Utils.HostFromParts("10.0.0.1", 5001, 1);
         var proposal1 = CreateProposal([endpoint.Clone()], configVersion: 1, maxNodeId: 10);
         var proposal2 = CreateProposal([endpoint.Clone()], configVersion: 1, maxNodeId: 20);
@@ -343,10 +341,8 @@ public class MembershipProposalEqualityTests
         var comparerResult = MembershipProposalComparer.Instance.Equals(proposal1, proposal2);
         var builtInResult = proposal1.Equals(proposal2);
 
-        // Comparer ignores MaxNodeId - considers them equal
-        Assert.True(comparerResult);
+        Assert.False(comparerResult);
 
-        // Built-in Equals considers MaxNodeId - considers them different
         Assert.False(builtInResult);
     }
 
