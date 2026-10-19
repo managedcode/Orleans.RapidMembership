@@ -34,6 +34,9 @@ internal sealed class MemoryReplicaSet : IDisposable
     public Task ObserveAsync(CoordinationConfiguration configuration) => Task.WhenAll(
         _replicas.Values.Select(replica => replica.ObserveAsync(configuration, TestContext.Current.CancellationToken)));
 
+    public Task ObserveAsync(CoordinationMember member, CoordinationConfiguration configuration)
+        => _replicas[member.Incarnation].ObserveAsync(configuration, TestContext.Current.CancellationToken);
+
     public async Task BootstrapAsync(CoordinationConfiguration initial)
     {
         await ObserveAsync(initial);

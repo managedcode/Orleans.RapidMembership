@@ -73,7 +73,7 @@ internal sealed class MemoryMembershipReplica(
 
         if (request.Action == PeerAction.FreezeConfiguration)
         {
-            return request.PreviousConfiguration is { } previous && _configuration.Freeze(previous, configuration);
+            return request.PreviousConfiguration is { } previous && Freeze(previous, configuration, request);
         }
 
         if (request.Action == PeerAction.InstallConfiguration)
@@ -107,6 +107,27 @@ internal sealed class MemoryMembershipReplica(
         }
 
         return granted;
+    }
+
+    private bool Freeze(CoordinationConfiguration previous, CoordinationConfiguration next, PeerRequest request)
+    {
+        if (_configuration.Freeze(previous, next))
+        {
+            return true;
+        }
+
+        // A real old voter's frozen view can fill a learner gap; installation still requires both full majorities.
+        var witnesses = request.FrozenReplicas;
+        if (witnesses.IsDefaultOrEmpty || witnesses.Length > previous.Members.Length)
+        {
+            return false;
+        }
+
+        var seen = new HashSet<Guid>();
+        var valid = witnesses.All(witness => previous.Contains(witness.Incarnation) && seen.Add(witness.Incarnation)
+            && witness.Previous.Matches(previous) && witness.Next.Matches(next) && witness.State.Identity == identity);
+        return valid && witnesses.Any(witness => witness.Incarnation != incarnation)
+            && _configuration.LearnNext(previous, next) && _configuration.Freeze(previous, next);
     }
 
     private bool InstallConfiguration(CoordinationConfiguration previous, CoordinationConfiguration next, PeerRequest request)

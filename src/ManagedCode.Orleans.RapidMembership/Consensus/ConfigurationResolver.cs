@@ -80,11 +80,26 @@ internal sealed class ConfigurationResolver(PeerTransport transport)
             PreviousConfiguration = previous,
             Configuration = next,
         }, previous, cancellationToken);
-        var frozen = System.Collections.Immutable.ImmutableArray.CreateRange(votes
-            .Where(reply => reply.Granted && previous.Matches(reply.Configuration) && next.Matches(reply.FrozenFor))
-            .Select(reply => new FrozenReplica(reply.Incarnation, previous, next, reply.State)));
+        var frozen = FreezeEvidence(previous, next, votes);
+        if (frozen.Length > 0 && frozen.Length < previous.Quorum)
+        {
+            var recovered = await transport.ExchangeAsync(new PeerRequest
+            {
+                Action = PeerAction.FreezeConfiguration,
+                PreviousConfiguration = previous,
+                Configuration = next,
+                FrozenReplicas = frozen,
+            }, previous, cancellationToken);
+            frozen = [.. frozen.Concat(FreezeEvidence(previous, next, recovered)).DistinctBy(vote => vote.Incarnation)];
+        }
+
         return frozen.Length >= previous.Quorum && await InstallAsync(previous, next, frozen, cancellationToken);
     }
+
+    private static System.Collections.Immutable.ImmutableArray<FrozenReplica> FreezeEvidence(
+        CoordinationConfiguration previous, CoordinationConfiguration next, IEnumerable<PeerReply> replies)
+        => [.. replies.Where(reply => reply.Granted && previous.Matches(reply.Configuration) && next.Matches(reply.FrozenFor))
+            .Select(reply => new FrozenReplica(reply.Incarnation, previous, next, reply.State))];
 
     private async Task<bool> InstallAsync(CoordinationConfiguration previous, CoordinationConfiguration next,
         System.Collections.Immutable.ImmutableArray<FrozenReplica> frozen, CancellationToken cancellationToken)

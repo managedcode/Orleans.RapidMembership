@@ -28,16 +28,39 @@ internal sealed class ReplicaConfigurationFence(Guid incarnation)
 
         if ((Current is null || configuration.Version > Current.Version) && !_pending.ContainsKey(configuration.Version))
         {
-            if (_pendingMembers + configuration.Members.Length > MaximumPendingMembers)
-            {
-                throw new InvalidDataException("Pending RAPID views exceed the retained membership bound.");
-            }
-
-            _pending.Add(configuration.Version, configuration);
-            _pendingMembers += configuration.Members.Length;
+            Remember(configuration);
         }
 
         Observed = configuration;
+    }
+
+    public bool LearnNext(CoordinationConfiguration previous, CoordinationConfiguration next)
+    {
+        next.Validate();
+        if (Current is not { } current || !current.Matches(previous) || !next.ImmediatelyFollows(previous)
+            || !CanRecoverAgreedView(next))
+        {
+            return false;
+        }
+
+        if (_pending.TryGetValue(next.Version, out var known))
+        {
+            return known.Matches(next);
+        }
+
+        Remember(next);
+        return true;
+    }
+
+    private void Remember(CoordinationConfiguration configuration)
+    {
+        if (_pendingMembers + configuration.Members.Length > MaximumPendingMembers)
+        {
+            throw new InvalidDataException("Pending RAPID views exceed the retained membership bound.");
+        }
+
+        _pending.Add(configuration.Version, configuration);
+        _pendingMembers += configuration.Members.Length;
     }
 
     public bool Bootstrap()
