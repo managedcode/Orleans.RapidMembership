@@ -22,9 +22,10 @@ internal sealed class TestClusterPortAllocator : IDisposable
     public int AllocatePort()
     {
         var ipGlobalProperties = IPGlobalProperties.GetIPGlobalProperties();
-        var tcpConnInfoArray = ipGlobalProperties.GetActiveTcpListeners();
+        var tcpConnInfoArray = ipGlobalProperties.GetActiveTcpListeners()
+            .Concat(ipGlobalProperties.GetActiveTcpConnections().Select(connection => connection.LocalEndPoint)).ToArray();
 
-        return GetAvailablePort(tcpConnInfoArray, 22300, 50000);
+        return GetAvailablePort(tcpConnInfoArray, 15000, 30000);
     }
 
     /// <inheritdoc />

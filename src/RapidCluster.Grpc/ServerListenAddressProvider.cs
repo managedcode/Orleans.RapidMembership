@@ -22,17 +22,20 @@ public sealed class ServerListenAddressProvider : IListenAddressProvider
 {
     private readonly IServer _server;
     private readonly bool _preferHttps;
+    private readonly string? _preferredHost;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ServerListenAddressProvider"/> class.
     /// </summary>
     /// <param name="server">The ASP.NET Core server.</param>
+    /// <param name="preferredHost">Optional advertised host for wildcard listeners.</param>
     /// <param name="preferHttps">Whether to prefer HTTPS addresses over HTTP. Default is true.</param>
-    public ServerListenAddressProvider(IServer server, bool preferHttps = true)
+    public ServerListenAddressProvider(IServer server, bool preferHttps = true, string? preferredHost = null)
     {
         ArgumentNullException.ThrowIfNull(server);
         _server = server;
         _preferHttps = preferHttps;
+        _preferredHost = preferredHost;
     }
 
     /// <inheritdoc />
@@ -72,8 +75,13 @@ public sealed class ServerListenAddressProvider : IListenAddressProvider
         }
 
         // Convert to EndPoint
-        if (IPAddress.TryParse(uri.Host, out var ipAddress))
+        if (IPAddress.TryParse(uri.Host.Trim('[', ']'), out var ipAddress))
         {
+            if (IPAddress.Any.Equals(ipAddress) || IPAddress.IPv6Any.Equals(ipAddress))
+            {
+                return ServerAddressResolver.GetAdvertisedEndpoint(_server, _preferredHost, _preferHttps);
+            }
+
             return new IPEndPoint(ipAddress, uri.Port);
         }
 

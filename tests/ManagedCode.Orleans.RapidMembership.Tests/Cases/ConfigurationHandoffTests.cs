@@ -26,7 +26,10 @@ public sealed class ConfigurationHandoffTests
         replica.Observe(next);
         Assert.False(replica.Allows(previous));
         Assert.False(replica.Freeze(initial, next));
-        Assert.False(replica.CanInstall(previous, next));
+        Assert.True(replica.CanInstall(previous, next));
+        Assert.True(previous.Matches(replica.Current));
+        Assert.False(replica.Allows(next));
+        Assert.False(replica.Allows(previous));
         Assert.True(replica.Freeze(previous, next));
         replica.Installed(previous, next);
         Assert.True(replica.Allows(next));

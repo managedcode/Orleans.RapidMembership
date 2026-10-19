@@ -11,6 +11,32 @@ namespace ManagedCode.Orleans.RapidMembership.Tests.Cases;
 public sealed class AspireChurnTests(ITestOutputHelper output)
 {
     [Fact]
+    public async Task AllCoordinatorsGracefullyLeaveTogetherAndTheirReplacementsKeepServingTheSameClients()
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(5));
+        var token = timeout.Token;
+        await using var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.ManagedCode_Orleans_RapidMembership_AppHost>(
+            ["--DcpPublisher:RandomizePorts=false", "--TestCluster:Nodes=6"], token);
+        _ = builder.Services.AddLogging(logging => logging.SetMinimumLevel(LogLevel.Warning));
+        await using var app = await builder.BuildAsync(token);
+        await app.StartAsync(token);
+        await using var evidence = new ChurnEvidence(output, app);
+        var cluster = new AspireChurnCluster(app, evidence.Write);
+        await cluster.ChangeAsync(Enumerable.Range(3, 3), "resource-start", token);
+        _ = await cluster.ConvergeAsync([0, 1, 2, 3, 4, 5], token);
+        await using var clients = new ContinuousClients();
+        await clients.StartAsync(await cluster.EnvironmentAsync(token), token);
+        await CheckAsync("all-coordinators-before-departure", [0, 1, 2, 3, 4, 5], cluster, clients, token);
+        var controllers = await cluster.VotersAsync([0, 1, 2, 3, 4, 5], token);
+        await cluster.ChangeAsync(controllers, "shutdown", token);
+        var survivors = Enumerable.Range(0, 6).Except(controllers).ToArray();
+        await CheckAsync("all-coordinators-replaced", survivors, cluster, clients, token);
+        await cluster.ChangeAsync(controllers, "resource-start", token);
+        await CheckAsync("departed-coordinators-return", [0, 1, 2, 3, 4, 5], cluster, clients, token);
+    }
+
+    [Fact]
     public async Task RealSiloShutdownJoinsZeroExitAndRestartRecoversExternalClients()
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
@@ -55,14 +81,20 @@ public sealed class AspireChurnTests(ITestOutputHelper output)
         await CheckAsync("initial-10", [.. Enumerable.Range(0, 10)], cluster, clients, token);
         await cluster.ChangeAsync(Enumerable.Range(10, 10), "resource-start", token);
         await CheckAsync("grow-20", [.. Enumerable.Range(0, 20)], cluster, clients, token);
-        await cluster.ChangeAsync(Enumerable.Range(5, 15), "crash", token);
-        await CheckAsync("crash-to-5", [.. Enumerable.Range(0, 5)], cluster, clients, token);
-        await cluster.ChangeAsync(Enumerable.Range(5, 15), "resource-start", token);
+        var controllers = await cluster.VotersAsync([.. Enumerable.Range(0, 20)], token);
+        var survivors = controllers.Concat(Enumerable.Range(0, 20).Except(controllers)).Take(5).Order().ToArray();
+        var departed = Enumerable.Range(0, 20).Except(survivors).ToArray();
+        await cluster.ChangeAsync(departed, "crash", token);
+        await CheckAsync("crash-to-5", survivors, cluster, clients, token);
+        await cluster.ChangeAsync(departed, "resource-start", token);
         await CheckAsync("return-20", [.. Enumerable.Range(0, 20)], cluster, clients, token);
+        controllers = await cluster.VotersAsync([.. Enumerable.Range(0, 20)], token);
+        var concurrentDepartures = Enumerable.Range(0, 20).Except(controllers).Take(10).ToArray();
+        var concurrentLive = Enumerable.Range(0, 20).Except(concurrentDepartures).Concat(Enumerable.Range(20, 10)).Order().ToArray();
         await Task.WhenAll(cluster.ChangeAsync(Enumerable.Range(20, 10), "resource-start", token),
-            cluster.ChangeAsync(Enumerable.Range(10, 10), "crash", token));
-        await CheckAsync("concurrent-10-join-10-crash", [.. Enumerable.Range(0, 10).Concat(Enumerable.Range(20, 10))], cluster, clients, token);
-        await cluster.ChangeAsync(Enumerable.Range(0, 10).Concat(Enumerable.Range(20, 10)), "crash", token);
+            cluster.ChangeAsync(concurrentDepartures, "crash", token));
+        await CheckAsync("concurrent-10-join-10-crash", concurrentLive, cluster, clients, token);
+        await cluster.ChangeAsync(concurrentLive, "crash", token);
         await cluster.RequireEmptyAsync(token);
         await Task.Delay(TimeSpan.FromSeconds(5), token);
         var successes = clients.Successes;
@@ -81,7 +113,7 @@ public sealed class AspireChurnTests(ITestOutputHelper output)
     }
 
     [Fact, Trait("Category", "Scale")]
-    public async Task LostVoterMajorityRejectsWritesAndOneReturningVoterRestoresLiveClients()
+    public async Task LostVoterMajorityRejectsFreshIncarnationsUntilCompleteClusterRestart()
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(10));
@@ -98,29 +130,38 @@ public sealed class AspireChurnTests(ITestOutputHelper output)
         await using var clients = new ContinuousClients();
         await clients.StartAsync(environment, token);
         await CheckAsync("quorum-initial-10", [.. Enumerable.Range(0, 10)], cluster, clients, token);
-        await cluster.ChangeAsync([0], "crash", token);
-        await CheckAsync("first-voter-loss-9", [.. Enumerable.Range(1, 9)], cluster, clients, token);
-        await cluster.ChangeAsync([1], "crash", token);
+        var initialMembers = await cluster.ConvergeAsync([.. Enumerable.Range(0, 10)], token);
+        var controllers = await cluster.VotersAsync([.. Enumerable.Range(0, 10)], token);
+        var lost = controllers.Take(2).ToArray();
+        await cluster.ChangeAsync(lost, "crash", token);
         await using var serializers = new ServiceCollection().AddSerializer(configuration => configuration.AddAssembly(typeof(RapidMembershipOptions).Assembly))
             .BuildServiceProvider();
         var options = new RapidMembershipOptions
         {
             SharedSecret = environment["RAPID_SECRET"],
-            SeedEndpoints = environment["RAPID_SEEDS"].Split(','),
             PeerTimeout = TimeSpan.FromMilliseconds(500),
             OperationTimeout = TimeSpan.FromSeconds(2),
         };
-        using var transport = new PeerTransport(options, options.Identity(new ClusterOptions { ClusterId = environment["CLUSTER_ID"], ServiceId = "rapid-membership-tests" }),
+        using var transport = new PeerTransport(options, RapidMembershipOptions.Identity(new ClusterOptions { ClusterId = environment["CLUSTER_ID"], ServiceId = "rapid-membership-tests" }),
             serializers.GetRequiredService<Serializer<PeerRequest>>(), serializers.GetRequiredService<Serializer<PeerReply>>());
-        using var proposer = new MembershipProposer(transport, options, serializers.GetRequiredService<Serializer<MembershipSnapshot>>());
+        await using var directory = new PeerDirectory(options, RapidMembershipOptions.Identity(new ClusterOptions
+        {
+            ClusterId = environment["CLUSTER_ID"],
+            ServiceId = "rapid-membership-tests",
+        }), transport);
+        using var proposer = new MembershipProposer(transport, options, serializers.GetRequiredService<Serializer<MembershipSnapshot>>(), directory);
         _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => proposer.ExecuteAsync(null, token));
         _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => proposer.ExecuteAsync(table => table, token));
-        await cluster.ChangeAsync([0], "resource-start", token);
-        int[] live = [0, .. Enumerable.Range(2, 8)];
-        _ = await cluster.ConvergeAsync(live, token, requireVoterView: false);
-        await clients.RequireProgressAsync(token);
-        await cluster.ChangeAsync([1], "resource-start", token);
-        await CheckAsync("full-voter-return-10", [.. Enumerable.Range(0, 10)], cluster, clients, token);
+        await cluster.ChangeAsync([lost[0]], "resource-start", token);
+        await Task.Delay(TimeSpan.FromSeconds(4), token);
+        _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => proposer.ExecuteAsync(table => table, token));
+        int[] remaining = [.. Enumerable.Range(0, 10).Except(lost), lost[0]];
+        await cluster.ChangeAsync(remaining, "crash", token);
+        await cluster.RequireEmptyAsync(token, resources: 10);
+        await cluster.ChangeAsync(Enumerable.Range(0, 10), "resource-start", token);
+        await CheckAsync("fresh-epoch-after-total-loss-10", [.. Enumerable.Range(0, 10)], cluster, clients, token);
+        var restoredMembers = await cluster.ConvergeAsync([.. Enumerable.Range(0, 10)], token);
+        Assert.Empty(initialMembers.Intersect(restoredMembers, StringComparer.Ordinal));
     }
 
     [Fact, Trait("Category", "Scale")]

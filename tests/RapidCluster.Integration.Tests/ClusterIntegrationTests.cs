@@ -304,6 +304,43 @@ public sealed class ClusterIntegrationTests(ITestOutputHelper outputHelper) : IA
     }
 
     [Fact]
+    public async Task ConcurrentJoinersPreserveEveryIncarnationAcrossDeferredViewsAndAnotherJoin()
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(2));
+        var addresses = Enumerable.Range(0, 13).Select(_ => CreateAddress(_cluster.GetNextPort())).ToArray();
+        var incarnations = addresses.ToDictionary(address => address.Port, _ => Guid.NewGuid());
+        var (_, seed) = await _cluster.CreateSeedNodeAsync(addresses[0], options =>
+            options.Metadata["incarnation"] = incarnations[addresses[0].Port].ToByteArray(), timeout.Token);
+        var joined = await Task.WhenAll(addresses.Skip(1).Take(11).Select(address =>
+            _cluster.CreateJoinerNodeAsync(address, addresses[0], options =>
+                options.Metadata["incarnation"] = incarnations[address.Port].ToByteArray(), timeout.Token)));
+        var nodes = joined.Select(result => result.Cluster).Prepend(seed).ToList();
+        await RequireMetadataAsync(12);
+        var (_, following) = await _cluster.CreateJoinerNodeAsync(addresses[12], addresses[0], options =>
+            options.Metadata["incarnation"] = incarnations[addresses[12].Port].ToByteArray(), timeout.Token);
+        nodes.Add(following);
+        await RequireMetadataAsync(13);
+
+        async Task RequireMetadataAsync(int expected)
+        {
+            while (nodes.Any(node => node.CurrentView.Members.Length != expected
+                || node.CurrentView.ConfigurationId != seed.CurrentView.ConfigurationId))
+            {
+                await Task.Delay(20, timeout.Token);
+            }
+
+            foreach (var node in nodes)
+            {
+                foreach (var member in node.CurrentView.Members)
+                {
+                    Assert.Equal(incarnations[((IPEndPoint)member.EndPoint).Port], new Guid(member.Metadata["incarnation"].Span));
+                }
+            }
+        }
+    }
+
+    [Fact]
     public async Task ComplexMetadataPropagatedCorrectly()
     {
         var seedAddress = CreateAddress(_cluster.GetNextPort());

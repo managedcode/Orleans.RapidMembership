@@ -64,9 +64,9 @@ public sealed class NativeProviderTests
         using var cancelled = new CancellationTokenSource();
         await cancelled.CancelAsync();
         _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => table.ReadAllAsync(cancelled.Token));
-        await table.DeleteMembershipTableEntriesAsync("test", timeout.Token);
+        await table.DeleteMembershipTableEntriesAsync(cluster.ClusterId, timeout.Token);
         Assert.Empty((await table.ReadAll()).Members);
-        await table.DeleteMembershipTableEntries("test");
+        await table.DeleteMembershipTableEntries(cluster.ClusterId);
         await table.DisposeAsync();
         await table.DisposeAsync();
     }

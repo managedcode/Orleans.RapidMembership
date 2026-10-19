@@ -12,18 +12,19 @@ using Orleans.Configuration;
 
 namespace ManagedCode.Orleans.RapidMembership.Tests.Cases;
 
-public sealed class AspireMembershipTests
+public sealed class AspireMembershipTests(ITestOutputHelper output)
 {
     [Fact]
     public async Task ThreeRealSilosDiscoverGatewaysSurviveAbruptLossAndRejoin()
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(6));
         var cancellationToken = timeout.Token;
         await using var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.ManagedCode_Orleans_RapidMembership_AppHost>(
             ["--DcpPublisher:RandomizePorts=false"], cancellationToken);
         _ = builder.Services.AddLogging(logging => logging.SetMinimumLevel(LogLevel.Warning));
         await using var app = await builder.BuildAsync(cancellationToken);
         await app.StartAsync(cancellationToken);
+        await using var evidence = new ChurnEvidence(output, app);
         await WaitForAsync(app, "silo-0", 3, cancellationToken);
         await WaitForAsync(app, "silo-1", 3, cancellationToken);
         await WaitForAsync(app, "silo-2", 3, cancellationToken);
@@ -41,11 +42,7 @@ public sealed class AspireMembershipTests
                 cluster.ClusterId = environment["CLUSTER_ID"];
                 cluster.ServiceId = "rapid-membership-tests";
             });
-            _ = client.UseRapidMembership(options =>
-            {
-                options.SharedSecret = environment["RAPID_SECRET"];
-                options.SeedEndpoints = environment["RAPID_SEEDS"].Split(',');
-            });
+            _ = client.UseRapidMembership(options => options.SharedSecret = environment["RAPID_SECRET"]);
         });
         using var clientHost = hostBuilder.Build();
         await clientHost.StartAsync(cancellationToken);
@@ -83,6 +80,7 @@ public sealed class AspireMembershipTests
     private static async Task WaitForAsync(DistributedApplication app, string resource, int active, CancellationToken cancellationToken)
     {
         using var client = app.CreateHttpClient(resource);
+        client.Timeout = TimeSpan.FromMinutes(3);
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();

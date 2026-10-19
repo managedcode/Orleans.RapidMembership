@@ -43,7 +43,6 @@ internal sealed class ContinuousClients : IAsyncDisposable
                 _ = client.UseRapidMembership(options =>
                 {
                     options.SharedSecret = environment["RAPID_SECRET"];
-                    options.SeedEndpoints = environment["RAPID_SEEDS"].Split(',');
                     options.OperationTimeout = TimeSpan.FromMinutes(2);
                     options.PeerTimeout = TimeSpan.FromSeconds(5);
                 });

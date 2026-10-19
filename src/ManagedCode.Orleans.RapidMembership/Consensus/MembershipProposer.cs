@@ -2,15 +2,20 @@ using Orleans.Serialization;
 
 namespace ManagedCode.Orleans.RapidMembership.Consensus;
 
-internal sealed class MembershipProposer(PeerTransport transport, RapidMembershipOptions options, Serializer<MembershipSnapshot> serializer) : IDisposable
+internal sealed class MembershipProposer(PeerTransport transport, RapidMembershipOptions options, Serializer<MembershipSnapshot> serializer, PeerDirectory directory) : IDisposable, IAsyncDisposable
 {
+    public PeerDirectory Directory => directory;
+
     private readonly SemaphoreSlim _admission = new(1);
+    private readonly CancellationTokenSource _stopping = new();
     private readonly string _identity = Guid.NewGuid().ToString("N");
+    private int _disposed;
     private long _counter;
 
     public async Task<MembershipSnapshot> ExecuteAsync(Func<MembershipTableData, MembershipTableData?>? mutation, CancellationToken cancellationToken)
     {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopping.Token);
         deadline.CancelAfter(options.OperationTimeout);
         await _admission.WaitAsync(deadline.Token);
         try
@@ -38,8 +43,10 @@ internal sealed class MembershipProposer(PeerTransport transport, RapidMembershi
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var observed = await transport.ExchangeAsync(new PeerRequest { Action = PeerAction.Inspect }, cancellationToken);
-            if (observed.Count < transport.Quorum)
+            var configuration = await directory.ResolveAsync(cancellationToken);
+            var observed = (await transport.ExchangeAsync(new PeerRequest { Action = PeerAction.Inspect, Configuration = configuration }, configuration, cancellationToken))
+                .Where(reply => reply.Granted).ToList();
+            if (observed.Count < configuration.Quorum)
             {
                 await RetryAsync(++conflicts, cancellationToken);
                 continue;
@@ -59,10 +66,11 @@ internal sealed class MembershipProposer(PeerTransport transport, RapidMembershi
                 var repair = await transport.ExchangeAsync(new PeerRequest
                 {
                     Action = PeerAction.Commit,
+                    Configuration = configuration,
                     Index = previous.Index,
                     Snapshot = previous,
-                }, cancellationToken);
-                if (repair.Count(reply => reply.Granted) >= transport.Quorum)
+                }, configuration, cancellationToken);
+                if (repair.Count(reply => reply.Granted) >= configuration.Quorum)
                 {
                     var result = serializer.Deserialize(serializer.SerializeToArray(previous)) ?? throw new InvalidDataException("Empty membership state.");
                     if (settled)
@@ -83,13 +91,14 @@ internal sealed class MembershipProposer(PeerTransport transport, RapidMembershi
             var promises = await transport.ExchangeAsync(new PeerRequest
             {
                 Action = PeerAction.Prepare,
+                Configuration = configuration,
                 Index = index,
                 Ballot = ballot,
                 Snapshot = previous,
-            }, cancellationToken);
+            }, configuration, cancellationToken);
             ObserveCounters(promises);
             var granted = promises.Where(reply => reply.Granted).ToArray();
-            if (granted.Length < transport.Quorum)
+            if (granted.Length < configuration.Quorum)
             {
                 await RetryAsync(++conflicts, cancellationToken);
                 continue;
@@ -101,12 +110,13 @@ internal sealed class MembershipProposer(PeerTransport transport, RapidMembershi
             var votes = await transport.ExchangeAsync(new PeerRequest
             {
                 Action = PeerAction.Accept,
+                Configuration = configuration,
                 Index = index,
                 Ballot = ballot,
                 Snapshot = candidate,
-            }, cancellationToken);
+            }, configuration, cancellationToken);
             ObserveCounters(votes);
-            if (votes.Count(reply => reply.Granted) < transport.Quorum)
+            if (votes.Count(reply => reply.Granted) < configuration.Quorum)
             {
                 await RetryAsync(++conflicts, cancellationToken);
                 continue;
@@ -115,10 +125,11 @@ internal sealed class MembershipProposer(PeerTransport transport, RapidMembershi
             var commits = await transport.ExchangeAsync(new PeerRequest
             {
                 Action = PeerAction.Commit,
+                Configuration = configuration,
                 Index = index,
                 Snapshot = candidate,
-            }, cancellationToken);
-            if (commits.Count(reply => reply.Granted) >= transport.Quorum && (candidate.OperationId == operationId || mutation is null))
+            }, configuration, cancellationToken);
+            if (commits.Count(reply => reply.Granted) >= configuration.Quorum && (candidate.OperationId == operationId || mutation is null))
             {
                 return serializer.Deserialize(serializer.SerializeToArray(candidate)) ?? throw new InvalidDataException("Empty membership state.");
             }
@@ -179,5 +190,18 @@ internal sealed class MembershipProposer(PeerTransport transport, RapidMembershi
         return Task.Delay(System.Security.Cryptography.RandomNumberGenerator.GetInt32(10, ceiling), cancellationToken);
     }
 
-    public void Dispose() => _admission.Dispose();
+    public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        await _stopping.CancelAsync();
+        await _admission.WaitAsync();
+        _admission.Dispose();
+        _stopping.Dispose();
+    }
 }

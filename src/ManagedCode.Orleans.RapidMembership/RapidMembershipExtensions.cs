@@ -12,7 +12,7 @@ namespace ManagedCode.Orleans.RapidMembership;
 /// <summary>Registers self-hosted RAPID membership for Orleans silos and clients.</summary>
 public static class RapidMembershipExtensions
 {
-    /// <summary>Uses self-hosted durable quorum membership instead of an external membership table.</summary>
+    /// <summary>Uses automatic in-memory quorum membership instead of an external membership table.</summary>
     public static ISiloBuilder UseRapidMembership(this ISiloBuilder builder, Action<RapidMembershipOptions> configure)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -43,10 +43,16 @@ public static class RapidMembershipExtensions
             var options = provider.GetRequiredService<IOptions<RapidMembershipOptions>>().Value;
             options.Validate(server);
             var cluster = provider.GetRequiredService<IOptions<ClusterOptions>>().Value;
-            return new PeerTransport(options, options.Identity(cluster), provider.GetRequiredService<Serializer<PeerRequest>>(),
+            return new PeerTransport(options, RapidMembershipOptions.Identity(cluster), provider.GetRequiredService<Serializer<PeerRequest>>(),
                 provider.GetRequiredService<Serializer<PeerReply>>());
         });
+        services.TryAddSingleton(provider =>
+        {
+            var options = provider.GetRequiredService<IOptions<RapidMembershipOptions>>().Value;
+            var cluster = provider.GetRequiredService<IOptions<ClusterOptions>>().Value;
+            return new PeerDirectory(options, RapidMembershipOptions.Identity(cluster), provider.GetRequiredService<PeerTransport>());
+        });
         services.TryAddSingleton(provider => new MembershipProposer(provider.GetRequiredService<PeerTransport>(),
-            provider.GetRequiredService<IOptions<RapidMembershipOptions>>().Value, provider.GetRequiredService<Serializer<MembershipSnapshot>>()));
+            provider.GetRequiredService<IOptions<RapidMembershipOptions>>().Value, provider.GetRequiredService<Serializer<MembershipSnapshot>>(), provider.GetRequiredService<PeerDirectory>()));
     }
 }

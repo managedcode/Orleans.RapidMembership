@@ -11,11 +11,12 @@ namespace ManagedCode.Orleans.RapidMembership.Tests.Cases;
 
 public sealed class NativeHostTests
 {
-    [Fact]
-    public async Task PublicRegistrationsStartARealSiloAndExternalClientWithDurableMembership()
+    [Theory]
+    [InlineData("127.0.0.1/32")]
+    [InlineData("127.0.0.1-127.0.0.2")]
+    public async Task PublicRegistrationsStartARealSiloAndExternalClientWithAutomaticInMemoryMembership(string network)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
-        using var directory = new TestDirectory();
         var listeners = Enumerable.Range(0, 3).Select(_ => new TcpListener(IPAddress.Loopback, 0)).ToArray();
         foreach (var listener in listeners)
         {
@@ -28,7 +29,6 @@ public sealed class NativeHostTests
             listener.Stop();
         }
 
-        var endpoint = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"http://127.0.0.1:{ports[0]}");
         var clusterId = Guid.NewGuid().ToString("N");
         var siloBuilder = Host.CreateApplicationBuilder();
         _ = siloBuilder.UseOrleans(silo =>
@@ -38,9 +38,7 @@ public sealed class NativeHostTests
             _ = silo.ConfigureEndpoints(IPAddress.Loopback, ports[1], ports[2]);
             _ = silo.UseRapidMembership(options =>
             {
-                options.SeedEndpoints = [endpoint];
-                options.ListenEndpoint = endpoint;
-                options.StorageDirectory = directory.Path;
+                options.DiscoveryNetworks = [network];
                 options.SharedSecret = "0123456789abcdef0123456789abcdef";
             });
         });
@@ -54,7 +52,7 @@ public sealed class NativeHostTests
                 _ = client.Configure<ClusterOptions>(options => options.ClusterId = clusterId);
                 _ = client.UseRapidMembership(options =>
                 {
-                    options.SeedEndpoints = [endpoint];
+                    options.DiscoveryNetworks = [network];
                     options.SharedSecret = "0123456789abcdef0123456789abcdef";
                 });
             });

@@ -8,6 +8,7 @@ internal sealed class MemoryMembershipReplica(
 {
     private readonly SemaphoreSlim _gate = new(1);
     private readonly ReplicaConfigurationFence _configuration = new(incarnation);
+    private System.Collections.Immutable.ImmutableArray<FrozenReplica> _handoff = [];
     private AcceptorState _state = new() { Identity = identity };
 
     public async Task ObserveAsync(CoordinationConfiguration configuration, CancellationToken cancellationToken)
@@ -60,7 +61,7 @@ internal sealed class MemoryMembershipReplica(
 
     private bool Apply(PeerRequest request)
     {
-        if (request.Action == PeerAction.Describe)
+        if (request.Action is PeerAction.Describe or PeerAction.Locate or PeerAction.FetchTransfer)
         {
             return true;
         }
@@ -129,6 +130,7 @@ internal sealed class MemoryMembershipReplica(
         }
 
         _state = new AcceptorState { Identity = identity, Committed = recovered };
+        _handoff = request.FrozenReplicas;
         _configuration.Installed(previous, next);
         return true;
     }
@@ -136,6 +138,7 @@ internal sealed class MemoryMembershipReplica(
     private PeerReply Reply(PeerAction action, bool granted) => new()
     {
         Granted = granted,
+        TransferEvidence = granted && action == PeerAction.FetchTransfer ? _handoff : [],
         Incarnation = incarnation,
         Configuration = _configuration.Current,
         FrozenFor = _configuration.FrozenFor,
@@ -155,7 +158,7 @@ internal sealed class MemoryMembershipReplica(
 
     private void RequireBound(int length)
     {
-        if (length > checked(options.MaximumSnapshotBytes * 3))
+        if (length > options.MaximumExchangeBytes)
         {
             throw new InvalidDataException("The replica exchange exceeds the configured byte bound.");
         }

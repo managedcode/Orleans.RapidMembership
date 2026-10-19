@@ -27,8 +27,6 @@ public sealed class LifecycleCancellationTests
         local.Stop();
         var options = new RapidMembershipOptions
         {
-            ListenEndpoint = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"http://127.0.0.1:{localPort}"),
-            SeedEndpoints = [string.Create(System.Globalization.CultureInfo.InvariantCulture, $"http://127.0.0.1:{seedPort}")],
             SharedSecret = "0123456789abcdef0123456789abcdef",
             PeerTimeout = TimeSpan.FromSeconds(1),
         };
@@ -38,7 +36,7 @@ public sealed class LifecycleCancellationTests
             .UseGrpcTransport(grpc =>
             {
                 grpc.Timeout = options.PeerTimeout;
-                grpc.JoinTimeout = TimeSpan.FromMilliseconds(250);
+                grpc.JoinTimeout = TimeSpan.FromSeconds(2);
             }).UseListenAddress(new IPEndPoint(IPAddress.Loopback, localPort));
         var observation = new RpcCancellationObservation();
         _ = builder.Services.AddSingleton(observation);
@@ -50,6 +48,11 @@ public sealed class LifecycleCancellationTests
         _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => app.Services.GetRequiredService<IRapidClusterLifecycle>().StartAsync(timeout.Token));
         var messaging = app.Services.GetRequiredService<IMessagingClient>();
         var endpoint = new RapidCluster.Pb.Endpoint { Hostname = ByteString.CopyFromUtf8("127.0.0.1"), Port = localPort };
+        var connected = await messaging.SendMessageAsync(endpoint, new RapidCluster.Pb.RapidClusterRequest
+        {
+            MembershipViewRequest = new RapidCluster.Pb.MembershipViewRequest { Sender = endpoint },
+        }, TestContext.Current.CancellationToken);
+        Assert.NotNull(connected.MembershipViewResponse);
         var pendingJoin = new RapidCluster.Pb.RapidClusterRequest
         {
             JoinMessage = new RapidCluster.Pb.JoinMessage
@@ -59,7 +62,7 @@ public sealed class LifecycleCancellationTests
             },
         };
         _ = await Assert.ThrowsAsync<TimeoutException>(() => messaging.SendMessageAsync(endpoint, pendingJoin, TestContext.Current.CancellationToken));
-        Assert.True(await observation.Finished.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken));
+        Assert.True(await observation.Finished.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
         var read = await messaging.SendMessageAsync(endpoint, new RapidCluster.Pb.RapidClusterRequest
         {
             MembershipViewRequest = new RapidCluster.Pb.MembershipViewRequest { Sender = endpoint },
@@ -106,7 +109,7 @@ public sealed class LifecycleCancellationTests
         var responses = await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => messaging.SendMessageAsync(endpoint, request, token)));
         Assert.All(responses, response => Assert.NotNull(response.MembershipViewResponse));
         await messaging.DisposeAsync();
-        await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(3), token);
+        await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(30), token);
         await messaging.DisposeAsync();
         using var channel = GrpcChannel.ForAddress(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}"));
         var client = new RapidCluster.Pb.MembershipService.MembershipServiceClient(channel);

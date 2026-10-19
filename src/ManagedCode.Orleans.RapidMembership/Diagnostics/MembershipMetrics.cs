@@ -16,6 +16,8 @@ internal static class MembershipMetrics
             PeerAction.Accept => "accept",
             PeerAction.Commit => "commit",
             PeerAction.Describe => "describe",
+            PeerAction.Locate => "locate",
+            PeerAction.FetchTransfer => "fetch-transfer",
             PeerAction.FreezeConfiguration => "freeze-configuration",
             PeerAction.InstallConfiguration => "install-configuration",
             _ => "invalid",

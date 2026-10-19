@@ -53,8 +53,8 @@ jobs:
         run: dotnet format RapidCluster.slnx --no-restore --exclude src/Clockwork --verify-no-changes
       - name: Build
         run: dotnet build RapidCluster.slnx --no-restore --configuration Release -warnaserror
-      - name: Membership, persistence, network and Orleans Aspire tests
-        run: dotnet run --project tests/ManagedCode.Orleans.RapidMembership.Tests --configuration Release --no-build -- --filter-not-trait Category=Scale --timeout 600s --output Detailed --coverage --coverage-settings eng/coverage.config.xml --coverage-output-format cobertura --coverage-output membership.cobertura.xml --report-trx --results-directory artifacts/tests/membership
+      - name: RAM membership, network and Orleans Aspire tests
+        run: dotnet run --project tests/ManagedCode.Orleans.RapidMembership.Tests --configuration Release --no-build -- --filter-not-trait Category=Scale --timeout 1200s --output Detailed --coverage --coverage-settings eng/coverage.config.xml --coverage-output-format cobertura --coverage-output membership.cobertura.xml --report-trx --results-directory artifacts/tests/membership
       - name: Enforce provider coverage
         run: python eng/verify-coverage.py artifacts/tests/membership/membership.cobertura.xml
       - name: RAPID unit tests

@@ -67,9 +67,11 @@ internal sealed class ReplicaConfigurationFence(Guid incarnation)
             return false;
         }
 
-        // Repeated installation acknowledges the view without clearing newer ballot promises or table slots.
+        // Repeated installation preserves newer promises. A validated old-majority certificate can
+        // supersede this replica's minority freeze without granting a second vote for the old view.
         return Current is { } current
-            ? current.Matches(next) && FrozenFor is null || current.Matches(previous) && next.Matches(FrozenFor)
+            ? current.Matches(next) && FrozenFor is null || current.Matches(previous)
+                || current.ClusterId == previous.ClusterId && current.Version < previous.Version
             : !previous.Contains(incarnation);
     }
 

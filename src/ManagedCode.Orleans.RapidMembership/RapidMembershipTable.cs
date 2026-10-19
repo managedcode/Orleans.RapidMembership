@@ -7,7 +7,7 @@ using RapidCluster;
 
 namespace ManagedCode.Orleans.RapidMembership;
 
-/// <summary>Provides the native Orleans membership table using durable majority consensus on seed silos.</summary>
+/// <summary>Provides the native Orleans membership table using automatically discovered in-memory quorum replicas.</summary>
 public sealed class RapidMembershipTable : IMembershipTable, IAsyncDisposable
 {
     private readonly RapidMembershipOptions _options;
@@ -15,7 +15,6 @@ public sealed class RapidMembershipTable : IMembershipTable, IAsyncDisposable
     private readonly MembershipProposer _proposer;
     private readonly Serializer<MembershipEntry> _entries;
     private readonly SemaphoreSlim _lifecycle = new(1);
-    private MembershipHost? _host;
     private int _disposed;
     private bool _initialized;
 
@@ -28,11 +27,12 @@ public sealed class RapidMembershipTable : IMembershipTable, IAsyncDisposable
         _entries = entries;
     }
 
-    /// <summary>Gets a value indicating whether this silo is a configured membership voter.</summary>
-    public bool IsVoter => _options.SeedEndpoints.Contains(_options.ListenEndpoint, StringComparer.Ordinal);
+    /// <summary>Gets a value indicating whether this silo currently participates in the automatically formed coordination group.</summary>
+    public bool IsVoter => _proposer.Directory.Host?.IsVoter == true;
 
     /// <summary>Gets the local RAPID voter view. Ordinary silos do not participate in voter consensus.</summary>
-    public ClusterMembershipView VoterView => _host?.Cluster.CurrentView ?? ClusterMembershipView.Empty;
+    public ClusterMembershipView VoterView => _proposer.Directory.Host is { IsVoter: true } host
+        ? host.Cluster.CurrentView : ClusterMembershipView.Empty;
 
     /// <inheritdoc />
     public Task InitializeMembershipTable(bool tryInitTableVersion) => InitializeMembershipTableAsync(tryInitTableVersion);
@@ -46,22 +46,8 @@ public sealed class RapidMembershipTable : IMembershipTable, IAsyncDisposable
             if (!_initialized)
             {
                 _options.Validate(server: true);
-                if (IsVoter && _host is null)
-                {
-                    var host = new MembershipHost(_options, _options.Identity(_cluster));
-                    try
-                    {
-                        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                        timeout.CancelAfter(_options.OperationTimeout);
-                        await host.StartAsync(timeout.Token);
-                        _host = host;
-                    }
-                    catch
-                    {
-                        await host.DisposeAsync();
-                        throw;
-                    }
-                }
+                await _proposer.Directory.StartServerAsync(cancellationToken);
+                await _proposer.Directory.WaitForFormationAsync(cancellationToken);
 
                 _ = await ReadAllAsync(cancellationToken);
                 _initialized = true;
@@ -153,11 +139,7 @@ public sealed class RapidMembershipTable : IMembershipTable, IAsyncDisposable
         await _lifecycle.WaitAsync();
         try
         {
-            if (_host is not null)
-            {
-                await _host.DisposeAsync();
-                _host = null;
-            }
+            await _proposer.Directory.DisposeAsync();
         }
         finally
         {

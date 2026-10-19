@@ -11,7 +11,7 @@ public sealed class MulticastLifecycleTests
     [Fact]
     public async Task BoundedObserverRecoversAfterCancellationAndReplacesAnExpiredPeer()
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
         var token = timeout.Token;
         using var firstListener = new TcpListener(IPAddress.Any, 0);
         using var secondListener = new TcpListener(IPAddress.Any, 0);

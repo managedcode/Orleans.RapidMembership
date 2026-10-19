@@ -1,61 +1,50 @@
 using System.Net;
-using System.Net.Sockets;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Orleans.Configuration;
 using Orleans.Serialization;
 
 namespace ManagedCode.Orleans.RapidMembership.Tests.Support;
 
-internal sealed class NetworkCluster : IAsyncDisposable
+internal sealed class NetworkCluster(string secret = "0123456789abcdef0123456789abcdef") : IAsyncDisposable
 {
-    private readonly TestDirectory _directory = new();
-    private readonly string _secret;
-    private readonly ServiceProvider _services = new ServiceCollection().AddSerializer(builder => builder.AddAssembly(typeof(RapidMembershipOptions).Assembly)).BuildServiceProvider();
-    private readonly MembershipHost?[] _hosts = new MembershipHost?[3];
+    private readonly ServiceProvider _services = new ServiceCollection()
+        .AddSerializer(builder => builder.AddAssembly(typeof(RapidMembershipOptions).Assembly)).BuildServiceProvider();
+
+    private readonly PeerDirectory?[] _nodes = new PeerDirectory?[3];
+    private readonly List<PeerDirectory> _clients = [];
     private readonly List<PeerTransport> _transports = [];
     private readonly List<MembershipProposer> _proposers = [];
+    private readonly ClusterOptions _cluster = new() { ClusterId = Guid.NewGuid().ToString("N"), ServiceId = "network-provider-tests" };
 
-    public NetworkCluster(string secret = "0123456789abcdef0123456789abcdef")
-    {
-        _secret = secret;
-        var listeners = Enumerable.Range(0, 3).Select(_ => new TcpListener(IPAddress.Loopback, 0)).ToArray();
-        foreach (var listener in listeners)
-        {
-            listener.Start();
-        }
+    public string ClusterId => _cluster.ClusterId;
 
-        Endpoints = [.. listeners.Select(listener => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}"))];
-        foreach (var listener in listeners)
-        {
-            listener.Stop();
-        }
-    }
+    public CoordinationConfiguration Configuration { get; private set; } = null!;
 
-    public string[] Endpoints { get; }
-
-    public IEnumerable<global::RapidCluster.ClusterMembershipView> VoterViews => _hosts.Where(host => host is not null).Select(host => host!.Cluster.CurrentView);
+    public IEnumerable<global::RapidCluster.ClusterMembershipView> VoterViews
+        => _nodes.Where(node => node is not null).Select(node => node!.Host!.Cluster.CurrentView);
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        for (var i = 0; i < _hosts.Length; i++)
+        for (var i = 0; i < _nodes.Length; i++)
         {
             var options = Options();
-            options.ListenEndpoint = Endpoints[i];
-            options.StorageDirectory = Path.Combine(_directory.Path, i.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            _hosts[i] = new MembershipHost(options, options.Identity(new ClusterOptions { ClusterId = "test", ServiceId = "test" }));
+            _nodes[i] = Directory(options, Transport());
         }
 
-        await Task.WhenAll(_hosts.Select(host => host!.StartAsync(cancellationToken)));
+        await Task.WhenAll(_nodes.Select(node => node!.StartServerAsync(cancellationToken)));
         while (true)
         {
-            var views = _hosts.Select(host => host!.Cluster.CurrentView).ToArray();
-            if (views.All(view => view.Members.Length == _hosts.Length)
-                && views.All(view => view.ConfigurationId == views[0].ConfigurationId))
+            var configurations = await Task.WhenAll(_nodes.Select(node => node!.ResolveAsync(cancellationToken)));
+            if (configurations.All(configuration => configuration.Members.Length == 3
+                && configuration.Matches(configurations[0])) && VoterViews.All(view => view.Members.Length == 3))
             {
+                Configuration = configurations[0];
                 return;
             }
 
-            await Task.Delay(10, cancellationToken);
+            await Task.Delay(20, cancellationToken);
         }
     }
 
@@ -64,59 +53,67 @@ internal sealed class NetworkCluster : IAsyncDisposable
         var options = Options();
         options.MaximumSnapshotBytes = maximumSnapshotBytes;
         options.MaximumOperationHistory = maximumOperationHistory;
-        var proposer = new MembershipProposer(Transport(), options, _services.GetRequiredService<Serializer<MembershipSnapshot>>());
+        var directory = Directory(options, Transport());
+        _clients.Add(directory);
+        var proposer = new MembershipProposer(_transports[^1], options,
+            _services.GetRequiredService<Serializer<MembershipSnapshot>>(), directory);
         _proposers.Add(proposer);
         return proposer;
     }
 
-    public RapidMembershipTable NativeTable()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        var options = Options();
-        options.ListenEndpoint = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}");
-        return new RapidMembershipTable(global::Microsoft.Extensions.Options.Options.Create(options),
-            global::Microsoft.Extensions.Options.Options.Create(new ClusterOptions { ClusterId = "test", ServiceId = "test" }),
-            Proposer(), _services.GetRequiredService<Serializer<global::Orleans.MembershipEntry>>());
-    }
+    public RapidMembershipTable NativeTable() => new(global::Microsoft.Extensions.Options.Options.Create(Options()),
+        global::Microsoft.Extensions.Options.Options.Create(_cluster), Proposer(), _services.GetRequiredService<Serializer<global::Orleans.MembershipEntry>>());
 
     public PeerTransport Transport(string? secret = null, string? identity = null)
     {
         var options = Options();
         options.SharedSecret = secret ?? options.SharedSecret;
-        var transport = new PeerTransport(options, identity ?? options.Identity(new ClusterOptions { ClusterId = "test", ServiceId = "test" }),
+        var transport = new PeerTransport(options, identity ?? RapidMembershipOptions.Identity(_cluster),
             _services.GetRequiredService<Serializer<PeerRequest>>(), _services.GetRequiredService<Serializer<PeerReply>>());
         _transports.Add(transport);
         return transport;
     }
 
+    public async Task DepartAsync(int index)
+    {
+        await _nodes[index]!.DisposeAsync();
+        _nodes[index] = null;
+    }
+
     public async Task StopAsync(int index)
     {
-        if (_hosts[index] is { } host)
+        if (_nodes[index] is { Host: { } host } directory)
         {
-            await host.DisposeAsync();
-            _hosts[index] = null;
+            // Abruptly close the real server transport before joining cleanup; do not advertise a graceful departure first.
+            var app = (WebApplication)typeof(MembershipHost).GetField("_app",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(host)!;
+            app.Lifetime.StopApplication();
+            await app.Services.GetRequiredService<IServer>().StopAsync(TestContext.Current.CancellationToken);
+            await directory.DisposeAsync();
+            _nodes[index] = null;
         }
     }
 
-    private RapidMembershipOptions Options()
+    private PeerDirectory Directory(RapidMembershipOptions options, PeerTransport transport)
+        => new(options, RapidMembershipOptions.Identity(_cluster), transport);
+
+    private RapidMembershipOptions Options() => new()
     {
-        var options = new RapidMembershipOptions
-        {
-            SharedSecret = _secret,
-            PeerTimeout = TimeSpan.FromMilliseconds(500),
-            SeedEndpoints = Endpoints,
-        };
-        return options;
-    }
+        SharedSecret = secret,
+        ListenPort = 0,
+        PeerTimeout = TimeSpan.FromSeconds(2),
+    };
 
     public async ValueTask DisposeAsync()
     {
-        for (var i = 0; i < _hosts.Length; i++)
+        foreach (var client in _clients)
         {
-            await StopAsync(i);
+            await client.DisposeAsync();
+        }
+
+        for (var index = 0; index < _nodes.Length; index++)
+        {
+            await StopAsync(index);
         }
 
         foreach (var proposer in _proposers)
@@ -130,6 +127,5 @@ internal sealed class NetworkCluster : IAsyncDisposable
         }
 
         await _services.DisposeAsync();
-        _directory.Dispose();
     }
 }

@@ -42,6 +42,13 @@ public sealed class RapidClusterOptions
     public bool JoinBeforeBootstrap { get; set; }
 
     /// <summary>
+    /// Gets or sets an explicit nonzero identity for a newly bootstrapped cluster.
+    /// Joining nodes learn the established identity from their peers.
+    /// When unset, bootstrap derives its identity from the configured seed endpoints.
+    /// </summary>
+    public ClusterId? BootstrapClusterId { get; set; }
+
+    /// <summary>
     /// Gets or sets timeout for waiting for <see cref="BootstrapExpect"/> nodes to contact the seed.
     /// If the timeout expires before the expected number of nodes join, the seed will
     /// start the cluster with whatever nodes have contacted it.

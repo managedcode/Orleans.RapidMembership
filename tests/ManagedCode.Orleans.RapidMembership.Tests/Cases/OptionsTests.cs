@@ -6,19 +6,14 @@ namespace ManagedCode.Orleans.RapidMembership.Tests.Cases;
 public sealed class OptionsTests
 {
     [Theory]
-    [InlineData("http://localhost:11112")]
-    [InlineData("http://0.0.0.0:11112")]
-    [InlineData("https://127.0.0.1:11112")]
-    [InlineData("http://127.0.0.1:11112/path")]
-    [InlineData("http://127.0.0.1:11112?query=1")]
-    [InlineData("http://127.0.0.1:11112#fragment")]
-    [InlineData("http://user@127.0.0.1:11112")]
-    [InlineData("not-an-endpoint")]
-    public void NonCanonicalOrUnreachableBindAddressesAreRejected(string seed)
+    [InlineData(-1)]
+    [InlineData(65536)]
+    public void InvalidListenerPortsAreRejectedForSilos(int port)
     {
         var options = Valid();
-        options.SeedEndpoints = [seed];
+        options.ListenPort = port;
         _ = Assert.Throws<OptionsValidationException>(() => options.Validate(server: true));
+        options.Validate(server: false);
     }
 
     [Theory]
@@ -43,30 +38,31 @@ public sealed class OptionsTests
     }
 
     [Fact]
-    public void VotersRequireDurableOwnershipAndClientsDoNotRequireAListener()
+    public void AutomaticDefaultsRequireNoAddressListOrDirectory()
     {
         var options = Valid();
-        options.SeedEndpoints = [options.ListenEndpoint];
-        _ = Assert.Throws<OptionsValidationException>(() => options.Validate(server: true));
-        options.StorageDirectory = "state";
         options.Validate(server: true);
-        options.ListenEndpoint = "unused-by-client";
         options.Validate(server: false);
-        _ = Assert.Throws<OptionsValidationException>(() => options.Validate(server: true));
+        options.ListenPort = 0;
+        options.DiscoveryNetworks = ["127.0.0.1/32", "10.1.2.4-10.1.2.10"];
+        options.Validate(server: true);
     }
 
     [Fact]
-    public void DuplicateVotersWeakSecretsAndInvalidDeadlinesAreRejected()
+    public void WeakSecretsAndInvalidDeadlinesOrMemoryBoundsAreRejected()
     {
         var options = Valid();
-        options.SeedEndpoints = [options.SeedEndpoints[0], options.SeedEndpoints[0]];
-        _ = Assert.Throws<OptionsValidationException>(() => options.Validate(server: false));
-        options = Valid();
         options.SharedSecret = "short";
         _ = Assert.Throws<OptionsValidationException>(() => options.Validate(server: false));
         options = Valid();
         options.OperationTimeout = TimeSpan.Zero;
         _ = Assert.Throws<OptionsValidationException>(() => options.Validate(server: false));
+        options = Valid();
+        options.StartupTimeout = TimeSpan.Zero;
+        _ = Assert.Throws<OptionsValidationException>(() => options.Validate(server: true));
+        options = Valid();
+        options.StartupTimeout = TimeSpan.FromMinutes(16);
+        _ = Assert.Throws<OptionsValidationException>(() => options.Validate(server: true));
         options = Valid();
         options.PeerTimeout = options.OperationTimeout.Add(TimeSpan.FromSeconds(1));
         _ = Assert.Throws<OptionsValidationException>(() => options.Validate(server: false));
@@ -76,21 +72,19 @@ public sealed class OptionsTests
         options = Valid();
         options.MaximumEntries = 0;
         _ = Assert.Throws<OptionsValidationException>(() => options.Validate(server: false));
+        options = Valid();
+        options.MaximumExchangeBytes = options.MaximumSnapshotBytes;
+        _ = Assert.Throws<OptionsValidationException>(() => options.Validate(server: false));
     }
 
     [Fact]
-    public void ClusterIdentitySeparatesServiceClusterAndVoterConfiguration()
+    public void ClusterIdentitySeparatesServiceAndClusterAndDoesNotDependOnSearchNetworks()
     {
-        var options = Valid();
-        var identity = options.Identity(new ClusterOptions { ServiceId = "ab", ClusterId = "c" });
-        Assert.NotEqual(identity, options.Identity(new ClusterOptions { ServiceId = "a", ClusterId = "bc" }));
-        options.SeedEndpoints = ["http://127.0.0.3:11112"];
-        Assert.NotEqual(identity, options.Identity(new ClusterOptions { ServiceId = "ab", ClusterId = "c" }));
+        var identity = RapidMembershipOptions.Identity(new ClusterOptions { ServiceId = "ab", ClusterId = "c" });
+        Assert.NotEqual(identity, RapidMembershipOptions.Identity(new ClusterOptions { ServiceId = "a", ClusterId = "bc" }));
+        Assert.NotEqual(identity, RapidMembershipOptions.Identity(new ClusterOptions { ServiceId = "ab", ClusterId = "d" }));
+        Assert.Equal(identity, RapidMembershipOptions.Identity(new ClusterOptions { ServiceId = "ab", ClusterId = "c" }));
     }
 
-    private static RapidMembershipOptions Valid() => new()
-    {
-        SeedEndpoints = ["http://127.0.0.2:11112"],
-        SharedSecret = "0123456789abcdef0123456789abcdef",
-    };
+    private static RapidMembershipOptions Valid() => new() { SharedSecret = "0123456789abcdef0123456789abcdef" };
 }

@@ -14,7 +14,7 @@ The required provider implements Orleans 10.4 membership and gateway discovery o
 | RM-006 Dynamic processes | Exact native membership converges after joins, graceful departure, abrupt kills and full restart; every live silo executes real grain calls. |
 | RM-007 Continuing clients | Four existing clients issue nonce-checked calls through churn, stop succeeding at zero and recover without replacement. |
 | RM-008 Delivery | Retain native upstream and platform/scale gates, original artifacts and one authorized three-package release. Adopt the actual published package in KeyLoad. |
-| RM-009 Automatic discovery | Real UDP discovery finds actual TCP endpoints without configured IPs. External clients observe without becoming servers; disappeared peers expire; foreign clusters/secrets stay isolated. |
+| RM-009 Automatic discovery | Real UDP discovery finds actual TCP endpoints without configured IPs. Configured ranges complete their initial bounded scan before bootstrap. A learned founding candidate cannot be promoted after expiry; its pre-formation loss stays closed until complete restart. External clients observe without becoming servers; disappeared peers expire; foreign clusters/secrets stay isolated. |
 | RM-010 Partition contract | Follow RAPID consistent configurations and majority recovery. Require old/new majorities for atomic table handoff; reject minority writes, stale configurations and forgotten incarnations. Discovery expiry cannot reduce the quorum. |
 
 ## Principal real-process schedule
@@ -23,8 +23,8 @@ Use actual Aspire AddProject silo processes and actual external Orleans clients.
 
 Every live node must report the complete expected native address/generation set; matching counts alone cannot pass. Every live silo must execute a grain call and every continuing client must progress in each live phase. The zero phase drains in-flight work and verifies absence of further successful calls. Complete loss creates fresh in-memory membership rather than reopening voter files.
 
-The prior tests assume fixed seed voters and durable directories. Adapt them to the corrected runtime and selected partition contract; their previous results do not qualify the new behavior. Preserve their actual fault injection, exact identity assertions, client operations and joined cleanup.
+The tests now use discovered peers, entirely in-memory membership and actual coordinator identities. Prior fixed-seed results do not qualify the corrected behavior. Preserve their actual fault injection, exact identity assertions, client operations and joined cleanup.
 
 ## Evidence
 
-The two new native discovery tests pass for actual UDP/TCP operations and packet isolation. Automatic in-memory table integration, final real-process qualification, platform CI, publication and consumer adoption remain open. Retain original failed, interrupted and incomplete reports; never substitute simulation, documentation or a parent coverage report for actual silo execution.
+Native UDP/TCP, RAM consensus, native silo/client hosting and focused Aspire recovery checks have run. Runtime integration is implemented. Final full-suite, coverage, zero-to-fifty process qualification, platform CI, publication and consumer adoption remain open. Retain original failed, interrupted and incomplete reports; never substitute simulation, documentation or a parent coverage report for actual silo execution.

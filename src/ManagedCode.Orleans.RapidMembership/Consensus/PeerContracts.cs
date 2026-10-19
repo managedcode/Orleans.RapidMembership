@@ -20,6 +20,8 @@ internal enum PeerAction
     Accept,
     Commit,
     Describe,
+    Locate,
+    FetchTransfer,
     FreezeConfiguration,
     InstallConfiguration,
 }
@@ -93,6 +95,18 @@ internal sealed class PeerReply
     [Id(4)] public Guid Incarnation { get; set; }
 
     [Id(5)] public CoordinationConfiguration? ObservedConfiguration { get; set; }
+
+    [Id(6)] public CoordinationConfiguration? KnownConfiguration { get; set; }
+
+    [Id(7)] public bool IsJoining { get; set; }
+
+    [Id(8)] public System.Collections.Immutable.ImmutableArray<FrozenReplica> TransferEvidence { get; set; } = [];
+
+    [Id(9)] public bool CanCoordinate { get; set; }
+
+    [Id(10)] public string BootstrapCandidate { get; set; } = string.Empty;
+
+    [Id(11)] public bool IsDeparting { get; set; }
 }
 
 [GenerateSerializer]

@@ -1,44 +1,25 @@
+using System.Collections.Concurrent;
 using Google.Protobuf;
 using Grpc.Core;
 using Grpc.Net.Client;
-using ManagedCode.Orleans.RapidMembership.Transport;
 using Orleans.Serialization;
 
 namespace ManagedCode.Orleans.RapidMembership.Transport;
 
-internal sealed class PeerTransport : IDisposable
+internal sealed class PeerTransport(
+    RapidMembershipOptions options, string identity, Serializer<PeerRequest> requests, Serializer<PeerReply> replies) : IDisposable
 {
     internal const string IdentityHeader = "x-rapid-cluster";
     internal const string SecretHeader = "x-rapid-secret";
-    private readonly RapidMembershipOptions _options;
-    private readonly Serializer<PeerRequest> _requests;
-    private readonly Serializer<PeerReply> _replies;
-    private readonly Metadata _headers;
-    private readonly GrpcChannel[] _channels;
-    private readonly MembershipPeer.MembershipPeerClient[] _clients;
+    private readonly Dictionary<CoordinationMember, GrpcChannel> _channels = [];
+    private readonly System.Threading.Lock _channelGate = new();
+    private readonly Metadata _headers = new() { { IdentityHeader, identity }, { SecretHeader, options.AdmissionToken } };
 
-    public PeerTransport(RapidMembershipOptions options, string identity, Serializer<PeerRequest> requests, Serializer<PeerReply> replies)
-    {
-        _options = options;
-        _requests = requests;
-        _replies = replies;
-        _headers = new Metadata { { IdentityHeader, identity }, { SecretHeader, options.AdmissionToken } };
-        _channels = [.. options.SeedEndpoints.Select(endpoint => GrpcChannel.ForAddress(endpoint, new GrpcChannelOptions
-        {
-            MaxReceiveMessageSize = checked(options.MaximumSnapshotBytes * 3),
-            MaxSendMessageSize = checked(options.MaximumSnapshotBytes * 3),
-        }))];
-        _clients = [.. _channels.Select(channel => new MembershipPeer.MembershipPeerClient(channel))];
-    }
-
-    public int Quorum => _clients.Length / 2 + 1;
-
-    public async Task<List<PeerReply>> ExchangeAsync(PeerRequest request, CancellationToken cancellationToken)
+    public async Task<List<PeerReply>> ExchangeAsync(PeerRequest request, CoordinationConfiguration configuration, CancellationToken cancellationToken)
     {
         using var group = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var payload = new PeerPayload { Content = ByteString.CopyFrom(_requests.SerializeToArray(request)) };
-        var pending = _clients.Select(client => SendAsync(client, payload, group.Token)).ToList();
-        var replies = new List<PeerReply>();
+        var pending = configuration.Members.Select(member => SendAsync(member, request, group.Token)).ToList();
+        var result = new List<PeerReply>();
         try
         {
             while (pending.Count > 0)
@@ -47,10 +28,10 @@ internal sealed class PeerTransport : IDisposable
                 _ = pending.Remove(completed);
                 if (await completed is { } reply)
                 {
-                    replies.Add(reply);
+                    result.Add(reply);
                 }
 
-                if (replies.Count(reply => reply.Granted) >= Quorum)
+                if (result.Count(reply => reply.Granted) >= configuration.Quorum)
                 {
                     break;
                 }
@@ -63,16 +44,53 @@ internal sealed class PeerTransport : IDisposable
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        return replies;
+        return result;
     }
 
-    private async Task<PeerReply?> SendAsync(MembershipPeer.MembershipPeerClient client, PeerPayload payload, CancellationToken cancellationToken)
+    public async Task<List<PeerReply>> LocateAsync(IEnumerable<CoordinationMember> members, CancellationToken cancellationToken)
     {
+        var result = new ConcurrentBag<PeerReply>();
+        await Parallel.ForEachAsync(members.Distinct().Take(options.MaximumPeers), new ParallelOptions
+        {
+            CancellationToken = cancellationToken,
+            MaxDegreeOfParallelism = 16,
+        }, async (member, token) =>
+        {
+            if (await SendAsync(member, new PeerRequest { Action = PeerAction.Locate }, token) is { Granted: true } reply)
+            {
+                result.Add(reply);
+            }
+        });
+        return [.. result];
+    }
+
+    public async Task<PeerReply?> SendAsync(CoordinationMember member, PeerRequest request, CancellationToken cancellationToken)
+    {
+        var channel = GetChannel(member);
+        var addressed = new PeerRequest
+        {
+            Action = request.Action,
+            Index = request.Index,
+            Ballot = request.Ballot,
+            Snapshot = request.Snapshot,
+            Configuration = request.Configuration,
+            PreviousConfiguration = request.PreviousConfiguration,
+            FrozenReplicas = request.FrozenReplicas,
+            Recipient = member.Incarnation,
+        };
+        var bytes = requests.SerializeToArray(addressed);
+        if (bytes.Length > options.MaximumExchangeBytes)
+        {
+            throw new InvalidDataException("The outgoing peer exchange exceeds its byte bound.");
+        }
+
         try
         {
-            using var call = client.ExchangeAsync(payload, _headers, DateTime.UtcNow + _options.PeerTimeout, cancellationToken);
-            var response = await call.ResponseAsync;
-            return _replies.Deserialize(response.Content.Span);
+            using var call = new MembershipPeer.MembershipPeerClient(channel).ExchangeAsync(
+                new PeerPayload { Content = ByteString.CopyFrom(bytes) }, _headers, DateTime.UtcNow + options.PeerTimeout, cancellationToken);
+            var payload = await call.ResponseAsync;
+            var reply = replies.Deserialize(payload.Content.Span);
+            return reply?.Incarnation == member.Incarnation ? reply : null;
         }
         catch (RpcException)
         {
@@ -84,11 +102,38 @@ internal sealed class PeerTransport : IDisposable
         }
     }
 
+    private GrpcChannel GetChannel(CoordinationMember member)
+    {
+        lock (_channelGate)
+        {
+            if (_channels.TryGetValue(member, out var existing))
+            {
+                return existing;
+            }
+
+            if (_channels.Count >= options.MaximumPeers)
+            {
+                throw new InvalidOperationException("The peer channel bound was reached.");
+            }
+
+            var channel = GrpcChannel.ForAddress(member.Endpoint, new GrpcChannelOptions
+            {
+                MaxReceiveMessageSize = options.MaximumExchangeBytes,
+                MaxSendMessageSize = options.MaximumExchangeBytes,
+            });
+            _channels.Add(member, channel);
+            return channel;
+        }
+    }
+
     public void Dispose()
     {
-        foreach (var channel in _channels)
+        lock (_channelGate)
         {
-            channel.Dispose();
+            foreach (var channel in _channels.Values)
+            {
+                channel.Dispose();
+            }
         }
     }
 }

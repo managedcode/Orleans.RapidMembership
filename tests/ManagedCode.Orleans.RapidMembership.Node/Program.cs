@@ -22,10 +22,8 @@ _ = builder.Host.UseOrleans(silo =>
     });
     _ = silo.UseRapidMembership(options =>
     {
-        options.ListenEndpoint = builder.Configuration["RAPID_LISTEN"]!;
-        options.StorageDirectory = builder.Configuration["RAPID_DIRECTORY"]!;
+        options.ListenPort = builder.Configuration.GetValue<int>("RAPID_PORT");
         options.SharedSecret = builder.Configuration["RAPID_SECRET"]!;
-        options.SeedEndpoints = builder.Configuration["RAPID_SEEDS"]!.Split(',');
         options.OperationTimeout = TimeSpan.FromMinutes(2);
         options.PeerTimeout = TimeSpan.FromSeconds(5);
     });
@@ -46,6 +44,9 @@ _ = app.MapGet("/state", async (RapidMembershipTable table, global::Orleans.Runt
         snapshot.Version.Version,
         table.IsVoter,
         RapidVoters = table.VoterView.Members.Length,
+        RapidConfiguration = table.VoterView.ConfigurationId.ToString(),
+        RapidMembers = table.VoterView.Members.Select(member =>
+            $"{new Guid(member.Metadata["membership-incarnation"].Span):N}@{member.EndPoint}").Order(StringComparer.Ordinal).ToArray(),
     };
 });
 _ = app.MapGet("/echo/{value}", (string value, IGrainFactory grains) => grains.GetGrain<IProbeGrain>("probe").Echo(value));

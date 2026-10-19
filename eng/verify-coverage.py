@@ -8,10 +8,13 @@ import xml.etree.ElementTree as ET
 
 CRITICAL = (
     "RapidMembershipOptions.cs", "RapidMembershipExtensions.cs", "RapidMembershipTable.cs",
-    "Consensus/MembershipAcceptor.cs", "Consensus/MembershipProposer.cs", "Consensus/MembershipSnapshotEquality.cs",
+    "Consensus/MembershipProposer.cs", "Consensus/MembershipSnapshotEquality.cs",
     "Consensus/PeerContracts.cs", "Consensus/CoordinationConfiguration.cs",
     "Consensus/ReplicaConfigurationFence.cs", "Consensus/ConfigurationHandoff.cs",
-    "Consensus/MembershipBallot.cs", "Consensus/MemoryMembershipReplica.cs", "Storage/VoterStorage.cs", "Operations/MembershipMutations.cs",
+    "Consensus/MembershipBallot.cs", "Consensus/MemoryMembershipReplica.cs", "Consensus/ConfigurationResolver.cs",
+    "Discovery/DiscoveryAddressRange.cs", "Discovery/DirectedDiscovery.cs", "Discovery/MulticastInterfaces.cs",
+    "Hosting/AutomaticSeeds.cs", "Hosting/ControllerRuntime.cs", "Hosting/GroupKnowledge.cs",
+    "Hosting/HostParticipation.cs", "Hosting/PeerSelection.cs", "Hosting/PeerDirectory.cs", "Operations/MembershipMutations.cs",
     "Operations/RapidGatewayListProvider.cs", "Hosting/MembershipHost.cs", "Transport/PeerTransport.cs",
     "Transport/MembershipPeerService.cs",
     "Discovery/DiscoveryPacket.cs", "Discovery/DiscoveredPeer.cs", "Discovery/MulticastDiscovery.cs",

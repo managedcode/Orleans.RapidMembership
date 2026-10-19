@@ -19,7 +19,7 @@ dotnet build RapidCluster.slnx --no-restore --configuration Release -warnaserror
 The repository retains xUnit v3 with Microsoft.Testing.Platform. Execute the Release binaries built above; detailed output, original TRX and coverage belong in `artifacts/tests/`.
 
 ```sh
-dotnet run --project tests/ManagedCode.Orleans.RapidMembership.Tests --configuration Release --no-build -- --filter-not-trait Category=Scale --timeout 600s --output Detailed --report-trx --results-directory artifacts/tests/membership
+dotnet run --project tests/ManagedCode.Orleans.RapidMembership.Tests --configuration Release --no-build -- --filter-not-trait Category=Scale --timeout 1200s --output Detailed --report-trx --results-directory artifacts/tests/membership
 dotnet run --project tests/ManagedCode.Orleans.RapidMembership.Tests --configuration Release --no-build -- --filter-trait Category=Scale --timeout 4500s --output Detailed --report-trx --results-directory artifacts/tests/churn
 dotnet run --project tests/RapidCluster.Unit.Tests --configuration Release --no-build -- --timeout 600s --output Detailed --report-trx --results-directory artifacts/tests/unit
 dotnet run --project tests/RapidCluster.Integration.Tests --configuration Release --no-build -- --timeout 600s --output Detailed --report-trx --results-directory artifacts/tests/network

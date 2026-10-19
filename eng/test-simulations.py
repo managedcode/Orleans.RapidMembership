@@ -43,8 +43,15 @@ def run_group(key, expected, output):
     kind = "--filter-method" if ".LargeScaleClusterTests." in key else "--filter-class"
     command = ["dotnet", str(ASSEMBLY), kind, key, "--timeout", "1800s", "--output", "Detailed", "--report-trx",
                "--results-directory", str(directory)]
+    child_environment = os.environ.copy()
+    runtime_settings = {}
+    if os.name == "nt":
+        # The instrumented scheduler uses managed worker threads; Windows native stack overflow
+        # terminated groups with 0xC00000FD before MTP could write their original results.
+        runtime_settings["DOTNET_Thread_DefaultStackSize"] = "800000"
+        child_environment.update(runtime_settings)
     with logs.open("wb") as stream:
-        process = subprocess.Popen(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT)
+        process = subprocess.Popen(command, cwd=ROOT, env=child_environment, stdout=stream, stderr=subprocess.STDOUT)
         try:
             code = process.wait(timeout=1860)
         except subprocess.TimeoutExpired:
@@ -61,7 +68,7 @@ def run_group(key, expected, output):
             outcomes.append(case.attrib["outcome"])
     passed = code == 0 and bool(reports) and collections.Counter(actual) == collections.Counter(expected)
     passed = passed and all(value == "Passed" for value in outcomes)
-    receipt = {"group": key, "command": command, "exitCode": code, "expected": expected,
+    receipt = {"group": key, "command": command, "runtimeSettings": runtime_settings, "exitCode": code, "expected": expected,
                "actual": actual, "outcomes": outcomes, "passed": passed}
     (directory / "receipt.json").write_text(json.dumps(receipt, indent=2), encoding="utf-8")
     print(f"{key}: {'PASS' if passed else 'FAIL'} ({len(actual)}/{len(expected)} native cases)", flush=True)

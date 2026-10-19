@@ -41,6 +41,7 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
     private readonly ISeedProvider _seedProvider;
     private readonly int _bootstrapExpect;
     private readonly bool _joinBeforeBootstrap;
+    private readonly ClusterId? _bootstrapClusterId;
 
     // Buffer for consensus messages from future configurations
     private readonly Dictionary<ConfigurationId, List<RapidClusterRequest>> _pendingConsensusMessages = [];
@@ -120,6 +121,11 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
         _seedProvider = seedProvider;
         _bootstrapExpect = opts.BootstrapExpect;
         _joinBeforeBootstrap = opts.JoinBeforeBootstrap;
+        _bootstrapClusterId = opts.BootstrapClusterId;
+        if (_bootstrapClusterId == ClusterId.None)
+        {
+            throw new ArgumentException("The bootstrap cluster identity must be nonzero.", nameof(rapidClusterOptions));
+        }
 
         // Seed addresses will be fetched asynchronously during InitializeAsync
         // We cannot filter self here because _myAddr is not yet known
@@ -294,14 +300,14 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
     {
         _log.StartingNewCluster(_myAddr);
 
-        // Generate deterministic ClusterId from the seed list (which for bootstrap is just self)
-        // In a multi-seed bootstrap, all seeds should arrive at the same ClusterId.
+        // A host may supply a fresh lifetime identity for RAM-only coordination.
+        // Otherwise the native seed contract derives a deterministic identity from the seed list.
         var sortedSeeds = _seedAddresses.Concat([_myAddr])
             .OrderBy(e => e.Hostname.ToStringUtf8(), StringComparer.Ordinal)
             .ThenBy(e => e.Port)
             .ToList();
 
-        _clusterId = new ClusterId(ComputeClusterHash(sortedSeeds));
+        _clusterId = _bootstrapClusterId ?? new ClusterId(ComputeClusterHash(sortedSeeds));
 
         // Create endpoint with node ID = 1 for the seed node
         var seedEndpoint = new Endpoint
@@ -822,7 +828,13 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
             }
 
             _log.NotifyingStaleJoiners(_pendingJoiners.Count);
+            var deferredMetadata = _pendingJoiners.Where(pair => _deferredProposals.Contains(pair.Key))
+                .Select(pair => (pair.Key, pair.Value.Metadata)).ToArray();
             _pendingJoiners.Clear();
+            foreach (var (endpoint, metadata) in deferredMetadata)
+            {
+                _pendingJoiners.Add(endpoint, new JoinerInfo { Metadata = metadata });
+            }
         }
     }
 
@@ -1800,7 +1812,7 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
 
         _log.RejoinWithCandidateSeeds(candidateSeeds.Count, _seedAddresses.Count);
 
-        var metadata = _membershipView.GetMetadata(_myAddr) ?? new Metadata();
+        var metadata = _nodeMetadata;
 
         JoinResponse? successfulResponse = null;
 
@@ -1840,6 +1852,7 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
             // CancelAllPendingJoiners also clears all pending joiner state
             CancelAllPendingJoiners();
             _pendingConsensusMessages.Clear();
+            _deferredProposals.Clear();
 
             // Build new membership view from response - build MemberInfo with metadata
             var metadataMap = new Dictionary<Endpoint, Metadata>(EndpointAddressComparer.Instance);

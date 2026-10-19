@@ -1,23 +1,21 @@
 # RAPID protocol in this fork
 
-The protocol implementation is based on [Reuben Bond's RapidCluster](https://github.com/ReubenBond/RapidCluster), an implementation of RAPID membership. Original MIT copyright is preserved in [LICENSE](../LICENSE); [NOTICE](../NOTICE) describes this fork. The upstream repository and its history retain the original documentation and implementation provenance.
+Based on [RapidCluster by Reuben Bond](https://github.com/ReubenBond/RapidCluster), an implementation of the [RAPID membership protocol](https://www.usenix.org/system/files/conference/atc18/atc18-suresh.pdf). Original MIT copyright is preserved in [LICENSE](../LICENSE); [NOTICE](../NOTICE) identifies this fork's additions.
 
-RAPID supplies peer discovery, monitoring and agreement on an observed participant view. In this Orleans provider, its participants are the explicitly configured seed voters. Ordinary silos use the native Orleans membership table. A RAPID view does not implement the durable row/version CAS needed by Orleans; see [architecture](Architecture.md) and [ADR 0001](ADR/0001-self-hosted-membership.md).
+## Protocol stages and ownership
 
-## Protocol stages
+1. Authenticated multicast/broadcast and optional bounded IPv4 CIDR/range probes discover actual peer addresses and listener ports. The provider waits for a stable discovered peer set before choosing the lowest process-incarnation ID for cold bootstrap. Other coordinators join through discovered installed configurations.
+2. Native RAPID monitoring rings assign observers. Multi-process cut detection combines observations into proposed participant-view changes.
+3. RAPID fast consensus and classic recovery agree coordinator configurations. A separate RAM ballot protocol implements atomic Orleans table operations and freezes an old majority before installing recovered state on a new majority.
 
-1. Seed discovery supplies known explicit endpoints. The first configured seed coordinates initial bootstrap. Returning nodes try existing seeds before forming an initial view.
-2. Multiple deterministic monitoring rings assign observers. Peer observations feed the multi-process cut detector, reducing the effect of one observer's suspicion.
-3. RAPID's consensus protocol selects participant-view changes. This protocol is separate from the provider's durable fixed-quorum membership-table consensus.
+The native protocol is in [RapidCluster.Core](../src/RapidCluster.Core/); HTTP/2 transport is in [RapidCluster.Grpc](../src/RapidCluster.Grpc/). Their ManagedCode packages preserve original assembly and namespace identities. The [Orleans provider](../README.md) owns discovery, admission, RAM table replication and configuration handoff. Automatic IP discovery is a provider extension, not an upstream guarantee of global discovery across partitioned networks.
 
-The code owners are [RapidCluster.Core](../src/RapidCluster.Core/) for protocol and hosted lifecycle, and [RapidCluster.Grpc](../src/RapidCluster.Grpc/) for HTTP/2 transport. Their ManagedCode packages are `ManagedCode.Orleans.RapidMembership.Protocol` and `ManagedCode.Orleans.RapidMembership.Grpc`; original assembly and namespace identities remain visible. Install the [Orleans provider](../README.md) for native membership and gateway integration.
+## Runtime contract
 
-## Observation and runtime ownership
+Up to three silos form the coordination group. Ordinary silos still announce their listeners and can be recruited; Microsoft Orleans owns their statuses, probes, distributed directory, placement and grain execution. The native RAPID participant view is not the Orleans active-silo table. Discovery expiry never shrinks a table quorum. A new process incarnation cannot reuse forgotten votes; independently bootstrapped roots with the same service identity are rejected.
 
-The native RAPID hosted service owns startup, observation subscriptions and joined shutdown. The provider binds the listener before observation starts. Its `VoterView` is advisory. Orleans' native table rows and silo probes determine active silo membership; an ordinary silo has no RAPID participant. Stale RAPID observations never change the fixed durable table quorum or authorize independent writable tables.
+Everything membership-related stays in RAM. Complete process loss permits fresh cluster formation and discards the old table. This is separate from application persistence. See [architecture](Architecture.md) for owners and [README](../README.md#network-scope) for discovery, HTTP/2 and native Orleans ports.
 
-The default provider membership socket is private HTTP/2 on TCP 11112. Identity and secret headers protect admission on both RAPID and membership-table services. Orleans silo and gateway ports are separate. Full deployment, persistence and failure limits are documented once in the [README](../README.md).
+## Qualification
 
-## Protocol qualification
-
-Retained upstream unit, real-network, property-based, deterministic Clockwork and Aspire suites exercise the original protocol. `eng/test-simulations.py` discovers the compiled instrumented test inventory and reconciles every native result. These tests do not substitute for the provider's actual Orleans process and continuing-client tests. Run the commands in [CONTRIBUTING.md](../CONTRIBUTING.md); actual CI artifacts establish the qualification result.
+Retained upstream unit, real-network, deterministic Clockwork and Aspire suites exercise the original protocol. `eng/test-simulations.py` discovers the instrumented native inventory and reconciles every original result. They do not replace actual Orleans silo-process and continuing-client qualification. [Testing](Testing.md) identifies those separate gates and [CONTRIBUTING](../CONTRIBUTING.md) owns executable commands.

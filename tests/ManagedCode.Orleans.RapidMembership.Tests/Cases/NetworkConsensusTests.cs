@@ -101,9 +101,9 @@ public sealed class NetworkConsensusTests
         Assert.NotNull(table);
         var chosen = new MembershipSnapshot { Index = 1, OperationId = Guid.NewGuid(), Table = table, Applied = true };
         var ballot = new Ballot(100, "lost-proposer");
-        var promises = await transport.ExchangeAsync(new PeerRequest { Action = PeerAction.Prepare, Index = 1, Ballot = ballot, Snapshot = initial }, timeout.Token);
+        var promises = await transport.ExchangeAsync(new PeerRequest { Action = PeerAction.Prepare, Configuration = cluster.Configuration, Index = 1, Ballot = ballot, Snapshot = initial }, cluster.Configuration, timeout.Token);
         Assert.True(promises.Count(reply => reply.Granted) >= 2);
-        var accepted = await transport.ExchangeAsync(new PeerRequest { Action = PeerAction.Accept, Index = 1, Ballot = ballot, Snapshot = chosen }, timeout.Token);
+        var accepted = await transport.ExchangeAsync(new PeerRequest { Action = PeerAction.Accept, Configuration = cluster.Configuration, Index = 1, Ballot = ballot, Snapshot = chosen }, cluster.Configuration, timeout.Token);
         Assert.True(accepted.Count(reply => reply.Granted) >= 2);
         await cluster.StopAsync(2);
         var recovered = await cluster.Proposer().ExecuteAsync(null, timeout.Token);
@@ -132,10 +132,10 @@ public sealed class NetworkConsensusTests
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
         await using var cluster = new NetworkCluster();
         await cluster.StartAsync(timeout.Token);
-        var request = new PeerRequest { Action = PeerAction.Inspect };
-        Assert.Empty(await cluster.Transport(identity: "other-cluster").ExchangeAsync(request, timeout.Token));
-        Assert.Empty(await cluster.Transport(secret: "other-secret").ExchangeAsync(request, timeout.Token));
-        Assert.True((await cluster.Transport().ExchangeAsync(request, timeout.Token)).Count >= 2);
+        var request = new PeerRequest { Action = PeerAction.Inspect, Configuration = cluster.Configuration };
+        Assert.Empty(await cluster.Transport(identity: "other-cluster").ExchangeAsync(request, cluster.Configuration, timeout.Token));
+        Assert.Empty(await cluster.Transport(secret: "other-secret").ExchangeAsync(request, cluster.Configuration, timeout.Token));
+        Assert.True((await cluster.Transport().ExchangeAsync(request, cluster.Configuration, timeout.Token)).Count >= 2);
     }
 
     [Fact]

@@ -39,6 +39,7 @@ internal sealed class AspireChurnCluster(DistributedApplication app, Action<stri
 
     public async Task<string[]> ConvergeAsync(int[] live, CancellationToken cancellationToken, bool requireVoterView = true)
     {
+        var (Indices, Members, Configuration) = await CoordinationAsync(live, cancellationToken);
         var observations = new ParallelOptions { MaxDegreeOfParallelism = 5, CancellationToken = cancellationToken };
         var expected = new string[live.Length];
         await Parallel.ForEachAsync(Enumerable.Range(0, live.Length), observations, async (slot, token) =>
@@ -60,7 +61,9 @@ internal sealed class AspireChurnCluster(DistributedApplication app, Action<stri
                     report(FormattableString.Invariant($"{Name(index)} active={state.Active} rapid={state.RapidVoters} expected={live.Length}"));
                 }
 
-                if (state.Active == live.Length && (!requireVoterView || state.RapidVoters == (state.IsVoter ? live.Count(member => member < 3) : 0))
+                if (state.Active == live.Length && (!requireVoterView || (state.IsVoter
+                    ? state.RapidConfiguration == Configuration && Members.SequenceEqual(state.RapidMembers, StringComparer.Ordinal)
+                    : state.RapidVoters == 0))
                     && expected.SequenceEqual(state.Members, StringComparer.Ordinal))
                 {
                     break;
@@ -71,6 +74,36 @@ internal sealed class AspireChurnCluster(DistributedApplication app, Action<stri
         });
 
         return [.. expected];
+    }
+
+    public async Task<int[]> VotersAsync(int[] live, CancellationToken cancellationToken)
+        => (await CoordinationAsync(live, cancellationToken)).Indices;
+
+    private async Task<(int[] Indices, string[] Members, string Configuration)> CoordinationAsync(int[] live, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            var states = new ChurnState[live.Length];
+            await Parallel.ForEachAsync(Enumerable.Range(0, live.Length), new ParallelOptions
+            {
+                MaxDegreeOfParallelism = 5,
+                CancellationToken = cancellationToken,
+            }, async (slot, token) => states[slot] = await ReadAsync(live[slot], token));
+            var indices = Enumerable.Range(0, live.Length).Where(slot => states[slot].IsVoter).ToArray();
+            if (indices.Length == Math.Min(3, live.Length) && indices.Length > 0)
+            {
+                var first = states[indices[0]];
+                if (first.RapidMembers.Length == indices.Length && indices.All(slot =>
+                    first.RapidConfiguration == states[slot].RapidConfiguration
+                    && first.RapidMembers.SequenceEqual(states[slot].RapidMembers, StringComparer.Ordinal)))
+                {
+                    report($"RAPID coordination {first.RapidConfiguration}: {string.Join(',', first.RapidMembers)}");
+                    return ([.. indices.Select(slot => live[slot])], first.RapidMembers, first.RapidConfiguration);
+                }
+            }
+
+            await Task.Delay(200, cancellationToken);
+        }
     }
 
     private async Task<ChurnState> ReadAsync(int index, CancellationToken cancellationToken)
@@ -126,9 +159,9 @@ internal sealed class AspireChurnCluster(DistributedApplication app, Action<stri
         return configuration.EnvironmentVariables.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
     }
 
-    public async Task RequireEmptyAsync(CancellationToken cancellationToken)
+    public async Task RequireEmptyAsync(CancellationToken cancellationToken, int resources = 50)
     {
-        while (Enumerable.Range(0, 50).Any(index =>
+        while (Enumerable.Range(0, resources).Any(index =>
             !app.ResourceNotifications.TryGetCurrentState(Name(index), out var current)
             || current.Snapshot.State?.Text is not ("NotStarted" or "Exited" or "Finished")))
         {
@@ -138,5 +171,6 @@ internal sealed class AspireChurnCluster(DistributedApplication app, Action<stri
 
     private static string Name(int index) => "silo-" + index.ToString(CultureInfo.InvariantCulture);
 
-    private readonly record struct ChurnState(int Active, int RapidVoters, string[] Members, bool IsVoter, string Self);
+    private readonly record struct ChurnState(int Active, int RapidVoters, string[] Members, bool IsVoter, string Self,
+        string[] RapidMembers, string RapidConfiguration);
 }

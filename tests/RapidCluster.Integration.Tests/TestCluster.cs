@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
 using System.Text;
@@ -14,13 +15,15 @@ namespace RapidCluster.Integration.Tests;
 /// </summary>
 internal sealed class TestCluster : IAsyncDisposable
 {
-    private readonly List<WebApplication> _apps = [];
+    private readonly ConcurrentBag<WebApplication> _apps = [];
     private readonly ILoggerFactory _loggerFactory;
     private readonly TestClusterPortAllocator _portAllocator = new();
     private readonly string _logFilePath;
+    private readonly Action<IServiceCollection>? _configureServices;
 
-    public TestCluster(ITestOutputHelper outputHelper)
+    public TestCluster(ITestOutputHelper outputHelper, Action<IServiceCollection>? configureServices = null)
     {
+        _configureServices = configureServices;
         var context = TestContext.Current;
         var testName = context.Test?.TestDisplayName ?? "unknown_test";
         _logFilePath = GenerateLogFilePath(testName);
@@ -59,8 +62,8 @@ internal sealed class TestCluster : IAsyncDisposable
         var app = builder.Build();
         _ = app.MapRapidClusterMembershipService();
 
-        await app.StartAsync(cancellationToken);
         _apps.Add(app);
+        await app.StartAsync(cancellationToken);
 
         // Start the cluster AFTER the gRPC server is listening
         var lifecycle = app.Services.GetRequiredService<IRapidClusterLifecycle>();
@@ -96,12 +99,13 @@ internal sealed class TestCluster : IAsyncDisposable
             })
             .UseGrpcTransport()
             .UseListenAddress(address);
+        _configureServices?.Invoke(builder.Services);
 
         var app = builder.Build();
         _ = app.MapRapidClusterMembershipService();
 
-        await app.StartAsync(cancellationToken);
         _apps.Add(app);
+        await app.StartAsync(cancellationToken);
 
         // Start the cluster AFTER the gRPC server is listening
         var lifecycle = app.Services.GetRequiredService<IRapidClusterLifecycle>();
@@ -137,8 +141,8 @@ internal sealed class TestCluster : IAsyncDisposable
         var app = builder.Build();
         _ = app.MapRapidClusterMembershipService();
 
-        await app.StartAsync(cancellationToken);
         _apps.Add(app);
+        await app.StartAsync(cancellationToken);
 
         var cluster = app.Services.GetRequiredService<IRapidCluster>();
 
@@ -171,12 +175,13 @@ internal sealed class TestCluster : IAsyncDisposable
             })
             .UseGrpcTransport()
             .UseListenAddress(address);
+        _configureServices?.Invoke(builder.Services);
 
         var app = builder.Build();
         _ = app.MapRapidClusterMembershipService();
 
-        await app.StartAsync(cancellationToken);
         _apps.Add(app);
+        await app.StartAsync(cancellationToken);
 
         var cluster = app.Services.GetRequiredService<IRapidCluster>();
 
@@ -236,8 +241,14 @@ internal sealed class TestCluster : IAsyncDisposable
 #pragma warning disable CA1031
             try
             {
-                await app.StopAsync(TestContext.Current.CancellationToken);
-                await app.DisposeAsync();
+                try
+                {
+                    await app.StopAsync(TestContext.Current.CancellationToken);
+                }
+                finally
+                {
+                    await app.DisposeAsync();
+                }
             }
             catch
             {

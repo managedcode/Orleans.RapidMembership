@@ -11,7 +11,7 @@
 
 Automatic, in-memory membership and gateway discovery for Microsoft Orleans 10.4 on .NET 10, based on RapidCluster.
 
-**Development status:** the provider is being changed to discover peer addresses itself and keep all membership state in RAM. No seed IP list, advertised IP or storage directory is part of the required configuration. The fixed-seed, disk-backed provider in earlier checkpoints is superseded and has not been released to NuGet. The automatic in-memory provider is not yet qualified end to end.
+**Development status:** automatic discovery, RAM replicas, configuration handoff and native Orleans hosting are implemented. Final platform, coverage and zero-to-fifty process qualification remain open. No package has been released to NuGet.
 
 **Based on [RapidCluster by Reuben Bond](https://github.com/ReubenBond/RapidCluster).** This repository is a fork. The original RAPID implementation, protocol tests and Clockwork simulations are retained. Original MIT copyright and license are preserved in [LICENSE](https://github.com/managedcode/Orleans.RapidMembership/blob/main/LICENSE); [NOTICE](https://github.com/managedcode/Orleans.RapidMembership/blob/main/NOTICE) identifies the ManagedCode additions. The [RAPID protocol documentation](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/RAPID.md) describes the underlying peer discovery and observation protocol.
 
@@ -29,32 +29,69 @@ The provider brings its protocol and transport dependencies transitively. Badges
 
 ## Required runtime contract
 
-- Discover other participants automatically on the reachable local multicast network; do not require users to know their IP addresses.
+- Discover other participants through reachable local multicast/broadcast and optional bounded subnet/range probes; do not require individual peer IPs.
 - Keep the membership table and coordination state entirely in memory. A complete loss of all processes forms a fresh membership table on restart.
 - Implement native Orleans membership and client gateway discovery. Orleans owns silo status, probing, directory, placement and grain execution.
 - Follow RAPID's consistent configurations and majority recovery. Freeze an old majority and install on a new majority during table handoff; discovery expiry cannot reduce a quorum. A partition without the required quorum cannot acknowledge writes as the same cluster.
 - Retain bounded requests, cancellation, authentication, memory and joined shutdown. Membership state is separate from application grain storage.
 
-The configuration example will be published with the implemented in-memory API. The former IP/directory example has been removed because it does not satisfy this contract.
+## Silo and client configuration
 
-## Automatic discovery implemented so far
+Install `ManagedCode.Orleans.RapidMembership` after its initial publication. Configure the same Orleans service/cluster identity and shared secret on silos and clients:
 
-The current discovery module sends cluster-scoped, authenticated UDP multicast beacons on port **11113** by default. It obtains peer addresses from network responses and advertises the actual TCP service port. It stores observations only in RAM, expires departed peers and lets an external client observe without announcing itself as a server. This discovers peers on the participating multicast network; routed networks must actually carry that multicast traffic.
+```csharp
+using ManagedCode.Orleans.RapidMembership;
+using Orleans.Configuration;
 
-Native socket tests start two real TCP listeners without configuring their IPs, discover them through UDP multicast and exchange nonce bytes with both discovered endpoints. They also check foreign-secret/cluster isolation, invalid packets and expiry after a node stops. These tests qualify discovery, not the unfinished automatic membership-table integration.
+builder.UseOrleans(silo =>
+{
+    silo.Configure<ClusterOptions>(options =>
+    {
+        options.ServiceId = "my-service";
+        options.ClusterId = "production";
+    });
+    silo.UseRapidMembership(options =>
+    {
+        options.SharedSecret = configuration["MembershipSecret"]!;
+    });
+});
+```
 
-## In-memory coordination implemented so far
+An external client uses `UseRapidMembership` on its `IClientBuilder` with the same identity and secret. The secret must contain at least 32 UTF-8 bytes and come from deployment secret configuration. No IP list, advertised address or directory is required. Each silo hosts its own private membership listener; ordinary Orleans silo/gateway endpoint configuration remains separate.
 
-The RAM replica implements native row snapshots, ballot promises, process-incarnation fencing and old/new configuration handoff. It recovers accepted work, rejects stale or conflicting transfers, preserves promises on repeated installation and bounds requests and retained state. A frozen configuration cannot be retargeted to skip an intermediate configuration.
+Optional settings bound directed discovery to a known subnet or inclusive IPv4 range:
 
-These components have native serializer and state-transition tests. They are not yet connected to automatic host bootstrap and the silo/client transport; the existing adapters still use the earlier prototype. Real-process qualification of the corrected runtime remains open.
+```csharp
+options.DiscoveryNetworks = ["192.168.1.0/24", "10.20.0.10-10.20.0.50"];
+options.MaximumDiscoveryAddresses = 4096;
+// Optional fixed membership listener port for firewall rules:
+options.ListenPort = 11112;
+```
+
+`ListenPort` defaults to an automatically allocated TCP port, allowing multiple silos on one machine. A fixed port requires distinct host addresses or network namespaces. Configured ranges are bounded and probed in rotating batches of at most 256 addresses per second. They supplement automatic discovery; they are not seed-voter lists.
+
+## Network scope
+
+Discovery sends authenticated, service/cluster-scoped IPv4 multicast to **239.192.44.44:11113/UDP** on active interfaces, plus localhost/broadcast and directed UDP probes. It learns actual addresses and membership TCP ports from responses, retaining observations for 30 seconds independently of RAPID failure detection. Each discovery socket has a bounded 256 KiB receive buffer. Localhost discovery works between processes on the same host. Cross-host discovery needs reachable multicast/broadcast or an explicit CIDR/range, UDP discovery reachability and a return route. It cannot enumerate arbitrary addresses on the Internet or cross an inaccessible router/firewall.
+
+Allow the configured discovery UDP port and the advertised membership TCP port between trusted peers. The membership listener serves HTTP/2 for both RAPID and the table protocol. Native Orleans silo and gateway ports must also be reachable under their own configuration. Identity and secret authentication protect protocol admission; HTTP/2 here does not encrypt traffic. Deploy on a trusted private network or an encrypted network overlay.
+
+## Coordination and process lifetime
+
+Configured discovery ranges complete their first bounded probe sweep before cold bootstrap can begin. Probes visit at most 256 configured addresses per round, with a one-second announcement cadence. Allow enough `StartupTimeout` for the full range and subsequent formation.
+
+Three discovered silos form the steady-state native RAPID coordination group when at least three are available; other silos host discovery and serve ordinary Orleans workloads. Graceful handoff can temporarily add replacements before departing coordinators close. Cold bootstrap waits for a stable lowest process-incarnation candidate and agreement from all currently discovered peers. A learned founding candidate cannot move upward when discovery observations expire. If it disappears before forming a cluster, restart all remaining processes to begin a new formation attempt. Independently formed groups with the same service identity are rejected rather than merged with conflicting tables. Discovery is a network observation mechanism, not proof of global network connectivity.
+
+The native RAPID protocol agrees coordinator configurations. The separate RAM ballot replica implements atomic Orleans row/version CAS. Each transition permanently freezes an old majority, recovers committed and accepted work, and installs on a new majority. A retained replica can catch up using that evidence; a restarted process has a fresh identity and cannot claim its forgotten promises. Retrying an installation preserves newer promises and table operations.
+
+Initial formation has a separate five-minute `StartupTimeout`; ordinary table operations retain their two-minute deadline. Three coordinators tolerate loss of one while a quorum remains reachable and can recruit another discovered silo. Losing a majority stops membership reads/writes that require agreement; arbitrary surviving silos cannot recreate that majority by themselves. Graceful departure transfers state before closing its listener. All membership state disappears after complete process loss; a fresh group with a new RAPID root can then form, including on reused TCP ports. This does not persist or restore application grain data.
 
 ## Qualification and delivery
 
 The primary acceptance remains actual Aspire-owned Orleans silo processes and continuing external Orleans clients: zero → ten → twenty → five, simultaneous ten-node joins/departures, complete loss and restart, cold fifty, graceful reduction/rejoin, and real grain execution on every live silo. Assertions use exact native silo identities and generations.
 
-Original RAPID unit, network, Clockwork and Aspire suites are retained. Previous fixed-seed/durable-table results do not qualify automatic in-memory membership. CI and original artifacts determine each gate independently. No package publication or KeyLoad adoption has occurred.
+Original RAPID unit, network, Clockwork and Aspire suites are retained. Previous fixed-seed/durable-table results do not qualify automatic in-memory membership. CI and original artifacts determine each gate independently; repository work items retain qualification and delivery evidence.
 
 All three package versions follow Orleans major/minor and the ManagedCode patch, initially **10.4.0**. CI owns verification. Release independently builds, packs and pushes the packages without waiting for CI or feed indexing. The version tag belongs to that completed release.
 
-See [architecture](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/Architecture.md), [requirements](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/Features/RapidMembership.md), [testing](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/Testing.md), [contributing](https://github.com/managedcode/Orleans.RapidMembership/blob/main/CONTRIBUTING.md) and the [current work item](https://github.com/managedcode/Orleans.RapidMembership/blob/main/tasks/in-progress/001_OrleansRapidMembership.md).
+See [architecture](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/Architecture.md), [requirements](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/Features/RapidMembership.md), [testing](https://github.com/managedcode/Orleans.RapidMembership/blob/main/docs/Testing.md), [contributing](https://github.com/managedcode/Orleans.RapidMembership/blob/main/CONTRIBUTING.md) and [work items](https://github.com/managedcode/Orleans.RapidMembership/tree/main/tasks).

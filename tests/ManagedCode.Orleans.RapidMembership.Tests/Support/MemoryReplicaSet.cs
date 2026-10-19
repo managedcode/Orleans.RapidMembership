@@ -11,7 +11,7 @@ internal sealed class MemoryReplicaSet : IDisposable
 
     private readonly Dictionary<Guid, MemoryMembershipReplica> _replicas = [];
 
-    public RapidMembershipOptions Options { get; } = new() { MaximumSnapshotBytes = 4096, MaximumEntries = 2, MaximumOperationHistory = 8 };
+    public RapidMembershipOptions Options { get; } = new() { MaximumSnapshotBytes = 4096, MaximumExchangeBytes = 12288, MaximumEntries = 2, MaximumOperationHistory = 8 };
 
     public MemoryMembershipReplica Add(CoordinationMember member)
     {
