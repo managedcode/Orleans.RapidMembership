@@ -160,7 +160,7 @@ internal sealed class ContinuousClients(Action<string>? report = null) : IAsyncD
     public Task<string[][]> RequireHostsAsync(string[] expected, CancellationToken cancellationToken)
         => Task.WhenAll(_hosts.Select(host => ReadHostsAsync(host.Services.GetRequiredService<IClusterClient>(), expected, cancellationToken)));
 
-    private static async Task<string[]> ReadHostsAsync(IClusterClient client, string[] expected, CancellationToken cancellationToken)
+    internal static async Task<string[]> ReadHostsAsync(IClusterClient client, string[] expected, CancellationToken cancellationToken)
     {
         while (true)
         {

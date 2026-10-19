@@ -29,14 +29,20 @@ internal sealed class PeerSelection
         IEnumerable<CoordinationMember> selected;
         if (known is null)
         {
-            _fullScan = now;
+            var scan = force || _fullScan != default && now - _fullScan >= TimeSpan.FromSeconds(30);
+            if (_fullScan == default || scan)
+            {
+                _fullScan = now;
+            }
+
             if (visible.Length == 0)
             {
                 return [];
             }
 
             var candidate = visible.MinBy(member => member.Incarnation);
-            selected = self is { } host && candidate.Incarnation == host.Incarnation ? discovered : visible.OrderBy(member => member.Incarnation).Take(1);
+            selected = scan || self is { } host && candidate.Incarnation == host.Incarnation
+                ? discovered : visible.OrderBy(member => member.Incarnation).Take(1);
         }
         else if (force || now - _fullScan >= TimeSpan.FromSeconds(30))
         {

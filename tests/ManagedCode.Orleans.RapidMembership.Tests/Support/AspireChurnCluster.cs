@@ -5,6 +5,8 @@ using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Orleans.Configuration;
+using Orleans.Serialization;
 
 namespace ManagedCode.Orleans.RapidMembership.Tests.Support;
 
@@ -81,6 +83,16 @@ internal sealed class AspireChurnCluster(DistributedApplication app, Action<stri
 
     private async Task<(int[] Indices, string[] Members, string Configuration)> CoordinationAsync(int[] live, CancellationToken cancellationToken)
     {
+        var environment = await EnvironmentAsync(cancellationToken);
+        await using var services = new ServiceCollection().AddSerializer(builder => builder.AddAssembly(typeof(RapidMembershipOptions).Assembly)).BuildServiceProvider();
+        var options = new RapidMembershipOptions { SharedSecret = environment["RAPID_SECRET"] };
+        var identity = RapidMembershipOptions.Identity(new ClusterOptions
+        {
+            ClusterId = environment["CLUSTER_ID"],
+            ServiceId = "rapid-membership-tests",
+        });
+        using var transport = new PeerTransport(options, identity,
+            services.GetRequiredService<Serializer<PeerRequest>>(), services.GetRequiredService<Serializer<PeerReply>>());
         while (true)
         {
             var states = new ChurnState[live.Length];
@@ -95,7 +107,8 @@ internal sealed class AspireChurnCluster(DistributedApplication app, Action<stri
                 var first = states[indices[0]];
                 if (first.RapidMembers.Length == indices.Length && indices.All(slot =>
                     first.RapidConfiguration == states[slot].RapidConfiguration
-                    && first.RapidMembers.SequenceEqual(states[slot].RapidMembers, StringComparer.Ordinal)))
+                    && first.RapidMembers.SequenceEqual(states[slot].RapidMembers, StringComparer.Ordinal))
+                    && await InstalledAsync(first.RapidMembers, transport, cancellationToken))
                 {
                     report($"RAPID coordination {first.RapidConfiguration}: {string.Join(',', first.RapidMembers)}");
                     return ([.. indices.Select(slot => live[slot])], first.RapidMembers, first.RapidConfiguration);
@@ -104,6 +117,21 @@ internal sealed class AspireChurnCluster(DistributedApplication app, Action<stri
 
             await Task.Delay(200, cancellationToken);
         }
+    }
+
+    private static async Task<bool> InstalledAsync(string[] voters, PeerTransport transport, CancellationToken cancellationToken)
+    {
+        var members = voters.Select(value =>
+        {
+            var separator = value.IndexOf('@', StringComparison.Ordinal);
+            return new CoordinationMember(Guid.ParseExact(value[..separator], "N"), "http://" + value[(separator + 1)..]);
+        }).ToArray();
+        var replies = await transport.LocateAsync(members, cancellationToken);
+        var configuration = replies.FirstOrDefault()?.Configuration;
+        return configuration is not null && configuration.Members.Length == members.Length
+            && members.All(member => configuration.Contains(member.Incarnation))
+            && members.All(member => replies.Any(reply => reply.Incarnation == member.Incarnation
+                && reply.Granted && configuration.Matches(reply.Configuration) && reply.FrozenFor is null));
     }
 
     private async Task<ChurnState> ReadAsync(int index, CancellationToken cancellationToken)
