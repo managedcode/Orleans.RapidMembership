@@ -163,7 +163,7 @@ public sealed class ClusterEndToEndTests(ITestOutputHelper outputHelper) : IAsyn
             cts.Token);
 
         // Create an HTTP client for the first cluster node
-        using var httpClient = _app.CreateHttpClient("cluster-0");
+        using var httpClient = _app.CreateHttpClient("cluster-0", "http");
 
         // Hit the health endpoint
         using var response = await httpClient.GetAsync(HealthUri, cts.Token);
@@ -196,7 +196,7 @@ public sealed class ClusterEndToEndTests(ITestOutputHelper outputHelper) : IAsyn
         for (var i = 0; i < ClusterSize; i++)
         {
             var resourceName = string.Create(CultureInfo.InvariantCulture, $"cluster-{i}");
-            using var httpClient = _app.CreateHttpClient(resourceName);
+            using var httpClient = _app.CreateHttpClient(resourceName, "http");
             using var response = await httpClient.GetAsync(HealthUri, cts.Token);
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             outputHelper.WriteLine($"{resourceName} health check passed.");
@@ -216,7 +216,7 @@ public sealed class ClusterEndToEndTests(ITestOutputHelper outputHelper) : IAsyn
             cts.Token);
 
         // Create an HTTP client for the cluster node
-        using var httpClient = _app.CreateHttpClient("cluster-0");
+        using var httpClient = _app.CreateHttpClient("cluster-0", "http");
 
         // Hit the health endpoint
         using var response = await httpClient.GetAsync(HealthUri, cts.Token);
@@ -281,7 +281,7 @@ public sealed class ClusterEndToEndTests(ITestOutputHelper outputHelper) : IAsyn
         await Task.WhenAll(waitTasks);
 
         // Check that the health endpoint returns "Healthy" status text
-        using var httpClient = _app.CreateHttpClient("cluster-0");
+        using var httpClient = _app.CreateHttpClient("cluster-0", "http");
         using var response = await httpClient.GetAsync(HealthUri, cts.Token);
 
         var content = await response.Content.ReadAsStringAsync(cts.Token);
@@ -303,7 +303,7 @@ public sealed class ClusterEndToEndTests(ITestOutputHelper outputHelper) : IAsyn
             "cluster-1",
             cts.Token);
 
-        using var httpClient = _app.CreateHttpClient("cluster-1");
+        using var httpClient = _app.CreateHttpClient("cluster-1", "http");
 
         // Make multiple health check requests in rapid succession
         const int requestCount = 10;
@@ -354,7 +354,7 @@ public sealed class ClusterEndToEndTests(ITestOutputHelper outputHelper) : IAsyn
             var nodeIndex = i;
             healthCheckTasks.Add(Task.Run(async () =>
             {
-                using var httpClient = _app.CreateHttpClient(resourceName);
+                using var httpClient = _app.CreateHttpClient(resourceName, "http");
                 using var response = await httpClient.GetAsync(HealthUri, cts.Token);
                 return (resourceName, response.StatusCode);
             }, cts.Token));
@@ -420,7 +420,7 @@ public sealed class ClusterEndToEndTests(ITestOutputHelper outputHelper) : IAsyn
             "cluster-0",
             cts.Token);
 
-        using var httpClient = _app.CreateHttpClient("cluster-0");
+        using var httpClient = _app.CreateHttpClient("cluster-0", "http");
         using var response = await httpClient.GetAsync(HealthUri, cts.Token);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -456,7 +456,7 @@ public sealed class ClusterEndToEndTests(ITestOutputHelper outputHelper) : IAsyn
         for (var i = 0; i < ClusterSize; i++)
         {
             var resourceName = string.Create(CultureInfo.InvariantCulture, $"cluster-{i}");
-            using var httpClient = _app.CreateHttpClient(resourceName);
+            using var httpClient = _app.CreateHttpClient(resourceName, "http");
             using var response = await httpClient.GetAsync(HealthUri, cts.Token);
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         }
