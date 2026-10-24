@@ -187,7 +187,7 @@ public sealed partial class PingPongFailureDetector : IEdgeFailureDetector
             var response = await _client.SendMessageAsync(_subject, request, _cts.Token).WaitAsync(_options.ProbeTimeout, _sharedResources.TimeProvider, _cts.Token);
             stopwatch.Stop();
 
-            if (response.ProbeResponse == null)
+            if (!IsMemberResponse(response.ProbeResponse, localConfigId))
             {
                 _consecutiveFailures++;
                 LogProbeFailed(new LoggableEndpoint(_subject), _consecutiveFailures, _options.ConsecutiveFailuresThreshold);
@@ -235,6 +235,17 @@ public sealed partial class PingPongFailureDetector : IEdgeFailureDetector
         }
 #pragma warning restore CA1031
     }
+
+    /// <summary>
+    /// A reply proves the monitored member alive only when it comes from a joined member of this cluster.
+    /// A restarted process that reuses the member's endpoint answers as bootstrapping, or with another
+    /// ClusterId, until it joins; counting that reply as success would keep the lost member in the view
+    /// and prevent the new process from ever joining at its own endpoint.
+    /// </summary>
+    private static bool IsMemberResponse(ProbeResponse? probeResponse, ConfigurationId localConfigId)
+        => probeResponse is { Status: Pb.NodeStatus.Ok }
+            && (localConfigId.ClusterId == ClusterId.None
+                || ConfigurationId.FromProtobuf(probeResponse.ConfigurationId).ClusterId == localConfigId.ClusterId);
 
     private void CheckForStaleView(ProbeResponse probeResponse)
     {

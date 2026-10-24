@@ -1429,9 +1429,13 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
             OnStaleViewDetected(probeMessage.Sender, senderConfigId, localConfigId);
         }
 
+        // A process that has not joined yet (for example, a restart that reuses a lost member's endpoint)
+        // reports BOOTSTRAPPING, so observers of the lost member keep counting probe failures.
+        var currentConfigId = _membershipView.ConfigurationId;
         return new ProbeResponse
         {
-            ConfigurationId = _membershipView.ConfigurationId.ToProtobuf(),
+            Status = currentConfigId.ClusterId == ClusterId.None ? Pb.NodeStatus.Bootstrapping : Pb.NodeStatus.Ok,
+            ConfigurationId = currentConfigId.ToProtobuf(),
             SenderInMembership = senderInMembership,
         }.ToRapidClusterResponse();
     }

@@ -192,6 +192,34 @@ internal sealed class TestCluster : IAsyncDisposable
     }
 
     /// <summary>
+    /// Starts the transport of a process that has not joined yet, as a restarted process does before it joins.
+    /// The caller starts the returned lifecycle to join through the seed.
+    /// </summary>
+    public async Task<(WebApplication App, IRapidClusterLifecycle Lifecycle, IRapidCluster Cluster)> CreateUnstartedNodeAsync(
+        EndPoint address,
+        EndPoint seedAddress,
+        CancellationToken cancellationToken = default)
+    {
+        var port = ((IPEndPoint)address).Port;
+        var builder = WebApplication.CreateBuilder();
+        _ = builder.Logging.ClearProviders();
+        _ = builder.Services.AddSingleton(_loggerFactory);
+        _ = builder.ConfigureRapidClusterKestrel(port);
+
+        _ = builder.Services
+            .AddRapidClusterManual(options => options.SeedAddresses = [seedAddress])
+            .UseGrpcTransport()
+            .UseListenAddress(address);
+
+        var app = builder.Build();
+        _ = app.MapRapidClusterMembershipService();
+
+        _apps.Add(app);
+        await app.StartAsync(cancellationToken);
+        return (app, app.Services.GetRequiredService<IRapidClusterLifecycle>(), app.Services.GetRequiredService<IRapidCluster>());
+    }
+
+    /// <summary>
     /// Waits for a cluster to be initialized (has at least one member).
     /// </summary>
     private static async Task WaitForClusterInitializedAsync(IRapidCluster cluster, CancellationToken cancellationToken)

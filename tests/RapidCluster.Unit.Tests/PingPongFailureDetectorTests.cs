@@ -387,6 +387,87 @@ public sealed class PingPongFailureDetectorTests
     }
 
     [Fact]
+    public async Task ReplyFromUnjoinedProcessOnSubjectEndpoint_CountsAsFailureUntilMemberReplies()
+    {
+        var timeProvider = new FakeTimeProvider();
+        var sharedResources = new SharedResources(timeProvider: timeProvider);
+        var observer = Utils.HostFromParts("127.0.0.1", 1000);
+        var subject = Utils.HostFromParts("127.0.0.2", 2000);
+        await using var client = new TestMessagingClient();
+        var failureNotified = false;
+        var member = false;
+
+        // A restarted process at the subject's endpoint answers as bootstrapping with no cluster identity.
+        client.ResponseGenerator = _ => member
+            ? new ProbeResponse { ConfigurationId = new ConfigurationId(new ClusterId(888), 5).ToProtobuf() }.ToRapidClusterResponse()
+            : new ProbeResponse { Status = Pb.NodeStatus.Bootstrapping, ConfigurationId = ConfigurationId.Empty.ToProtobuf() }.ToRapidClusterResponse();
+
+        using var detector = CreateMemberDetector(subject, observer, client, sharedResources, () => failureNotified = true, threshold: 3);
+        detector.Start();
+
+        // Two unjoined replies are failures; a reply from the joined member of this cluster resets the count.
+        await AdvanceProbesAsync(timeProvider, 2);
+        member = true;
+        await AdvanceProbesAsync(timeProvider, 1);
+        member = false;
+        await AdvanceProbesAsync(timeProvider, 2);
+        Assert.False(failureNotified);
+
+        await AdvanceProbesAsync(timeProvider, 1);
+        Assert.True(failureNotified);
+    }
+
+    [Fact]
+    public async Task ReplyFromAnotherClusterOnSubjectEndpoint_CountsAsFailure()
+    {
+        var timeProvider = new FakeTimeProvider();
+        var sharedResources = new SharedResources(timeProvider: timeProvider);
+        var observer = Utils.HostFromParts("127.0.0.1", 1000);
+        var subject = Utils.HostFromParts("127.0.0.2", 2000);
+        await using var client = new TestMessagingClient();
+        var failureNotified = false;
+        var staleViewDetected = false;
+
+        client.ResponseGenerator = _ => new ProbeResponse { ConfigurationId = new ConfigurationId(new ClusterId(999), 10).ToProtobuf() }.ToRapidClusterResponse();
+
+        using var detector = CreateMemberDetector(subject, observer, client, sharedResources, () => failureNotified = true, threshold: 2,
+            onStaleViewDetected: (_, _, _) => staleViewDetected = true);
+        detector.Start();
+
+        await AdvanceProbesAsync(timeProvider, 2);
+
+        Assert.True(failureNotified);
+        Assert.False(staleViewDetected);
+    }
+
+    private static PingPongFailureDetector CreateMemberDetector(Endpoint subject, Endpoint observer, TestMessagingClient client,
+        SharedResources sharedResources, Action notifier, int threshold,
+        Action<Endpoint, ConfigurationId, ConfigurationId>? onStaleViewDetected = null) => new(
+            subject,
+            observer,
+            client,
+            sharedResources,
+            notifier,
+            options: new PingPongFailureDetectorOptions
+            {
+                ConsecutiveFailuresThreshold = threshold,
+                Interval = TimeSpan.FromSeconds(1),
+            },
+            onStaleViewDetected: onStaleViewDetected,
+            viewAccessor: new TestMembershipViewAccessor(Utils.CreateMembershipView(numNodes: 3, configVersion: 5)),
+            metrics: CreateMetrics(),
+            logger: NullLogger<PingPongFailureDetector>.Instance);
+
+    private static async Task AdvanceProbesAsync(FakeTimeProvider timeProvider, int probes)
+    {
+        for (var probe = 0; probe < probes; probe++)
+        {
+            timeProvider.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
     public void Factory_CreatesDetectorWithCorrectConfiguration()
     {
         var timeProvider = new FakeTimeProvider();

@@ -25,24 +25,7 @@ public sealed class AspireMembershipTests(ITestOutputHelper output)
         await using var evidence = new ChurnEvidence(output, app);
         var cluster = new AspireChurnCluster(app, evidence.Write);
         _ = await cluster.ConvergeAsync([0, 1, 2], cancellationToken);
-        var resource = app.Services.GetRequiredService<DistributedApplicationModel>().Resources.OfType<ProjectResource>().Single(node => node.Name == "silo-0");
-        var configuration = await ExecutionConfigurationBuilder.Create(resource).WithEnvironmentVariablesConfig()
-            .BuildAsync(new DistributedApplicationExecutionContext(DistributedApplicationOperation.Run),
-                Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, cancellationToken);
-        Assert.Null(configuration.Exception);
-        var environment = configuration.EnvironmentVariables.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
-        var hostBuilder = Host.CreateApplicationBuilder();
-        _ = hostBuilder.UseOrleansClient(client =>
-        {
-            _ = client.Configure<ClusterOptions>(cluster =>
-            {
-                cluster.ClusterId = environment["CLUSTER_ID"];
-                cluster.ServiceId = "rapid-membership-tests";
-            });
-            _ = client.UseRapidMembership(options => options.SharedSecret = environment["RAPID_SECRET"]);
-        });
-        using var clientHost = hostBuilder.Build();
-        await clientHost.StartAsync(cancellationToken);
+        using var clientHost = await StartClientAsync(app, cancellationToken);
         var grains = clientHost.Services.GetRequiredService<IClusterClient>();
         _ = await ContinuousClients.ReadHostsAsync(grains, await cluster.ConvergeAsync([0, 1, 2], cancellationToken), cancellationToken);
         Assert.Equal("before", await grains.GetGrain<IProbeGrain>("before").Echo("before"));
@@ -71,5 +54,64 @@ public sealed class AspireMembershipTests(ITestOutputHelper output)
         Assert.True(left.Success);
         _ = await ContinuousClients.ReadHostsAsync(grains, await cluster.ConvergeAsync([0, 1, 2], cancellationToken), cancellationToken);
         await clientHost.StopAsync(cancellationToken);
+    }
+
+    [Fact]
+    public async Task CrashedVoterRestartedOnItsEndpointBeforeDetectionRejoins()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(6));
+        var cancellationToken = timeout.Token;
+        await using var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.ManagedCode_Orleans_RapidMembership_AppHost>(
+            ["--DcpPublisher:RandomizePorts=false"], cancellationToken);
+        _ = builder.Services.AddLogging(logging => logging.SetMinimumLevel(LogLevel.Warning));
+        await using var app = await builder.BuildAsync(cancellationToken);
+        await app.StartAsync(cancellationToken);
+        await using var evidence = new ChurnEvidence(output, app);
+        var cluster = new AspireChurnCluster(app, evidence.Write);
+        _ = await cluster.ConvergeAsync([0, 1, 2], cancellationToken);
+        using var clientHost = await StartClientAsync(app, cancellationToken);
+        var grains = clientHost.Services.GetRequiredService<IClusterClient>();
+        _ = await ContinuousClients.ReadHostsAsync(grains, await cluster.ConvergeAsync([0, 1, 2], cancellationToken), cancellationToken);
+
+        // The replacement process reuses the crashed voter's membership endpoint before its observers can declare
+        // the lost incarnation down, so its probe replies must not keep that incarnation in the view.
+        var commands = app.Services.GetRequiredService<ResourceCommandService>();
+        Assert.True((await commands.ExecuteCommandAsync("silo-2", "crash", cancellationToken)).Success);
+        _ = await app.ResourceNotifications.WaitForResourceAsync("silo-2", KnownResourceStates.TerminalStates, cancellationToken);
+        Assert.True((await commands.ExecuteCommandAsync("silo-2", "resource-start", cancellationToken)).Success);
+        _ = await ContinuousClients.ReadHostsAsync(grains, await cluster.ConvergeAsync([0, 1, 2], cancellationToken), cancellationToken);
+        Assert.Equal("restarted", await grains.GetGrain<IProbeGrain>("restarted").Echo("restarted"));
+        await clientHost.StopAsync(cancellationToken);
+    }
+
+    private static async Task<IHost> StartClientAsync(DistributedApplication app, CancellationToken cancellationToken)
+    {
+        var resource = app.Services.GetRequiredService<DistributedApplicationModel>().Resources.OfType<ProjectResource>().Single(node => node.Name == "silo-0");
+        var configuration = await ExecutionConfigurationBuilder.Create(resource).WithEnvironmentVariablesConfig()
+            .BuildAsync(new DistributedApplicationExecutionContext(DistributedApplicationOperation.Run),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, cancellationToken);
+        Assert.Null(configuration.Exception);
+        var environment = configuration.EnvironmentVariables.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+        var hostBuilder = Host.CreateApplicationBuilder();
+        _ = hostBuilder.UseOrleansClient(client =>
+        {
+            _ = client.Configure<ClusterOptions>(cluster =>
+            {
+                cluster.ClusterId = environment["CLUSTER_ID"];
+                cluster.ServiceId = "rapid-membership-tests";
+            });
+            _ = client.UseRapidMembership(options => options.SharedSecret = environment["RAPID_SECRET"]);
+        });
+        var clientHost = hostBuilder.Build();
+        try
+        {
+            await clientHost.StartAsync(cancellationToken);
+            return clientHost;
+        }
+        catch
+        {
+            clientHost.Dispose();
+            throw;
+        }
     }
 }
