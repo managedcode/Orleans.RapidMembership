@@ -72,6 +72,7 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
     private readonly HashSet<Endpoint> _votesReceived = [with(EndpointAddressComparer.Instance)];
     private readonly HashSet<Endpoint> _deliveryFailureEndpoints = [with(EndpointAddressComparer.Instance)];
     private readonly List<Phase1bMessage> _phase1bResponses = [];
+    private readonly HashSet<Endpoint> _phase1bSenders = [with(EndpointAddressComparer.Instance)];
     private readonly HashSet<Endpoint> _negativeVoters = [with(EndpointAddressComparer.Instance)];
 
     private Rank _currentRank = new() { Round = 1, NodeIndex = 0 };
@@ -585,6 +586,7 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
         _negativeVoters.Clear();
         _candidateValue = null;
         _phase1bResponses.Clear();
+        _phase1bSenders.Clear();
 
         _deliveryFailureEndpoints.Clear();
         _votesPerProposal.Clear();
@@ -770,6 +772,14 @@ internal sealed class ConsensusCoordinator : IAsyncDisposable
         if (!phase1bMessage.Rnd.Equals(_currentRank))
         {
             _paxosLog.Phase1bRoundMismatch(_currentRank, phase1bMessage.Rnd);
+            return;
+        }
+
+        // Each acceptor promises once per round. The coordinator's own acceptor answers locally and again through
+        // the broadcast to itself; counting both would let one acceptor form a phase-1 majority.
+        if (!_phase1bSenders.Add(phase1bMessage.Sender))
+        {
+            _paxosLog.DuplicatePhase1b(phase1bMessage.Sender, phase1bMessage.Rnd);
             return;
         }
 

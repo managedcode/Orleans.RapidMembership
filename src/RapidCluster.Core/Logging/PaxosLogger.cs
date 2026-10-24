@@ -60,6 +60,11 @@ internal sealed partial class PaxosLogger(ILogger logger)
     [LoggerMessage(Level = LogLevel.Debug, Message = "HandlePhase1bMessage: round mismatch, expected={Expected}, got={Got}")]
     public partial void Phase1bRoundMismatch(Rank expected, Rank got);
 
+    [LoggerMessage(EventName = nameof(DuplicatePhase1b), Level = LogLevel.Debug, Message = "HandlePhase1bMessage: duplicate promise from {Sender} for rnd={Rnd}, ignoring")]
+    private partial void DuplicatePhase1bCore(LoggableEndpoint sender, Rank rnd);
+
+    public void DuplicatePhase1b(Endpoint sender, Rank rnd) => DuplicatePhase1bCore(new(sender), rnd);
+
     [LoggerMessage(Level = LogLevel.Debug, Message = "HandlePhase1bMessage: collected {Count} responses, threshold={Threshold}, f={F}")]
     public partial void Phase1bCollected(int count, int threshold, int f);
 

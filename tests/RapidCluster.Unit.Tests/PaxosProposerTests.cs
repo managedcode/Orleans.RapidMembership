@@ -178,6 +178,65 @@ public sealed class ClassicProposerConsensusCoordinatorTests
     }
 
     [Fact]
+    public async Task Phase1b_RepeatedPromiseFromOneAcceptor_CannotFormMajority()
+    {
+        const int membershipSize = 3;
+        var myAddr = Utils.HostFromParts("127.0.0.1", 1000);
+        var configId = new ConfigurationId(new ClusterId(888), version: 1);
+
+        var broadcasted = new ConcurrentQueue<RapidClusterRequest>();
+        var broadcaster = new CapturingBroadcaster(broadcasted);
+        await using var client = new NoopMessagingClient();
+        var viewAccessor = new TestMembershipViewAccessor(membershipSize);
+        var options = Options.Create(new RapidClusterProtocolOptions());
+        var sharedResources = new SharedResources(new FakeTimeProvider());
+        var metrics = CreateMetrics();
+
+        await using var coordinator = new ConsensusCoordinator(
+            myAddr,
+            configId,
+            membershipSize,
+            client,
+            broadcaster,
+            viewAccessor,
+            options,
+            sharedResources,
+            metrics,
+            NullLogger<ConsensusCoordinator>.Instance);
+
+        var proposal = CreateProposal(configId, Utils.HostFromParts("10.0.0.1", 5001));
+        coordinator.Propose(proposal);
+
+        await WaitUntilAsync(() => broadcasted.Any(r => r.ContentCase == RapidClusterRequest.ContentOneofCase.Phase1AMessage), TimeSpan.FromSeconds(2));
+        var phase1aRank = broadcasted.First(r => r.ContentCase == RapidClusterRequest.ContentOneofCase.Phase1AMessage).Phase1AMessage.Rank;
+        while (broadcasted.TryDequeue(out _)) { }
+
+        // The local acceptor already promised. Its copies of that promise arriving through the broadcast are still
+        // one acceptor, so the majority of two out of three has not promised yet.
+        var self = Utils.HostFromParts("127.0.0.1", 1000, nodeId: Utils.GetNextNodeId());
+        var vote = new Rank { Round = 1, NodeIndex = 10 };
+        foreach (var sender in new[] { self, self })
+        {
+            _ = coordinator.HandleMessages(new RapidClusterRequest
+            {
+                Phase1BMessage = new Phase1bMessage { Sender = sender, ConfigurationId = configId.ToProtobuf(), Rnd = phase1aRank, Vrnd = vote, Proposal = proposal },
+            }, TestContext.Current.CancellationToken);
+        }
+
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        Assert.DoesNotContain(broadcasted, r => r.ContentCase == RapidClusterRequest.ContentOneofCase.Phase2AMessage);
+
+        // A promise from a second acceptor completes the majority.
+        _ = coordinator.HandleMessages(new RapidClusterRequest
+        {
+            Phase1BMessage = CreatePhase1b(configId, senderPort: 2000, phase1aRank, vote, proposal),
+        }, TestContext.Current.CancellationToken);
+
+        await WaitUntilAsync(() => broadcasted.Any(r => r.ContentCase == RapidClusterRequest.ContentOneofCase.Phase2AMessage), TimeSpan.FromSeconds(2));
+        _ = Assert.Single(broadcasted, r => r.ContentCase == RapidClusterRequest.ContentOneofCase.Phase2AMessage);
+    }
+
+    [Fact]
     public async Task Phase1b_DoesNotBroadcast_WhenNoValueChosen()
     {
         const int membershipSize = 3;

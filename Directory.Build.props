@@ -2,7 +2,7 @@
   <PropertyGroup>
     <Authors>ManagedCode;Reuben Bond</Authors>
     <Company>ManagedCode</Company>
-    <Version>10.4.1</Version>
+    <Version>10.4.2</Version>
     <PackageVersion>$(Version)</PackageVersion>
     <RepositoryUrl>https://github.com/managedcode/Orleans.RapidMembership</RepositoryUrl>
     <PackageProjectUrl>https://github.com/managedcode/Orleans.RapidMembership</PackageProjectUrl>
