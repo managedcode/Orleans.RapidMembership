@@ -22,6 +22,9 @@ internal sealed class NetworkCluster(string secret = "0123456789abcdef0123456789
 
     public CoordinationConfiguration Configuration { get; private set; } = null!;
 
+    public PeerDirectory Node(int index)
+        => _nodes[index] ?? throw new InvalidOperationException("The native coordinator has stopped.");
+
     public IEnumerable<global::RapidCluster.ClusterMembershipView> VoterViews
         => _nodes.Where(node => node is not null).Select(node => node!.Host!.Cluster.CurrentView);
 

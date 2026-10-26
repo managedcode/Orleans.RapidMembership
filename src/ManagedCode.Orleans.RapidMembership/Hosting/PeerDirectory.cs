@@ -13,6 +13,9 @@ internal sealed class PeerDirectory(RapidMembershipOptions options, string ident
     private MulticastDiscovery? _observer;
     private IReadOnlyList<PeerReply> _descriptions = [];
     private CoordinationConfiguration? _resolved;
+
+    // Departure confirmation retains quorum-resolved history; routing still requires the current result.
+    private CoordinationConfiguration? _lastConfirmedConfiguration;
     private DateTimeOffset _refreshed;
     private int _disposed;
 
@@ -108,6 +111,13 @@ internal sealed class PeerDirectory(RapidMembershipOptions options, string ident
             _selection.Observe(_descriptions);
             _knowledge.Learn(_descriptions, Host is not null);
             _resolved = await _resolver.ResolveAsync(_descriptions, linked.Token);
+            var confirmed = Volatile.Read(ref _lastConfirmedConfiguration);
+            if (_resolved is { } resolved && (confirmed is null || resolved.ClusterId != confirmed.ClusterId
+                || resolved.Version > confirmed.Version))
+            {
+                Volatile.Write(ref _lastConfirmedConfiguration, resolved);
+            }
+
             _refreshed = options.TimeProvider.GetUtcNow();
             return _descriptions;
         }
@@ -146,6 +156,13 @@ internal sealed class PeerDirectory(RapidMembershipOptions options, string ident
 
     public async Task CompleteDepartureAsync(CoordinationConfiguration target, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        var confirmed = Volatile.Read(ref _lastConfirmedConfiguration);
+        if (confirmed is not null && confirmed.ClusterId == target.ClusterId && confirmed.Version >= target.Version)
+        {
+            return;
+        }
+
         var previous = _knowledge.Configuration;
         var members = previous is null ? target.Members : previous.Members.Concat(target.Members);
         while (true)

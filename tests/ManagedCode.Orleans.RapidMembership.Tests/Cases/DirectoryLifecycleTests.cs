@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using ManagedCode.Orleans.RapidMembership.Tests.Support;
 using Microsoft.Extensions.DependencyInjection;
 using Orleans.Serialization;
 
@@ -47,5 +48,46 @@ public sealed class DirectoryLifecycleTests
         Assert.NotEqual(configuration.ClusterId, fresh.ClusterId);
         Assert.NotEqual(configuration.Members[0].Incarnation, Assert.Single(fresh.Members).Incarnation);
         Assert.True(fresh.Matches(await restarted.ResolveAsync(token)));
+    }
+
+    [Fact]
+    public async Task QuorumConfirmedDepartureDoesNotRequireStoppedSuccessorsToAnswerAgain()
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(2));
+        var token = timeout.Token;
+        await using var network = new NetworkCluster();
+        await network.StartAsync(token);
+        var original = network.Configuration;
+        var retiring = network.Node(0);
+        var host = retiring.Host!;
+        await host.PrepareDepartureAsync();
+        await host.StopWorkAsync();
+        await host.Lifecycle.StopAsync(token);
+        var transferred = await retiring.ResolveAsync(token);
+        while (transferred.Contains(host.Incarnation) || transferred.Members.Length != 2)
+        {
+            await Task.Delay(20, token);
+            transferred = await retiring.ResolveAsync(token);
+        }
+
+        Assert.Equal(original.ClusterId, transferred.ClusterId);
+        Assert.True(transferred.Version > original.Version);
+        await network.StopAsync(1);
+        await network.StopAsync(2);
+        _ = await retiring.RefreshAsync(token, force: true);
+        using var read = CancellationTokenSource.CreateLinkedTokenSource(token);
+        read.CancelAfter(TimeSpan.FromMilliseconds(250));
+        _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => retiring.ResolveAsync(read.Token));
+        using var confirmation = CancellationTokenSource.CreateLinkedTokenSource(token);
+        confirmation.CancelAfter(TimeSpan.FromSeconds(1));
+        await retiring.CompleteDepartureAsync(transferred, confirmation.Token);
+        await network.DepartAsync(0);
+        Assert.Empty(await network.Transport().LocateAsync(original.Members, token));
+        await using var fresh = new NetworkCluster();
+        await fresh.StartAsync(token);
+        Assert.NotEqual(original.ClusterId, fresh.Configuration.ClusterId);
+        Assert.All(fresh.Configuration.Members, member => Assert.DoesNotContain(original.Members,
+            previous => previous.Incarnation == member.Incarnation));
     }
 }
