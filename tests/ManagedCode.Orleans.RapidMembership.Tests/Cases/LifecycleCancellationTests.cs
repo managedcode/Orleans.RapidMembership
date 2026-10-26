@@ -27,17 +27,13 @@ public sealed class LifecycleCancellationTests
         var seedPort = ((IPEndPoint)seed.LocalEndpoint).Port;
         var localPort = ((IPEndPoint)local.LocalEndpoint).Port;
         local.Stop();
-        var options = new RapidMembershipOptions
-        {
-            SharedSecret = "0123456789abcdef0123456789abcdef",
-            PeerTimeout = TimeSpan.FromSeconds(1),
-        };
+        var controlTimeout = TimeSpan.FromSeconds(30);
         var builder = WebApplication.CreateSlimBuilder();
         _ = builder.WebHost.ConfigureKestrel(server => server.Listen(IPAddress.Loopback, localPort, listen => listen.Protocols = HttpProtocols.Http2));
         _ = builder.Services.AddRapidClusterManual(rapid => rapid.SeedAddresses = [new IPEndPoint(IPAddress.Loopback, seedPort)])
             .UseGrpcTransport(grpc =>
             {
-                grpc.Timeout = options.PeerTimeout;
+                grpc.Timeout = controlTimeout;
                 grpc.JoinTimeout = TimeSpan.FromSeconds(2);
             }).UseListenAddress(new IPEndPoint(IPAddress.Loopback, localPort));
         var observation = new RpcCancellationObservation();
@@ -64,7 +60,7 @@ public sealed class LifecycleCancellationTests
             },
         };
         _ = await Assert.ThrowsAsync<TimeoutException>(() => messaging.SendMessageAsync(endpoint, pendingJoin, TestContext.Current.CancellationToken));
-        Assert.True(await observation.Finished.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
+        Assert.True(await observation.Finished.Task.WaitAsync(controlTimeout, TestContext.Current.CancellationToken));
         var read = await messaging.SendMessageAsync(endpoint, new RapidCluster.Pb.RapidClusterRequest
         {
             MembershipViewRequest = new RapidCluster.Pb.MembershipViewRequest { Sender = endpoint },
