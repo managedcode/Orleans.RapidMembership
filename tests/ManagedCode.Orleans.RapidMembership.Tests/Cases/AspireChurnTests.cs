@@ -222,25 +222,34 @@ public sealed class AspireChurnTests(ITestOutputHelper output)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(TimeSpan.FromMinutes(10));
-        var members = await cluster.ConvergeAsync(live, deadline.Token);
-        await clients.RequireProgressAsync(deadline.Token);
-        while (members.Except(clients.Silos, StringComparer.Ordinal).Any())
+        output.WriteLine($"Checking phase {phase}: {string.Join(",", live)}");
+        try
         {
+            var members = await cluster.ConvergeAsync(live, deadline.Token);
             await clients.RequireProgressAsync(deadline.Token);
-        }
+            while (members.Except(clients.Silos, StringComparer.Ordinal).Any())
+            {
+                await clients.RequireProgressAsync(deadline.Token);
+            }
 
-        var managementHosts = await clients.RequireHostsAsync(members, deadline.Token);
-        Assert.All(managementHosts, known => Assert.Equal(members, known));
-        output.WriteLine(JsonSerializer.Serialize(new
+            var managementHosts = await clients.RequireHostsAsync(members, deadline.Token);
+            Assert.All(managementHosts, known => Assert.Equal(members, known));
+            output.WriteLine(JsonSerializer.Serialize(new
+            {
+                phase,
+                managementHosts,
+                ManagementActive = managementHosts.Select(known => known.Length).ToArray(),
+                live,
+                members,
+                clients.Successes,
+                TransientFailures = clients.Failures,
+                ExecutingSilos = clients.Silos,
+            }));
+        }
+        catch (Exception failure)
         {
-            phase,
-            managementHosts,
-            ManagementActive = managementHosts.Select(known => known.Length).ToArray(),
-            live,
-            members,
-            clients.Successes,
-            TransientFailures = clients.Failures,
-            ExecutingSilos = clients.Silos,
-        }));
+            output.WriteLine($"Phase {phase} failed before client cleanup: {failure}");
+            throw;
+        }
     }
 }
