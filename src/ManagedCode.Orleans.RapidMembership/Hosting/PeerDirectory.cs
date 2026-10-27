@@ -178,6 +178,28 @@ internal sealed class PeerDirectory(RapidMembershipOptions options, string ident
         }
     }
 
+    public async Task CompleteTerminalDepartureAsync(CoordinationConfiguration terminal, CancellationToken cancellationToken)
+    {
+        var host = Host ?? throw new InvalidOperationException("Terminal departure requires the native membership server.");
+        var previous = _knowledge.Configuration;
+        var members = (previous is null ? terminal.Members : previous.Members)
+            .Concat(host.Discovery.Peers.Select(peer => new CoordinationMember(peer.NodeId, peer.Endpoint)))
+            .Where(member => !terminal.Contains(member.Incarnation))
+            .DistinctBy(member => member.Incarnation).ToArray();
+        var descriptions = await transport.LocateAsync(members, cancellationToken);
+        if (!descriptions.Any(reply => reply.IsDeparting))
+        {
+            return;
+        }
+
+        await CompleteDepartureAsync(terminal, cancellationToken);
+        while (descriptions.Any(reply => reply.IsDeparting))
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(50), options.TimeProvider, cancellationToken);
+            descriptions = await transport.LocateAsync(members, cancellationToken);
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)

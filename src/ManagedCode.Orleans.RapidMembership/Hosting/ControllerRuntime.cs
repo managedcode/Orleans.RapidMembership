@@ -31,6 +31,7 @@ internal sealed class ControllerRuntime : IAsyncDisposable
     private volatile bool _retired;
     private DateTimeOffset _bootstrapObserved;
     private CoordinationConfiguration? _observed;
+    private long _observedViewVersion = -1;
 
     public ControllerRuntime(MembershipHost host, PeerDirectory directory)
     {
@@ -165,6 +166,8 @@ internal sealed class ControllerRuntime : IAsyncDisposable
                     _ = await _host.Replica.BootstrapAsync(cancellationToken);
                 }
             }
+
+            Volatile.Write(ref _observedViewVersion, view.ConfigurationId.Version);
         }
     }
 
@@ -231,13 +234,22 @@ internal sealed class ControllerRuntime : IAsyncDisposable
         await _host.Lifecycle.StopAsync(cancellationToken);
         NativeLifecycle(_host.RuntimeLogger, "native stop completed", null);
         var view = _host.Cluster.CurrentView;
-        if (!view.Members.IsDefaultOrEmpty)
+        while (Volatile.Read(ref _observedViewVersion) < view.ConfigurationId.Version)
         {
-            var configuration = FromView(view);
+            await Task.Delay(TimeSpan.FromMilliseconds(50), _host.Options.TimeProvider, cancellationToken);
+        }
+
+        if (_observed is { } configuration)
+        {
             if (!configuration.Contains(_host.Incarnation))
             {
                 await _directory.CompleteDepartureAsync(configuration, cancellationToken);
                 NativeLifecycle(_host.RuntimeLogger, "table handoff completed", null);
+            }
+            else
+            {
+                await _directory.CompleteTerminalDepartureAsync(configuration, cancellationToken);
+                NativeLifecycle(_host.RuntimeLogger, "remaining cohort departure completed", null);
             }
         }
     }

@@ -90,4 +90,78 @@ public sealed class DirectoryLifecycleTests
         Assert.All(fresh.Configuration.Members, member => Assert.DoesNotContain(original.Members,
             previous => previous.Incarnation == member.Incarnation));
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task ConcurrentGracefulDepartureOfEveryCoordinatorJoinsBeforeFreshClusterFormation(int first)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(2));
+        var token = timeout.Token;
+        await using var network = new NetworkCluster();
+        await network.StartAsync(token);
+        var original = network.Configuration;
+        var nodes = Enumerable.Range(0, 3).Select(network.Node).ToArray();
+        var observations = nodes.Select((node, index) => DescribeNativeView(node, index, node.Host!.Cluster.CurrentView)).ToArray();
+        using var observing = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var watchers = nodes.Select((node, index) => ObserveNativeViewsAsync(node, index, observations, observing.Token)).ToArray();
+        var errors = await Task.WhenAll(Enumerable.Range(0, 3).Select(offset =>
+            Record.ExceptionAsync(() => network.DepartAsync((first + offset) % 3)).AsTask()));
+        await observing.CancelAsync();
+        var observationErrors = await Task.WhenAll(watchers.Select(watcher =>
+            Record.ExceptionAsync(() => watcher).AsTask()));
+        errors = [.. errors, .. observationErrors];
+        Assert.True(errors.All(error => error is null), string.Join(Environment.NewLine,
+            observations.Concat(errors.OfType<Exception>().Select(error => error.ToString()))));
+        Assert.Empty(await network.Transport().LocateAsync(original.Members, token));
+        await using var fresh = new NetworkCluster();
+        await fresh.StartAsync(token);
+        Assert.NotEqual(original.ClusterId, fresh.Configuration.ClusterId);
+        Assert.All(fresh.Configuration.Members, member => Assert.DoesNotContain(original.Members,
+            previous => previous.Incarnation == member.Incarnation));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task ConcurrentNativeDepartureDoesNotWaitForAFormerMultiMemberViewsLeaveDeadline(int first)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(2));
+        var token = timeout.Token;
+        await using var network = new NetworkCluster();
+        await network.StartAsync(token);
+        var lifecycles = Enumerable.Range(0, 3).Select(index => network.Node(index).Host!.Lifecycle).ToArray();
+        using var leaving = CancellationTokenSource.CreateLinkedTokenSource(token);
+        leaving.CancelAfter(TimeSpan.FromSeconds(5));
+        await Task.WhenAll(Enumerable.Range(0, 3).Select(offset =>
+            lifecycles[(first + offset) % 3].StopAsync(leaving.Token)));
+        Assert.False(leaving.IsCancellationRequested,
+            "Native departure must finish when only the local member remains, before the leave deadline expires.");
+    }
+
+    private static async Task ObserveNativeViewsAsync(PeerDirectory node, int index, string[] observations, CancellationToken token)
+    {
+        try
+        {
+            await foreach (var view in node.Host!.Cluster.ViewUpdates.WithCancellation(token))
+            {
+                observations[index] = DescribeNativeView(node, index, view);
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+    }
+
+    private static string DescribeNativeView(PeerDirectory node, int index, global::RapidCluster.ClusterMembershipView view)
+    {
+        var self = view.Members.Any(member => new Guid(member.Metadata["membership-incarnation"].Span) == node.Host!.Incarnation);
+        return string.Create(global::System.Globalization.CultureInfo.InvariantCulture,
+            $"Node {index}: native {view.ConfigurationId.Version}, members {view.Members.Length}, "
+            + $"self {self}, table {node.Host!.Knowledge.Configuration?.Version}, departing {node.Host.Participation.IsDeparting}.");
+    }
 }

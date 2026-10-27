@@ -79,8 +79,14 @@ internal sealed class NetworkCluster(string secret = "0123456789abcdef0123456789
 
     public async Task DepartAsync(int index)
     {
-        await _nodes[index]!.DisposeAsync();
-        _nodes[index] = null;
+        try
+        {
+            await _nodes[index]!.DisposeAsync();
+        }
+        finally
+        {
+            _nodes[index] = null;
+        }
     }
 
     public async Task StopAsync(int index)

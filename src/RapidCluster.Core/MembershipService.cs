@@ -2471,7 +2471,8 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
                 await using var updates = _viewAccessor.Updates.GetAsyncEnumerator(leaving.Token);
                 while (await updates.MoveNextAsync())
                 {
-                    if (!updates.Current.IsHostPresent(_myAddr))
+                    // A last member has no remaining observer which can confirm its removal.
+                    if (updates.Current.Size <= 1 || !updates.Current.IsHostPresent(_myAddr))
                     {
                         break;
                     }
