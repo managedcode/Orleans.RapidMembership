@@ -239,6 +239,12 @@ internal sealed class ControllerRuntime : IAsyncDisposable
             await Task.Delay(TimeSpan.FromMilliseconds(50), _host.Options.TimeProvider, cancellationToken);
         }
 
+        if (view.Members.Length > 1 && view.Members.Any(member =>
+            new Guid(member.Metadata["membership-incarnation"].Span) == _host.Incarnation))
+        {
+            throw new InvalidOperationException("The native leave deadline ended while this host remained in a multi-member view.");
+        }
+
         if (_observed is { } configuration)
         {
             if (!configuration.Contains(_host.Incarnation))

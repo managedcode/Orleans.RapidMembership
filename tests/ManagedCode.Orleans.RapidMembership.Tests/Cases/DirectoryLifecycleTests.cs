@@ -51,6 +51,31 @@ public sealed class DirectoryLifecycleTests
     }
 
     [Fact]
+    public async Task CancelledNativeLeaveCannotReportSuccessfulRetirementWhileItsHostRemainsInAMultiMemberView()
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(2));
+        var token = timeout.Token;
+        await using var network = new NetworkCluster();
+        await network.StartAsync(token);
+        var retiring = network.Node(0);
+        var member = retiring.Host!.Self;
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+        await retiring.Host.Lifecycle.StopAsync(cancelled.Token);
+        Assert.Equal(3, retiring.Host.Cluster.CurrentView.Members.Length);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => network.DepartAsync(0));
+        Assert.Contains("multi-member view", error.Message, StringComparison.Ordinal);
+        Assert.Empty(await network.Transport().LocateAsync([member], token));
+        await using var table = network.NativeTable();
+        await table.InitializeMembershipTableAsync(true, token);
+        var empty = await table.ReadAllAsync(token);
+        var entry = MutationTests.Entry(1);
+        Assert.True(await table.InsertRowAsync(entry, empty.Version.Next(), token));
+        Assert.Equal(entry.SiloAddress, Assert.Single((await table.ReadAllAsync(token)).Members).Item1.SiloAddress);
+    }
+
+    [Fact]
     public async Task QuorumConfirmedDepartureDoesNotRequireStoppedSuccessorsToAnswerAgain()
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);

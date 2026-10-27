@@ -2449,36 +2449,34 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
             var leaveMessage = new LeaveMessage { Sender = _myAddr };
             var leave = leaveMessage.ToRapidClusterRequest();
 
-            var observers = _membershipView.GetObserversOf(_myAddr);
-            _log.LeavingWithObservers(_myAddr, observers.Length, observers);
-
             using var deadline = new CancellationTokenSource(_options.LeaveMessageTimeout, _sharedResources.TimeProvider);
             using var leaving = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
-            var leaveTasks = observers.Select(endpoint =>
-                _messagingClient.SendMessageBestEffortAsync(endpoint, leave, leaving.Token));
-
-            _ = await Task.WhenAll(leaveTasks).WaitAsync(leaving.Token);
-            if (_membershipView.Size > 1)
+            while (true)
             {
-                await using var updates = _viewAccessor.Updates.GetAsyncEnumerator(leaving.Token);
-                while (await updates.MoveNextAsync())
+                var view = _viewAccessor.CurrentView;
+
+                // A last member has no remaining observer which can confirm its removal.
+                if (view.Size <= 1 || !view.IsHostPresent(_myAddr))
                 {
-                    // A last member has no remaining observer which can confirm its removal.
-                    if (updates.Current.Size <= 1 || !updates.Current.IsHostPresent(_myAddr))
-                    {
-                        break;
-                    }
+                    break;
                 }
 
-                if (deadline.IsCancellationRequested && _membershipView.IsHostPresent(_myAddr))
-                {
-                    _log.TimeoutWhileLeaving();
-                }
+                // Observers may still be learning this view when the first leave arrives.
+                var observers = view.GetObserversOf(_myAddr);
+                _log.LeavingWithObservers(_myAddr, observers.Length, observers);
+                var leaveTasks = observers.Select(endpoint =>
+                    _messagingClient.SendMessageBestEffortAsync(endpoint, leave, leaving.Token));
+                _ = await Task.WhenAll(leaveTasks).WaitAsync(leaving.Token);
+                await Task.Delay(_options.BatchingWindow, _sharedResources.TimeProvider, leaving.Token);
             }
         }
         catch (OperationCanceledException)
         {
             // Cancellation requested - continue with shutdown
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                _log.TimeoutWhileLeaving();
+            }
         }
         catch (TimeoutException)
         {
