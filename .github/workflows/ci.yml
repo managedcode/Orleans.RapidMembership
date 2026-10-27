@@ -66,8 +66,14 @@ jobs:
         run: dotnet run --project tests/RapidCluster.Unit.Tests --configuration Release --no-build -- --timeout 600s --output Detailed --coverage --coverage-settings eng/coverage.config.xml --coverage-output-format cobertura --coverage-output unit.cobertura.xml --report-trx --results-directory artifacts/tests/unit
       - name: RAPID real networking tests
         run: dotnet run --project tests/RapidCluster.Integration.Tests --configuration Release --no-build -- --timeout 600s --output Detailed --coverage --coverage-settings eng/coverage.config.xml --coverage-output-format cobertura --coverage-output network.cobertura.xml --report-trx --results-directory artifacts/tests/network
-      - name: RAPID Aspire tests
+      - name: RAPID Aspire tests (Unix)
+        if: runner.os != 'Windows'
         run: dotnet run --project tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests --configuration Release --no-build -- --timeout 600s --output Detailed --report-trx --results-directory artifacts/tests/rapid-aspire
+      - name: RAPID Aspire tests (Windows native process evidence)
+        if: runner.os == 'Windows'
+        uses: ./eng/native-diagnostics
+        with:
+          suite: aspire
       - name: Pack RAPID protocol
         run: dotnet pack src/RapidCluster.Core --configuration Release --no-build --output artifacts/packages -warnaserror
       - name: Pack gRPC transport
