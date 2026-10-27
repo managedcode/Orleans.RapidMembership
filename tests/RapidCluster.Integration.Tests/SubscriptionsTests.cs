@@ -15,6 +15,7 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
     private readonly TestCluster _cluster = new(outputHelper);
     private readonly List<CancellationTokenSource> _subscriptionCts = [];
     private readonly List<IDisposable> _observableSubscriptions = [];
+    private readonly List<Task> _subscriptionTasks = [];
 
     public async ValueTask DisposeAsync()
     {
@@ -30,13 +31,23 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
         foreach (var cts in _subscriptionCts)
         {
             await cts.CancelAsync();
-            cts.Dispose();
         }
 
-        _subscriptionCts.Clear();
+        try
+        {
+            await Task.WhenAll(_subscriptionTasks);
+        }
+        finally
+        {
+            foreach (var cts in _subscriptionCts)
+            {
+                cts.Dispose();
+            }
 
-        await _cluster.DisposeAsync();
-        GC.SuppressFinalize(this);
+            _subscriptionCts.Clear();
+            await _cluster.DisposeAsync();
+            GC.SuppressFinalize(this);
+        }
     }
 
     /// <summary>
@@ -52,7 +63,9 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
         var cts = new CancellationTokenSource();
         _subscriptionCts.Add(cts);
 
-        _ = Task.Run(async () =>
+        _subscriptionTasks.Add(ConsumeAsync());
+
+        async Task ConsumeAsync()
         {
             try
             {
@@ -61,11 +74,11 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
                     callback.Accept(view);
                 }
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
                 // Expected during cleanup
             }
-        }, cts.Token);
+        }
     }
 
     /// <summary>
@@ -76,7 +89,9 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
         var cts = new CancellationTokenSource();
         _subscriptionCts.Add(cts);
 
-        _ = Task.Run(async () =>
+        _subscriptionTasks.Add(ConsumeAsync());
+
+        async Task ConsumeAsync()
         {
             try
             {
@@ -85,11 +100,11 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
                     bag.Add(view);
                 }
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
                 // Expected during cleanup
             }
-        }, cts.Token);
+        }
     }
 
     /// <summary>
@@ -104,8 +119,8 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
 
     /// <summary>
     /// Two node cluster, one subscription each.
-    /// With IAsyncEnumerable, subscribers only receive views published AFTER they subscribe.
-    /// The seed's consumer is started before the join, so it receives the join view update.
+    /// Subscribers replay the current public view and then receive subsequent views.
+    /// The seed's consumer starts before the join and receives the join view update.
     /// </summary>
     [Fact]
     public async Task SubscriptionOnJoin()
@@ -119,7 +134,7 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
 
         var (joinerApp, joiner) = await _cluster.CreateJoinerNodeAsync(joinerAddress, seedAddress, TestContext.Current.CancellationToken);
 
-        // Note: Joiner's consumer is started AFTER join completes, so it may miss the initial view update
+        // The joiner's consumer replays the public view available after joining.
         var joinCb = new ViewCallback();
         StartViewUpdateConsumer(joiner, joinCb);
 
@@ -142,36 +157,8 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
     /// With IAsyncEnumerable, subscribers only receive views published AFTER they subscribe.
     /// </summary>
     [Fact]
-    public async Task MultipleSubscriptionsOnJoin()
-    {
-        var seedAddress = CreateAddress(_cluster.GetNextPort());
-        var joinerAddress = CreateAddress(_cluster.GetNextPort());
-
-        var seedCb1 = new ViewCallback();
-        var seedCb2 = new ViewCallback();
-        var (_, seed) = await _cluster.CreateSeedNodeAsync(seedAddress, TestContext.Current.CancellationToken);
-        StartViewUpdateConsumer(seed, seedCb1);
-        StartViewUpdateConsumer(seed, seedCb2);
-        var (_, joiner) = await _cluster.CreateJoinerNodeAsync(joinerAddress, seedAddress, TestContext.Current.CancellationToken);
-
-        // Note: Joiner's consumers are started AFTER join completes
-        var joinCb1 = new ViewCallback();
-        var joinCb2 = new ViewCallback();
-        StartViewUpdateConsumer(joiner, joinCb1);
-        StartViewUpdateConsumer(joiner, joinCb2);
-
-        await TestCluster.WaitForClusterSizeAsync(seed, 2, TimeSpan.FromSeconds(10));
-
-        // Give callbacks time to fire
-        await Task.Delay(500, TestContext.Current.CancellationToken);
-
-        // Both seed callbacks should receive the same number of views (consumer started before join)
-        Assert.True(seedCb1.NumTimesCalled() >= 1, string.Create(CultureInfo.InvariantCulture, $"Expected seedCb1 to receive at least 1 view update, got {seedCb1.NumTimesCalled()}"));
-        Assert.True(seedCb2.NumTimesCalled() >= 1, string.Create(CultureInfo.InvariantCulture, $"Expected seedCb2 to receive at least 1 view update, got {seedCb2.NumTimesCalled()}"));
-
-        // Both should receive the same views since they subscribed at the same time
-        Assert.Equal(seedCb1.NumTimesCalled(), seedCb2.NumTimesCalled());
-    }
+    public Task MultipleSubscriptionsOnJoin()
+        => VerifyMultipleSubscriptionsOnJoinAsync(useObservable: false);
 
     /// <summary>
     /// Tests that view updates include membership information.
@@ -280,6 +267,70 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
     /// <summary>
     /// Encapsulates a view update callback and counts the number of times it was invoked.
     /// </summary>
+    private async Task VerifyMultipleSubscriptionsOnJoinAsync(bool useObservable)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        var token = deadline.Token;
+        Action<IRapidCluster, ViewCallback> subscribe = useObservable ? StartObservableConsumer : StartViewUpdateConsumer;
+        var seedAddress = CreateAddress(_cluster.GetNextPort());
+        var (_, seed) = await _cluster.CreateSeedNodeAsync(seedAddress, token);
+        await WaitForPublicViewAsync(seed, token);
+        var initial = seed.CurrentView.ConfigurationId;
+        ViewCallback[] seedCallbacks = [new(), new()];
+        foreach (var callback in seedCallbacks)
+        {
+            subscribe(seed, callback);
+        }
+
+        await WaitForCallbacksAsync(seedCallbacks, initial, token);
+        var (_, joiner) = await _cluster.CreateJoinerNodeAsync(CreateAddress(_cluster.GetNextPort()), seedAddress, token);
+        await TestCluster.WaitForClusterSizeAsync(seed, 2, TimeSpan.FromSeconds(10));
+        await WaitForPublicViewAsync(joiner, token);
+        ViewCallback[] joinCallbacks = [new(), new()];
+        foreach (var callback in joinCallbacks)
+        {
+            subscribe(joiner, callback);
+        }
+
+        var final = seed.CurrentView.ConfigurationId;
+        await WaitForCallbacksAsync([.. seedCallbacks, .. joinCallbacks], final, token);
+        ConfigurationId[] expectedSeedConfigurations = [initial, final];
+        foreach (var callback in seedCallbacks)
+        {
+            Assert.Equal(expectedSeedConfigurations, callback.GetConfigurations());
+        }
+
+        ConfigurationId[] expectedJoinerConfigurations = [final];
+        foreach (var callback in joinCallbacks)
+        {
+            Assert.Equal(expectedJoinerConfigurations, callback.GetConfigurations());
+        }
+    }
+
+    private static async Task WaitForPublicViewAsync(IRapidCluster cluster, CancellationToken token)
+    {
+        var expected = cluster.CurrentView.ConfigurationId;
+        await foreach (var view in cluster.ViewUpdates.WithCancellation(token))
+        {
+            if (view.ConfigurationId == expected)
+            {
+                return;
+            }
+        }
+
+        token.ThrowIfCancellationRequested();
+        throw new InvalidOperationException("The public view stream ended before the current native configuration.");
+    }
+
+    private static async Task WaitForCallbacksAsync(ViewCallback[] callbacks, ConfigurationId expected, CancellationToken token)
+    {
+        while (callbacks.Any(callback => !callback.GetViewLog().Any(view => view.ConfigurationId == expected)))
+        {
+            await Task.Delay(10, token);
+        }
+    }
+
     private sealed class ViewCallback
     {
         private readonly ConcurrentBag<ClusterMembershipView> _viewLog = [];
@@ -287,6 +338,9 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
         public int NumTimesCalled() => _viewLog.Count;
 
         public List<ClusterMembershipView> GetViewLog() => [.. _viewLog];
+
+        public ConfigurationId[] GetConfigurations()
+            => [.. _viewLog.OrderBy(view => view.ConfigurationId.Version).Select(view => view.ConfigurationId)];
 
         public void Accept(ClusterMembershipView view) => _viewLog.Add(view);
     }
@@ -328,37 +382,8 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
     /// Both observers should receive the same views since BroadcastChannel multicasts to all subscribers.
     /// </summary>
     [Fact]
-    public async Task MultipleObservableSubscriptionsOnJoin()
-    {
-        var seedAddress = CreateAddress(_cluster.GetNextPort());
-        var joinerAddress = CreateAddress(_cluster.GetNextPort());
-
-        var seedCb1 = new ViewCallback();
-        var seedCb2 = new ViewCallback();
-        var (_, seed) = await _cluster.CreateSeedNodeAsync(seedAddress, TestContext.Current.CancellationToken);
-        StartObservableConsumer(seed, seedCb1);
-        StartObservableConsumer(seed, seedCb2);
-        var (_, joiner) = await _cluster.CreateJoinerNodeAsync(joinerAddress, seedAddress, TestContext.Current.CancellationToken);
-        var joinCb1 = new ViewCallback();
-        var joinCb2 = new ViewCallback();
-        StartObservableConsumer(joiner, joinCb1);
-        StartObservableConsumer(joiner, joinCb2);
-
-        await TestCluster.WaitForClusterSizeAsync(seed, 2, TimeSpan.FromSeconds(10));
-
-        // Give callbacks time to fire
-        await Task.Delay(500, TestContext.Current.CancellationToken);
-
-        // Both seed callbacks should receive the same number of views
-        Assert.True(seedCb1.NumTimesCalled() >= 1, string.Create(CultureInfo.InvariantCulture, $"Expected seedCb1 to receive at least 1 view, got {seedCb1.NumTimesCalled()}"));
-        Assert.True(seedCb2.NumTimesCalled() >= 1, string.Create(CultureInfo.InvariantCulture, $"Expected seedCb2 to receive at least 1 view, got {seedCb2.NumTimesCalled()}"));
-
-        // Both should receive the same views since they subscribed at the same time
-        Assert.Equal(seedCb1.NumTimesCalled(), seedCb2.NumTimesCalled());
-
-        // Both joiner callbacks should receive the same number of views
-        Assert.Equal(joinCb1.NumTimesCalled(), joinCb2.NumTimesCalled());
-    }
+    public Task MultipleObservableSubscriptionsOnJoin()
+        => VerifyMultipleSubscriptionsOnJoinAsync(useObservable: true);
 
     /// <summary>
     /// Tests that IObservable subscriptions work with Rx.NET operators like Where, Select, etc.

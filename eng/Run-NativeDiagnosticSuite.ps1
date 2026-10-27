@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('provider', 'scale')][string]$Suite
+    [Parameter(Mandatory)][ValidateSet('provider', 'scale', 'aspire')][string]$Suite
 )
 
 $ErrorActionPreference = 'Stop'
@@ -11,7 +11,8 @@ $startedUtc = [DateTime]::UtcNow
 $exitCode = 1
 try
 {
-    $arguments = @('run', '--project', 'tests/ManagedCode.Orleans.RapidMembership.Tests',
+    $project = if ($Suite -eq 'aspire') { 'tests/RapidCluster.EndToEnd/RapidCluster.EndToEnd.Tests' } else { 'tests/ManagedCode.Orleans.RapidMembership.Tests' }
+    $arguments = @('run', '--project', $project,
         '--configuration', 'Release', '--no-build', '--', '--output', 'Detailed',
         '--report-trx', '--results-directory', $resultRoot, '--diagnostic',
         '--diagnostic-output-directory', $resultRoot, '--diagnostic-file-prefix', 'native-diagnostic',
@@ -23,9 +24,13 @@ try
             '--coverage', '--coverage-settings', 'eng/coverage.config.xml',
             '--coverage-output-format', 'cobertura', '--coverage-output', 'membership.cobertura.xml')
     }
-    else
+    elseif ($Suite -eq 'scale')
     {
         $arguments += @('--filter-trait', 'Category=Scale', '--timeout', '4500s')
+    }
+    else
+    {
+        $arguments += @('--timeout', '600s')
     }
     & dotnet @arguments
     $exitCode = $LASTEXITCODE

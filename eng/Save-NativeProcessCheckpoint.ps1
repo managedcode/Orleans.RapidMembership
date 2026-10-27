@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('provider', 'scale')][string]$Suite,
+    [Parameter(Mandatory)][ValidateSet('provider', 'scale', 'aspire')][string]$Suite,
     [Parameter(Mandatory)][int]$AtSeconds
 )
 

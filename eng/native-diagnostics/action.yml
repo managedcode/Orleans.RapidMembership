@@ -2,7 +2,7 @@ name: Native Windows process evidence
 description: Join the native suite while retaining live process checkpoints.
 inputs:
   suite:
-    description: Native provider or scale suite.
+    description: Native provider, scale or upstream Aspire suite.
     required: true
 runs:
   using: node24

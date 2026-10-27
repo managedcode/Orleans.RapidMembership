@@ -3,7 +3,7 @@ import { mkdir, open, readFile, writeFile, access } from 'node:fs/promises';
 import path from 'node:path';
 
 const suite = process.env.INPUT_SUITE;
-if (!['provider', 'scale'].includes(suite)) throw new Error('Unknown native suite');
+if (!['provider', 'scale', 'aspire'].includes(suite)) throw new Error('Unknown native suite');
 const root = process.env.GITHUB_WORKSPACE;
 const resultRoot = path.join(root, 'artifacts/tests/windows-diagnostics', suite);
 await mkdir(resultRoot, { recursive: true });
@@ -24,13 +24,15 @@ const stdout = await open(path.join(resultRoot, 'stdout.log'), 'w');
 const stderr = await open(path.join(resultRoot, 'stderr.log'), 'w');
 const worker = spawn('pwsh', ['-NoProfile', '-File', path.join(root, 'eng/Run-NativeDiagnosticSuite.ps1'), '-Suite', suite],
     { cwd: root, stdio: ['ignore', stdout.fd, stderr.fd] });
-const completion = exited(worker);
+let nativeOutcome;
+const completion = exited(worker).then(result => { nativeOutcome = result; return result; });
 await writeFile(path.join(resultRoot, 'worker.json'), JSON.stringify({
     processId: worker.pid, startedUtc: new Date().toISOString(), source: process.env.GITHUB_SHA,
 }));
 let diagnosticFailure;
 try {
-    for (const seconds of [120, 240, 360]) {
+    for (const seconds of [120, 240, 360, 900, 1200]) {
+        if (nativeOutcome) break;
         await command('pwsh', ['-NoProfile', '-File', path.join(root, 'eng/Save-NativeProcessCheckpoint.ps1'), '-Suite', suite, '-AtSeconds', String(seconds)]);
         await command(process.execPath, [uploader], {
             ...process.env, INPUT_NAME: `windows-${suite}-${seconds}s`,
