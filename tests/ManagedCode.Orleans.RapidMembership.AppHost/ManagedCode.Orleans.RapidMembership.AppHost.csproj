@@ -3,7 +3,6 @@
   <PropertyGroup><OutputType>Exe</OutputType><IsAspireHost>true</IsAspireHost><AspireUseCliBundle>true</AspireUseCliBundle><IsPackable>false</IsPackable></PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.AppHost" />
-    <Compile Include="../ManagedCode.Orleans.RapidMembership.Node/Contracts/NodeProcessIdentity.cs" Link="Contracts/NodeProcessIdentity.cs" />
     <ProjectReference Include="../ManagedCode.Orleans.RapidMembership.Node/ManagedCode.Orleans.RapidMembership.Node.csproj" />
   </ItemGroup>
 </Project>

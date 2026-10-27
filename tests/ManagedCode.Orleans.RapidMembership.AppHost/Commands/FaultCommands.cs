@@ -1,8 +1,8 @@
 using System.Diagnostics;
-using System.Net.Http.Json;
+using System.Globalization;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
-using ManagedCode.Orleans.RapidMembership.Node.Contracts;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ManagedCode.Orleans.RapidMembership.AppHost.Commands;
 
@@ -13,22 +13,21 @@ internal static class FaultCommands
         _ = node.WithHttpCommand("/shutdown", "Gracefully stop test silo", endpointName: "http", commandName: "shutdown");
         _ = node.WithCommand("crash", "Crash test silo", async context =>
         {
-            using var client = new HttpClient();
-            var endpoint = new Uri(new Uri(node.GetEndpoint("http").Url), "/process");
-            var identity = await client.GetFromJsonAsync<NodeProcessIdentity>(endpoint, context.CancellationToken);
-            if (identity is null || identity.ProcessId <= 0 || identity.StartTimeUtcTicks <= 0)
+            var notifications = context.Services.GetRequiredService<ResourceNotificationService>();
+            if (!notifications.TryGetCurrentState(node.Resource.Name, out var current))
             {
-                return CommandResults.Failure("Test process identity was not returned.");
+                return CommandResults.Failure("Test resource state was not found.");
             }
 
-            using var process = Process.GetProcessById(identity.ProcessId);
-            if (process.HasExited || process.StartTime.ToUniversalTime().Ticks != identity.StartTimeUtcTicks)
+            var snapshot = current.Snapshot;
+            var pid = Convert.ToInt32(snapshot.Properties.Single(item => item.Name == "executable.pid").Value, CultureInfo.InvariantCulture);
+            using var process = Process.GetProcessById(pid);
+            if (process.HasExited || snapshot.StartTimeStamp is null || process.StartTime.ToUniversalTime() < snapshot.StartTimeStamp.Value.AddMinutes(-1))
             {
                 return CommandResults.Failure("Test process identity could not be verified.");
             }
 
-            context.CancellationToken.ThrowIfCancellationRequested();
-            process.Kill();
+            process.Kill(entireProcessTree: true);
             await process.WaitForExitAsync(context.CancellationToken);
             return CommandResults.Success();
         });

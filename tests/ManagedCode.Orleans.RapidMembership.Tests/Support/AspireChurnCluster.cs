@@ -105,8 +105,6 @@ internal sealed class AspireChurnCluster(DistributedApplication app, Action<stri
             var observation = System.Text.Json.JsonSerializer.Serialize(states.Select((state, slot) => new
             {
                 Index = live[slot],
-                state.ProcessId,
-                state.ProcessStart,
                 state.IsVoter,
                 state.RapidConfiguration,
                 state.RapidMembers,
@@ -234,5 +232,5 @@ internal sealed class AspireChurnCluster(DistributedApplication app, Action<stri
     private static string Name(int index) => "silo-" + index.ToString(CultureInfo.InvariantCulture);
 
     private readonly record struct ChurnState(int Active, int RapidVoters, string[] Members, bool IsVoter, string Self,
-        string[] RapidMembers, string RapidConfiguration, string[] RapidNodeIds, int ProcessId, long ProcessStart);
+        string[] RapidMembers, string RapidConfiguration, string[] RapidNodeIds);
 }
