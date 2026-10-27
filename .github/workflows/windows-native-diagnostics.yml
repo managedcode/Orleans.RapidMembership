@@ -39,60 +39,10 @@ jobs:
         run: dotnet restore RapidCluster.slnx
       - name: Build
         run: dotnet build RapidCluster.slnx --no-restore --configuration Release -warnaserror
-      - name: Start native suite with its original deadline
-        env:
-          DIAGNOSTIC_SUITE: ${{ matrix.suite }}
-        run: |
-          $suite = $env:DIAGNOSTIC_SUITE
-          $resultRoot = Join-Path $env:GITHUB_WORKSPACE "artifacts/tests/windows-diagnostics/$suite"
-          New-Item -ItemType Directory -Force $resultRoot | Out-Null
-          New-Item -ItemType Directory -Force $env:DCP_DIAGNOSTICS_LOG_FOLDER | Out-Null
-          $script = Join-Path $env:GITHUB_WORKSPACE 'eng/Run-NativeDiagnosticSuite.ps1'
-          $worker = Start-Process pwsh -ArgumentList @('-NoProfile', '-File', "`"$script`"", '-Suite', $suite) -PassThru -RedirectStandardOutput "$resultRoot/stdout.log" -RedirectStandardError "$resultRoot/stderr.log"
-          @{ processId = $worker.Id; startedUtc = $worker.StartTime.ToUniversalTime(); startTicks = $worker.StartTime.ToUniversalTime().Ticks; source = $env:GITHUB_SHA } | ConvertTo-Json | Set-Content "$resultRoot/worker.json"
-      - name: Capture first two minutes
-        run: ./eng/Save-NativeProcessCheckpoint.ps1 -Suite '${{ matrix.suite }}' -AtSeconds 120
-      - uses: actions/upload-artifact@v4
+      - name: Execute and join native suite with live checkpoint uploads
+        uses: ./eng/native-diagnostics
         with:
-          name: windows-${{ matrix.suite }}-120s
-          path: artifacts/tests/windows-diagnostics/${{ matrix.suite }}/checkpoint-120/**
-          if-no-files-found: error
-      - name: Capture first four minutes
-        run: ./eng/Save-NativeProcessCheckpoint.ps1 -Suite '${{ matrix.suite }}' -AtSeconds 240
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-${{ matrix.suite }}-240s
-          path: artifacts/tests/windows-diagnostics/${{ matrix.suite }}/checkpoint-240/**
-          if-no-files-found: error
-      - name: Capture first six minutes
-        run: ./eng/Save-NativeProcessCheckpoint.ps1 -Suite '${{ matrix.suite }}' -AtSeconds 360
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-${{ matrix.suite }}-360s
-          path: artifacts/tests/windows-diagnostics/${{ matrix.suite }}/checkpoint-360/**
-          if-no-files-found: error
-      - name: Join native suite and preserve its actual result
-        run: |
-          $resultRoot = Join-Path $env:GITHUB_WORKSPACE 'artifacts/tests/windows-diagnostics/${{ matrix.suite }}'
-          $worker = Get-Content "$resultRoot/worker.json" | ConvertFrom-Json
-          while (-not (Test-Path "$resultRoot/result.json"))
-          {
-              $process = Get-Process -Id $worker.processId -ErrorAction SilentlyContinue
-              if (-not $process -or $process.StartTime.ToUniversalTime().Ticks -ne $worker.startTicks)
-              {
-                  throw 'The diagnostic worker exited without its native result.'
-              }
-              Start-Sleep -Seconds 5
-          }
-          Get-Content "$resultRoot/stdout.log" -Tail 100
-          Get-Content "$resultRoot/stderr.log" -Tail 100
-          $result = Get-Content "$resultRoot/result.json" | ConvertFrom-Json
-          if ($result.exitCode -ne 0) { exit $result.exitCode }
-          if ('${{ matrix.suite }}' -eq 'provider')
-          {
-              python eng/verify-coverage.py "$resultRoot/membership.cobertura.xml"
-              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
+          suite: ${{ matrix.suite }}
       - name: Retain complete original diagnostics
         if: always()
         uses: actions/upload-artifact@v4
