@@ -29,7 +29,7 @@ while ($true)
         processors = $env:NUMBER_OF_PROCESSORS
         processes = $processes
     } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $checkpoint ($now.ToString('HHmmssfff') + '.json'))
-    $elapsed = ($now - [DateTime]::Parse($worker.startedUtc).ToUniversalTime()).TotalSeconds
+    $elapsed = ($now - ([DateTime]$worker.startedUtc).ToUniversalTime()).TotalSeconds
     if ($elapsed -ge $AtSeconds -or (Test-Path (Join-Path $resultRoot 'result.json')))
     {
         break

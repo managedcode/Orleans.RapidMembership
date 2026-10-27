@@ -49,7 +49,7 @@ jobs:
           New-Item -ItemType Directory -Force $env:DCP_DIAGNOSTICS_LOG_FOLDER | Out-Null
           $script = Join-Path $env:GITHUB_WORKSPACE 'eng/Run-NativeDiagnosticSuite.ps1'
           $worker = Start-Process pwsh -ArgumentList @('-NoProfile', '-File', "`"$script`"", '-Suite', $suite) -PassThru -RedirectStandardOutput "$resultRoot/stdout.log" -RedirectStandardError "$resultRoot/stderr.log"
-          @{ processId = $worker.Id; startedUtc = $worker.StartTime.ToUniversalTime(); source = $env:GITHUB_SHA } | ConvertTo-Json | Set-Content "$resultRoot/worker.json"
+          @{ processId = $worker.Id; startedUtc = $worker.StartTime.ToUniversalTime(); startTicks = $worker.StartTime.ToUniversalTime().Ticks; source = $env:GITHUB_SHA } | ConvertTo-Json | Set-Content "$resultRoot/worker.json"
       - name: Capture first two minutes
         run: ./eng/Save-NativeProcessCheckpoint.ps1 -Suite '${{ matrix.suite }}' -AtSeconds 120
       - uses: actions/upload-artifact@v4
@@ -78,7 +78,7 @@ jobs:
           while (-not (Test-Path "$resultRoot/result.json"))
           {
               $process = Get-Process -Id $worker.processId -ErrorAction SilentlyContinue
-              if (-not $process -or $process.StartTime.ToUniversalTime() -ne [DateTime]::Parse($worker.startedUtc).ToUniversalTime())
+              if (-not $process -or $process.StartTime.ToUniversalTime().Ticks -ne $worker.startTicks)
               {
                   throw 'The diagnostic worker exited without its native result.'
               }
