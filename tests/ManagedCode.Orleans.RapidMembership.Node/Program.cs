@@ -1,5 +1,6 @@
 using System.Net;
 using ManagedCode.Orleans.RapidMembership;
+using ManagedCode.Orleans.RapidMembership.Node.Contracts;
 using Orleans;
 using Orleans.Configuration;
 
@@ -33,14 +34,16 @@ _ = builder.Host.UseOrleans(silo =>
 });
 _ = builder.Services.Configure<Microsoft.Extensions.Hosting.HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromMinutes(3));
 var app = builder.Build();
+var processIdentity = NodeProcessIdentity.Capture();
+_ = app.MapGet("/process", () => processIdentity);
 _ = app.MapGet("/state", async (RapidMembershipTable table, global::Orleans.Runtime.ILocalSiloDetails details, CancellationToken cancellationToken) =>
 {
     var snapshot = await table.ReadAllAsync(cancellationToken);
     return new
     {
-        Environment.ProcessId,
+        processIdentity.ProcessId,
         Self = details.SiloAddress.ToString(),
-        ProcessStart = System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks,
+        ProcessStart = processIdentity.StartTimeUtcTicks,
         Members = snapshot.Members.Where(row => row.Item1.Status == Orleans.Runtime.SiloStatus.Active)
             .Select(row => row.Item1.SiloAddress.ToString()).Order(StringComparer.Ordinal).ToArray(),
         Active = snapshot.Members.Count(row => row.Item1.Status == Orleans.Runtime.SiloStatus.Active),
