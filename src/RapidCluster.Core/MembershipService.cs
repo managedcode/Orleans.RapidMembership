@@ -2464,9 +2464,13 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
                 // Observers may still be learning this view when the first leave arrives.
                 var observers = view.GetObserversOf(_myAddr);
                 _log.LeavingWithObservers(_myAddr, observers.Length, observers);
+
+                // A held observer must not consume the whole departure deadline before a new view is announced.
+                using var announcementDeadline = new CancellationTokenSource(_options.BatchingWindow, _sharedResources.TimeProvider);
+                using var announcement = CancellationTokenSource.CreateLinkedTokenSource(leaving.Token, announcementDeadline.Token);
                 var leaveTasks = observers.Select(endpoint =>
-                    _messagingClient.SendMessageBestEffortAsync(endpoint, leave, leaving.Token));
-                _ = await Task.WhenAll(leaveTasks).WaitAsync(leaving.Token);
+                    _messagingClient.SendMessageBestEffortAsync(endpoint, leave, announcement.Token));
+                _ = await Task.WhenAll(leaveTasks);
                 await Task.Delay(_options.BatchingWindow, _sharedResources.TimeProvider, leaving.Token);
             }
         }

@@ -7,10 +7,21 @@ namespace RapidCluster.Integration.Tests;
 /// <summary>
 /// Real-network tests for graceful membership departure, concurrent joins and reused process endpoints.
 /// </summary>
-public sealed class MembershipEndpointLifecycleTests(ITestOutputHelper outputHelper) : IAsyncDisposable
+public sealed class MembershipEndpointLifecycleTests : IAsyncDisposable
 {
     private static readonly TimeSpan ViewTimeout = TimeSpan.FromSeconds(60);
-    private readonly TestCluster _cluster = new(outputHelper);
+    private readonly LeaveMessageDeliveryGate _leaveMessages = new();
+    private readonly TestCluster _cluster;
+
+    public MembershipEndpointLifecycleTests(ITestOutputHelper outputHelper)
+    {
+        ArgumentNullException.ThrowIfNull(outputHelper);
+        _cluster = new TestCluster(outputHelper, services =>
+        {
+            _ = services.AddSingleton(_leaveMessages);
+            _ = services.AddGrpc(options => options.Interceptors.Add<LeaveMessageDeliveryGate>());
+        });
+    }
 
     public async ValueTask DisposeAsync()
     {
@@ -21,10 +32,11 @@ public sealed class MembershipEndpointLifecycleTests(ITestOutputHelper outputHel
     private static IPEndPoint CreateAddress(int port) => new(IPAddress.Parse("127.0.0.1"), port);
 
     [Theory]
-    [InlineData(0)]
-    [InlineData(20)]
-    [InlineData(50)]
-    public async Task GracefulDepartureRemainsEffectiveWhenConcurrentJoinsChangeItsObservers(int joinDelayMilliseconds)
+    [InlineData(0, false)]
+    [InlineData(20, false)]
+    [InlineData(50, false)]
+    [InlineData(20, true)]
+    public async Task GracefulDepartureRemainsEffectiveWhenConcurrentJoinsChangeItsObservers(int joinDelayMilliseconds, bool holdFirstLeave)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         timeout.CancelAfter(ViewTimeout);
@@ -43,8 +55,14 @@ public sealed class MembershipEndpointLifecycleTests(ITestOutputHelper outputHel
         var joiningAddresses = Enumerable.Range(0, 6).Select(_ => CreateAddress(_cluster.GetNextPort())).ToArray();
         var newNodes = await Task.WhenAll(joiningAddresses.Select(address =>
             _cluster.CreateUnstartedNodeAsync(address, seedAddress, token)));
+        if (holdFirstLeave)
+        {
+            _leaveMessages.HoldNext();
+        }
+
         var joining = Task.WhenAll(newNodes.Select(node => node.Lifecycle.StartAsync(token)));
         await Task.WhenAll(joining, DepartAfterJoinDelayAsync());
+        Assert.Equal(holdFirstLeave, _leaveMessages.Entered.IsCompletedSuccessfully);
         Assert.DoesNotContain(departing.CurrentView.Members, member => member.EndPoint.Equals(departingAddress));
         var survivors = new[] { seed, second }.Concat(newNodes.Select(node => node.Cluster)).ToArray();
         var expectedPorts = joiningAddresses.Prepend(secondAddress).Prepend(seedAddress).Select(address => address.Port).Order().ToArray();
@@ -79,7 +97,7 @@ public sealed class MembershipEndpointLifecycleTests(ITestOutputHelper outputHel
         var seedAddress = CreateAddress(_cluster.GetNextPort());
         var secondAddress = CreateAddress(_cluster.GetNextPort());
         var lostAddress = CreateAddress(_cluster.GetNextPort());
-        var (_, seed) = await _cluster.CreateSeedNodeAsync(seedAddress, cancellationToken);
+        var (seedApp, seed) = await _cluster.CreateSeedNodeAsync(seedAddress, cancellationToken);
         var (_, second) = await _cluster.CreateJoinerNodeAsync(secondAddress, seedAddress, cancellationToken);
         var (lostApp, _) = await _cluster.CreateSeedNodeAsync(lostAddress, options => options.SeedAddresses = [seedAddress], cancellationToken);
         await TestCluster.WaitForClusterSizeExactAsync(seed, 3, ViewTimeout);
@@ -105,5 +123,16 @@ public sealed class MembershipEndpointLifecycleTests(ITestOutputHelper outputHel
         Assert.NotEqual(lostId, rejoined.Id);
         Assert.Equal(seed.CurrentView.ConfigurationId, restarted.CurrentView.ConfigurationId);
         Assert.Equal(seed.CurrentView.ConfigurationId, second.CurrentView.ConfigurationId);
+
+        // The surviving quorum must also tolerate a subsequent abrupt loss of the first seed.
+        await seedApp.StopAsync(cancellationToken);
+        await seedApp.DisposeAsync();
+        await TestCluster.WaitForClusterSizeExactAsync(second, 2, ViewTimeout);
+        await TestCluster.WaitForClusterSizeExactAsync(restarted, 2, ViewTimeout);
+        var (_, returnedSeed) = await _cluster.CreateJoinerNodeAsync(seedAddress, secondAddress, cancellationToken);
+        await TestCluster.WaitForClusterSizeExactAsync(returnedSeed, 3, ViewTimeout);
+        await TestCluster.WaitForClusterSizeExactAsync(second, 3, ViewTimeout);
+        Assert.Equal(second.CurrentView.ConfigurationId, returnedSeed.CurrentView.ConfigurationId);
+        Assert.Equal(second.CurrentView.ConfigurationId, restarted.CurrentView.ConfigurationId);
     }
 }

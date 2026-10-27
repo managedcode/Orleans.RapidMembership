@@ -28,3 +28,6 @@ The tests now use discovered peers, entirely in-memory membership and actual coo
 ## Evidence
 
 Native UDP/TCP, RAM consensus, native silo/client hosting and focused Aspire recovery checks have run. Runtime integration is implemented. Current qualification and delivery outcomes are recorded in original CI artifacts and the tracked work item. Retain original failed, interrupted and incomplete reports; never substitute simulation, documentation or a parent coverage report for actual silo execution.
+
+
+A native leave announcement bounds each round by the existing protocol batching window and joins its transport calls. One held observer cannot consume the full leave deadline and prevent announcements to newly learned observers. The overall leave bound is unchanged. Qualification retains full native integration logs and records differing coordinator configurations and member IDs when convergence is pending.

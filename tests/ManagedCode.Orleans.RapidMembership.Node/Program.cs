@@ -50,6 +50,8 @@ _ = app.MapGet("/state", async (RapidMembershipTable table, global::Orleans.Runt
         RapidConfiguration = table.VoterView.ConfigurationId.ToString(),
         RapidMembers = table.VoterView.Members.Select(member =>
             $"{new Guid(member.Metadata["membership-incarnation"].Span):N}@{member.EndPoint}").Order(StringComparer.Ordinal).ToArray(),
+        RapidNodeIds = table.VoterView.Members.Select(member =>
+            string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{member.Id}@{member.EndPoint}")).Order(StringComparer.Ordinal).ToArray(),
     };
 });
 _ = app.MapGet("/echo/{value}", (string value, IGrainFactory grains) => grains.GetGrain<IProbeGrain>("probe").Echo(value));

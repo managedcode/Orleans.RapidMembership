@@ -58,6 +58,7 @@ internal sealed class TestCluster : IAsyncDisposable
             .AddRapidClusterManual(options => options.SeedAddresses = [address])
             .UseGrpcTransport()
             .UseListenAddress(address);
+        _configureServices?.Invoke(builder.Services);
 
         var app = builder.Build();
         _ = app.MapRapidClusterMembershipService();
@@ -137,6 +138,7 @@ internal sealed class TestCluster : IAsyncDisposable
             .AddRapidCluster(options => options.SeedAddresses = [seedAddress])
             .UseGrpcTransport()
             .UseListenAddress(address);
+        _configureServices?.Invoke(builder.Services);
 
         var app = builder.Build();
         _ = app.MapRapidClusterMembershipService();
@@ -210,6 +212,7 @@ internal sealed class TestCluster : IAsyncDisposable
             .AddRapidClusterManual(options => options.SeedAddresses = [seedAddress])
             .UseGrpcTransport()
             .UseListenAddress(address);
+        _configureServices?.Invoke(builder.Services);
 
         var app = builder.Build();
         _ = app.MapRapidClusterMembershipService();

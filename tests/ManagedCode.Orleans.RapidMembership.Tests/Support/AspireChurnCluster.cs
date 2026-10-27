@@ -93,6 +93,7 @@ internal sealed class AspireChurnCluster(DistributedApplication app, Action<stri
         });
         using var transport = new PeerTransport(options, identity,
             services.GetRequiredService<Serializer<PeerRequest>>(), services.GetRequiredService<Serializer<PeerReply>>());
+        string? previousObservation = null;
         while (true)
         {
             var states = new ChurnState[live.Length];
@@ -101,12 +102,27 @@ internal sealed class AspireChurnCluster(DistributedApplication app, Action<stri
                 MaxDegreeOfParallelism = 5,
                 CancellationToken = cancellationToken,
             }, async (slot, token) => states[slot] = await ReadAsync(live[slot], token));
+            var observation = System.Text.Json.JsonSerializer.Serialize(states.Select((state, slot) => new
+            {
+                Index = live[slot],
+                state.IsVoter,
+                state.RapidConfiguration,
+                state.RapidMembers,
+                state.RapidNodeIds,
+            }));
+            if (!string.Equals(observation, previousObservation, StringComparison.Ordinal))
+            {
+                report($"RAPID observed configurations: {observation}");
+                previousObservation = observation;
+            }
+
             var indices = Enumerable.Range(0, live.Length).Where(slot => states[slot].IsVoter).ToArray();
             if (indices.Length == Math.Min(3, live.Length) && indices.Length > 0)
             {
                 var first = states[indices[0]];
                 if (first.RapidMembers.Length == indices.Length && indices.All(slot =>
                     first.RapidConfiguration == states[slot].RapidConfiguration
+                    && first.RapidNodeIds.SequenceEqual(states[slot].RapidNodeIds, StringComparer.Ordinal)
                     && first.RapidMembers.SequenceEqual(states[slot].RapidMembers, StringComparer.Ordinal))
                     && await InstalledAsync(first.RapidMembers, transport, cancellationToken))
                 {
@@ -216,5 +232,5 @@ internal sealed class AspireChurnCluster(DistributedApplication app, Action<stri
     private static string Name(int index) => "silo-" + index.ToString(CultureInfo.InvariantCulture);
 
     private readonly record struct ChurnState(int Active, int RapidVoters, string[] Members, bool IsVoter, string Self,
-        string[] RapidMembers, string RapidConfiguration);
+        string[] RapidMembers, string RapidConfiguration, string[] RapidNodeIds);
 }
