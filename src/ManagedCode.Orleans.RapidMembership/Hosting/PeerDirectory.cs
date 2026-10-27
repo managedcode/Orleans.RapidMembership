@@ -4,6 +4,11 @@ namespace ManagedCode.Orleans.RapidMembership.Hosting;
 
 internal sealed class PeerDirectory(RapidMembershipOptions options, string identity, PeerTransport transport) : IAsyncDisposable
 {
+    private static readonly Action<Microsoft.Extensions.Logging.ILogger, string, Exception?> FormationDeadline =
+        Microsoft.Extensions.Logging.LoggerMessage.Define<string>(Microsoft.Extensions.Logging.LogLevel.Warning,
+            new Microsoft.Extensions.Logging.EventId(1, "FormationDeadline"),
+            "RAPID formation deadline reached: {ConfigurationStates}.");
+
     private readonly SemaphoreSlim _lifecycle = new(1);
     private readonly SemaphoreSlim _resolution = new(1);
     private readonly CancellationTokenSource _stopping = new();
@@ -52,17 +57,30 @@ internal sealed class PeerDirectory(RapidMembershipOptions options, string ident
     {
         using var timer = new CancellationTokenSource(options.StartupTimeout, options.TimeProvider);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopping.Token, timer.Token);
-        while (true)
+        try
         {
-            var descriptions = await RefreshAsync(deadline.Token);
-            if (_resolved is { } configuration && configuration.Members.Length >= Math.Min(3, descriptions.Count)
-                && configuration.Members.All(member => descriptions.Any(reply => reply.Incarnation == member.Incarnation
-                    && reply.Granted && configuration.Matches(reply.Configuration))))
+            while (true)
             {
-                return;
-            }
+                var descriptions = await RefreshAsync(deadline.Token);
+                if (_resolved is { } configuration && configuration.Members.Length >= Math.Min(3, descriptions.Count)
+                    && configuration.Members.All(member => descriptions.Any(reply => reply.Incarnation == member.Incarnation
+                        && reply.Granted && configuration.Matches(reply.Configuration))))
+                {
+                    return;
+                }
 
-            await Task.Delay(TimeSpan.FromMilliseconds(50), options.TimeProvider, deadline.Token);
+                await Task.Delay(TimeSpan.FromMilliseconds(50), options.TimeProvider, deadline.Token);
+            }
+        }
+        finally
+        {
+            if (timer.IsCancellationRequested && Host is { } host)
+            {
+                var peers = string.Join("; ", _descriptions.Select(reply =>
+                    FormattableString.Invariant($"{reply.Incarnation:N}:installed={reply.Configuration?.Version},observed={reply.ObservedConfiguration?.Version},next={reply.NextConfiguration?.Version},frozen={reply.FrozenFor?.Version},joining={reply.IsJoining}")));
+                FormationDeadline(host.RuntimeLogger,
+                    FormattableString.Invariant($"native={host.Cluster.CurrentView.ConfigurationId.Version},resolved={_resolved?.Version}; {peers}"), null);
+            }
         }
     }
 
