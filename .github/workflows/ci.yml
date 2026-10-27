@@ -124,8 +124,14 @@ jobs:
         run: dotnet restore RapidCluster.slnx
       - name: Build
         run: dotnet build tests/ManagedCode.Orleans.RapidMembership.Tests --no-restore --configuration Release -warnaserror
-      - name: Continuous clients, concurrent joins and departures, total loss and restart
+      - name: Continuous clients, concurrent joins and departures, total loss and restart (Unix)
+        if: runner.os != 'Windows'
         run: dotnet run --project tests/ManagedCode.Orleans.RapidMembership.Tests --configuration Release --no-build -- --filter-trait Category=Scale --timeout 4500s --output Detailed --report-trx --results-directory artifacts/tests/churn
+      - name: Continuous clients, concurrent joins and departures, total loss and restart (Windows native process evidence)
+        if: runner.os == 'Windows'
+        uses: ./eng/native-diagnostics
+        with:
+          suite: scale
       - name: Retain original scale qualification
         if: always()
         uses: actions/upload-artifact@v4
