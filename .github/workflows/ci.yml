@@ -36,13 +36,13 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          dnx --yes aspire.cli@13.6.1 -- setup --install-path "$HOME/.aspire"
+          dnx --yes aspire.cli@13.6.4 -- setup --install-path "$HOME/.aspire"
           echo "$HOME/.aspire/bin" >> "$GITHUB_PATH"
       - name: Prepare Aspire CLI bundle (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          dnx --yes aspire.cli@13.6.1 -- setup --install-path "$env:USERPROFILE\.aspire"
+          dnx --yes aspire.cli@13.6.4 -- setup --install-path "$env:USERPROFILE\.aspire"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "$env:USERPROFILE\.aspire\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - uses: actions/setup-python@v5
@@ -102,13 +102,13 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          dnx --yes aspire.cli@13.6.1 -- setup --install-path "$HOME/.aspire"
+          dnx --yes aspire.cli@13.6.4 -- setup --install-path "$HOME/.aspire"
           echo "$HOME/.aspire/bin" >> "$GITHUB_PATH"
       - name: Prepare Aspire CLI bundle (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          dnx --yes aspire.cli@13.6.1 -- setup --install-path "$env:USERPROFILE\.aspire"
+          dnx --yes aspire.cli@13.6.4 -- setup --install-path "$env:USERPROFILE\.aspire"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "$env:USERPROFILE\.aspire\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Prepare native orchestration diagnostics

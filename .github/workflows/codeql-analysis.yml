@@ -19,7 +19,7 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Prepare Aspire CLI bundle
         run: |
-          dnx --yes aspire.cli@13.6.1 -- setup --install-path "$HOME/.aspire"
+          dnx --yes aspire.cli@13.6.4 -- setup --install-path "$HOME/.aspire"
           echo "$HOME/.aspire/bin" >> "$GITHUB_PATH"
       - uses: github/codeql-action/init@v3
         with:

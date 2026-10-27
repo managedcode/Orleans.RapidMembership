@@ -4,7 +4,7 @@ Read [AGENTS.md](AGENTS.md) and the affected project rules first. This fork pres
 
 ## Build
 
-Install the Aspire CLI matching the pinned AppHost SDK (13.6.1) and prepare its bundle before building multiple AppHost projects. CI runs the paired CLI setup once before the solution build.
+Install the Aspire CLI matching the pinned AppHost SDK (13.6.4) and prepare its bundle before building multiple AppHost projects. CI runs the paired CLI setup once before the solution build.
 
 ```sh
 dotnet restore RapidCluster.slnx
