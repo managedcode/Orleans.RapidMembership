@@ -48,3 +48,11 @@ Get-ChildItem $diagnostics -File | ForEach-Object {
 Get-ChildItem (Join-Path $resultRoot '*diagnostic*') -File | ForEach-Object {
     Get-Content $_.FullName -Tail 500 | Set-Content (Join-Path $checkpoint $_.Name)
 }
+
+$phases = Join-Path $root 'artifacts/tests/churn'
+if (Test-Path $phases)
+{
+    Get-ChildItem $phases -Recurse -Filter phases.log | ForEach-Object {
+        Get-Content $_.FullName -Tail 100 | Set-Content (Join-Path $checkpoint ("phases-" + $_.Directory.Name + '.log'))
+    }
+}

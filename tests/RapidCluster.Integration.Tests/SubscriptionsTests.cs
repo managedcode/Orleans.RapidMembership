@@ -138,11 +138,12 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
         var joinCb = new ViewCallback();
         StartViewUpdateConsumer(joiner, joinCb);
 
+        using var deadline = CreateDeliveryDeadline(10);
         await TestCluster.WaitForClusterSizeAsync(seed, 2, TimeSpan.FromSeconds(10));
         await TestCluster.WaitForClusterSizeAsync(joiner, 2, TimeSpan.FromSeconds(10));
 
-        // Give callbacks time to fire
-        await Task.Delay(500, TestContext.Current.CancellationToken);
+        // Require delivery of the actual native configuration.
+        await WaitForCallbacksAsync([seedCb, joinCb], seed.CurrentView.ConfigurationId, deadline.Token);
 
         // Seed should receive at least 1 view update for the join (consumer started before joiner joined)
         Assert.True(seedCb.NumTimesCalled() >= 1, string.Create(CultureInfo.InvariantCulture, $"Expected seed to receive at least 1 view update, got {seedCb.NumTimesCalled()}"));
@@ -175,8 +176,9 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
 
         var (joinerApp, joiner) = await _cluster.CreateJoinerNodeAsync(joinerAddress, seedAddress, TestContext.Current.CancellationToken);
 
+        using var deadline = CreateDeliveryDeadline(10);
         await TestCluster.WaitForClusterSizeAsync(seed, 2, TimeSpan.FromSeconds(10));
-        await Task.Delay(500, TestContext.Current.CancellationToken);
+        await WaitForObservedViewsAsync([viewUpdates], seed.CurrentView.ConfigurationId, deadline.Token);
 
         Assert.False(viewUpdates.IsEmpty);
 
@@ -200,17 +202,20 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
 
         var (joinerApp, joiner) = await _cluster.CreateJoinerNodeAsync(joinerAddress, seedAddress, options => options.Metadata["role"] = Encoding.UTF8.GetBytes("worker"), TestContext.Current.CancellationToken);
 
+        using var deadline = CreateDeliveryDeadline(10);
         await TestCluster.WaitForClusterSizeAsync(seed, 2, TimeSpan.FromSeconds(10));
-        await Task.Delay(500, TestContext.Current.CancellationToken);
+        await WaitForObservedViewsAsync([viewUpdates], seed.CurrentView.ConfigurationId, deadline.Token);
 
         Assert.False(viewUpdates.IsEmpty);
 
         // Final view should include both nodes with metadata
-        var lastView = viewUpdates.OrderByDescending(v => v.ConfigurationId).First();
+        var lastView = viewUpdates.First(view => view.ConfigurationId == seed.CurrentView.ConfigurationId);
         Assert.Equal(2, lastView.Members.Length);
 
         // Verify both members have metadata
         Assert.All(lastView.Members, m => Assert.True(m.Metadata.ContainsKey("role")));
+        Assert.Equal("seed", Encoding.UTF8.GetString(lastView.Members.Single(member => member.EndPoint.Equals(seedAddress)).Metadata["role"].Span));
+        Assert.Equal("worker", Encoding.UTF8.GetString(lastView.Members.Single(member => member.EndPoint.Equals(joinerAddress)).Metadata["role"].Span));
     }
 
     /// <summary>
@@ -243,12 +248,13 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
         var joiner2Cb = new ViewCallback();
         StartViewUpdateConsumer(joiner2, joiner2Cb);
 
+        using var deadline = CreateDeliveryDeadline(15);
         await TestCluster.WaitForClusterSizeAsync(seed, 3, TimeSpan.FromSeconds(15));
         await TestCluster.WaitForClusterSizeAsync(joiner1, 3, TimeSpan.FromSeconds(15));
         await TestCluster.WaitForClusterSizeAsync(joiner2, 3, TimeSpan.FromSeconds(15));
 
-        // Give callbacks time to fire
-        await Task.Delay(500, TestContext.Current.CancellationToken);
+        // Require delivery of the actual native configuration.
+        await WaitForCallbacksAsync([seedCb, joiner1Cb, joiner2Cb], seed.CurrentView.ConfigurationId, deadline.Token);
 
         // Seed receives callbacks for both joins (consumer started before any joiner joined)
         Assert.True(seedCb.NumTimesCalled() >= 2, string.Create(CultureInfo.InvariantCulture, $"Expected seed to receive at least 2 views, got {seedCb.NumTimesCalled()}"));
@@ -269,8 +275,7 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
     /// </summary>
     private async Task VerifyMultipleSubscriptionsOnJoinAsync(bool useObservable)
     {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        using var deadline = CreateDeliveryDeadline(10);
         var token = deadline.Token;
         Action<IRapidCluster, ViewCallback> subscribe = useObservable ? StartObservableConsumer : StartViewUpdateConsumer;
         var seedAddress = CreateAddress(_cluster.GetNextPort());
@@ -308,6 +313,13 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
         }
     }
 
+    private static CancellationTokenSource CreateDeliveryDeadline(int seconds)
+    {
+        var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(seconds));
+        return deadline;
+    }
+
     private static async Task WaitForPublicViewAsync(IRapidCluster cluster, CancellationToken token)
     {
         var expected = cluster.CurrentView.ConfigurationId;
@@ -323,9 +335,12 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
         throw new InvalidOperationException("The public view stream ended before the current native configuration.");
     }
 
-    private static async Task WaitForCallbacksAsync(ViewCallback[] callbacks, ConfigurationId expected, CancellationToken token)
+    private static Task WaitForCallbacksAsync(ViewCallback[] callbacks, ConfigurationId expected, CancellationToken token)
+        => WaitForObservedViewsAsync([.. callbacks.Select(callback => callback.Views)], expected, token);
+
+    private static async Task WaitForObservedViewsAsync(IEnumerable<ClusterMembershipView>[] observations, ConfigurationId expected, CancellationToken token)
     {
-        while (callbacks.Any(callback => !callback.GetViewLog().Any(view => view.ConfigurationId == expected)))
+        while (observations.Any(views => !views.Any(view => view.ConfigurationId == expected)))
         {
             await Task.Delay(10, token);
         }
@@ -336,6 +351,8 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
         private readonly ConcurrentBag<ClusterMembershipView> _viewLog = [];
 
         public int NumTimesCalled() => _viewLog.Count;
+
+        public IEnumerable<ClusterMembershipView> Views => _viewLog;
 
         public List<ClusterMembershipView> GetViewLog() => [.. _viewLog];
 
@@ -363,11 +380,12 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
         var joinCb = new ViewCallback();
         StartObservableConsumer(joiner, joinCb);
 
+        using var deadline = CreateDeliveryDeadline(10);
         await TestCluster.WaitForClusterSizeAsync(seed, 2, TimeSpan.FromSeconds(10));
         await TestCluster.WaitForClusterSizeAsync(joiner, 2, TimeSpan.FromSeconds(10));
 
-        // Give callbacks time to fire
-        await Task.Delay(500, TestContext.Current.CancellationToken);
+        // Require delivery of the actual native configuration.
+        await WaitForCallbacksAsync([seedCb, joinCb], seed.CurrentView.ConfigurationId, deadline.Token);
 
         // Seed should receive at least 1 view update for the join
         Assert.True(seedCb.NumTimesCalled() >= 1, string.Create(CultureInfo.InvariantCulture, $"Expected seed to receive at least 1 view, got {seedCb.NumTimesCalled()}"));
@@ -396,19 +414,28 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
         var joinerAddress = CreateAddress(_cluster.GetNextPort());
 
         var membershipCounts = new ConcurrentBag<int>();
+        var finalCount = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var (seedApp, seed) = await _cluster.CreateSeedNodeAsync(seedAddress, TestContext.Current.CancellationToken);
 
         // Use Rx operators to transform the stream: extract membership count
         // Explicit cast needed because ViewUpdates implements both IObservable<T> and IAsyncEnumerable<T>
         var subscription = ((IObservable<ClusterMembershipView>)seed.ViewUpdates)
             .Select(v => v.Members.Length)
-            .Subscribe(membershipCounts.Add);
+            .Subscribe(count =>
+            {
+                membershipCounts.Add(count);
+                if (count == 2)
+                {
+                    _ = finalCount.TrySetResult();
+                }
+            });
         _observableSubscriptions.Add(subscription);
 
         var (joinerApp, joiner) = await _cluster.CreateJoinerNodeAsync(joinerAddress, seedAddress, TestContext.Current.CancellationToken);
 
+        using var deadline = CreateDeliveryDeadline(10);
         await TestCluster.WaitForClusterSizeAsync(seed, 2, TimeSpan.FromSeconds(10));
-        await Task.Delay(500, TestContext.Current.CancellationToken);
+        await finalCount.Task.WaitAsync(deadline.Token);
 
         // Should have received at least one membership count
         Assert.False(membershipCounts.IsEmpty, "Expected at least one membership count");
@@ -444,12 +471,13 @@ public sealed class SubscriptionsTests(ITestOutputHelper outputHelper) : IAsyncD
         var joiner2Cb = new ViewCallback();
         StartObservableConsumer(joiner2, joiner2Cb);
 
+        using var deadline = CreateDeliveryDeadline(15);
         await TestCluster.WaitForClusterSizeAsync(seed, 3, TimeSpan.FromSeconds(15));
         await TestCluster.WaitForClusterSizeAsync(joiner1, 3, TimeSpan.FromSeconds(15));
         await TestCluster.WaitForClusterSizeAsync(joiner2, 3, TimeSpan.FromSeconds(15));
 
-        // Give callbacks time to fire
-        await Task.Delay(500, TestContext.Current.CancellationToken);
+        // Require delivery of the actual native configuration.
+        await WaitForCallbacksAsync([seedCb, joiner1Cb, joiner2Cb], seed.CurrentView.ConfigurationId, deadline.Token);
 
         // Seed should receive callbacks for both joins
         Assert.True(seedCb.NumTimesCalled() >= 2, string.Create(CultureInfo.InvariantCulture, $"Expected seed to receive at least 2 views, got {seedCb.NumTimesCalled()}"));
