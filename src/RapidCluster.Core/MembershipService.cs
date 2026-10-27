@@ -2124,7 +2124,7 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
             // Get old members (Members property safely returns empty for empty views)
             var oldMembers = new HashSet<Endpoint>(_membershipView.Members, EndpointAddressComparer.Instance);
 
-            if (wasKicked)
+            if (wasKicked && Volatile.Read(ref _stopRequested) == 0)
             {
                 // If we had no previous membership (empty view), we weren't really "kicked" -
                 // we just haven't joined yet. Skip the kicked event in this case.
@@ -2142,7 +2142,7 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
             }
             else
             {
-                // We're still in membership - apply the new view
+                // Apply retained membership or the learned removal of a departing host.
                 // SetMembershipView will compute added nodes internally and notify waiting joiners
                 oldConsensus = SetMembershipView(newView);
             }
@@ -2157,7 +2157,7 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
         // If we were kicked, schedule rejoin outside the lock.
         // Note: If !_initialized && wasKicked, we already returned early above,
         // so this only triggers for initialized nodes that were kicked.
-        if (wasKicked)
+        if (wasKicked && Volatile.Read(ref _stopRequested) == 0)
         {
             var rejoinTask = Task.Run(
                 () => RejoinClusterAsync(_stoppingCts.Token),
@@ -2443,14 +2443,6 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
         // Remain a consensus participant until the departure is learned or bounded shutdown expires.
         Volatile.Write(ref _stopRequested, 1);
 
-        // Stop all failure detectors immediately to prevent probe noise during shutdown
-        foreach (var fd in _failureDetectors)
-        {
-            fd.Dispose();
-        }
-
-        _failureDetectors.Clear();
-
         // Send leave messages to observers
         try
         {
@@ -2497,6 +2489,14 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
             // We may already have been removed, continue with shutdown
             _log.NodeAlreadyRemoved();
         }
+
+        // Keep native stale-view learning available until departure participation ends.
+        foreach (var fd in _failureDetectors)
+        {
+            fd.Dispose();
+        }
+
+        _failureDetectors.Clear();
 
         _consensusInstance?.Cancel();
 

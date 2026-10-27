@@ -134,13 +134,20 @@ public sealed class DirectoryLifecycleTests
         var token = timeout.Token;
         await using var network = new NetworkCluster();
         await network.StartAsync(token);
-        var lifecycles = Enumerable.Range(0, 3).Select(index => network.Node(index).Host!.Lifecycle).ToArray();
+        var nodes = Enumerable.Range(0, 3).Select(network.Node).ToArray();
+        var lifecycles = nodes.Select(node => node.Host!.Lifecycle).ToArray();
+        var observations = nodes.Select((node, index) => DescribeNativeView(node, index, node.Host!.Cluster.CurrentView)).ToArray();
+        using var observing = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var watchers = nodes.Select((node, index) => ObserveNativeViewsAsync(node, index, observations, observing.Token)).ToArray();
         using var leaving = CancellationTokenSource.CreateLinkedTokenSource(token);
         leaving.CancelAfter(TimeSpan.FromSeconds(5));
         await Task.WhenAll(Enumerable.Range(0, 3).Select(offset =>
             lifecycles[(first + offset) % 3].StopAsync(leaving.Token)));
+        await observing.CancelAsync();
+        await Task.WhenAll(watchers);
         Assert.False(leaving.IsCancellationRequested,
-            "Native departure must finish when only the local member remains, before the leave deadline expires.");
+            "Native departure must finish when only the local member remains, before the leave deadline expires."
+            + Environment.NewLine + string.Join(Environment.NewLine, observations));
     }
 
     private static async Task ObserveNativeViewsAsync(PeerDirectory node, int index, string[] observations, CancellationToken token)
