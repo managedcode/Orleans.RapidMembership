@@ -77,8 +77,7 @@ public sealed class TimeProviderTests
         network.Replicas.Options.TimeProvider = clock;
         gate.Arm();
         var operation = wholeOperation ? proposer.ExecuteAsync(null, token) : null;
-        var calls = wholeOperation ? [] : network.Members.Select(member => network.Transport.SendAsync(member,
-            new PeerRequest { Action = PeerAction.Inspect, Configuration = installed }, token)).ToArray();
+        var calls = wholeOperation ? [] : network.Members.Select(member => network.Transport.SendAsync(member, new PeerRequest { Action = PeerAction.Inspect, Configuration = installed }, token)).ToArray();
         try
         {
             await gate.Entered.Task.WaitAsync(token);

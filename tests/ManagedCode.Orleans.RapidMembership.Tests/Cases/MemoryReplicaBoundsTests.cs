@@ -22,7 +22,7 @@ public sealed class MemoryReplicaBoundsTests
         if (bound == "rows")
         {
             snapshot.Table = new MembershipTableData([.. snapshot.Table.Members,
-                Tuple.Create(MutationTests.Entry(2), "second"), Tuple.Create(MutationTests.Entry(3), "third")], snapshot.Table.Version);
+                Tuple.Create(MutationTests.Entry(2), "second"), Tuple.Create(MutationTests.Entry(3), "third"),], snapshot.Table.Version);
         }
         else if (bound == "history")
         {

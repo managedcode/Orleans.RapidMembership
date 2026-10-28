@@ -99,7 +99,7 @@ internal sealed class ConfigurationResolver(PeerTransport transport)
     private static System.Collections.Immutable.ImmutableArray<FrozenReplica> FreezeEvidence(
         CoordinationConfiguration previous, CoordinationConfiguration next, IEnumerable<PeerReply> replies)
         => [.. replies.Where(reply => reply.Granted && previous.Matches(reply.Configuration) && next.Matches(reply.FrozenFor))
-            .Select(reply => new FrozenReplica(reply.Incarnation, previous, next, reply.State))];
+            .Select(reply => new FrozenReplica(reply.Incarnation, previous, next, reply.State)),];
 
     private async Task<bool> InstallAsync(CoordinationConfiguration previous, CoordinationConfiguration next,
         System.Collections.Immutable.ImmutableArray<FrozenReplica> frozen, CancellationToken cancellationToken)

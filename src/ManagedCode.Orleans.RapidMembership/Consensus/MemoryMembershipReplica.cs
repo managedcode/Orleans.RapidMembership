@@ -165,8 +165,7 @@ internal sealed class MemoryMembershipReplica(
         FrozenFor = _configuration.FrozenFor,
         ObservedConfiguration = _configuration.Observed,
         NextConfiguration = _configuration.Next,
-        State = granted && action is PeerAction.Describe or PeerAction.FreezeConfiguration or PeerAction.Inspect or PeerAction.Prepare
-            ? _state : new AcceptorState { Promised = _state.Promised },
+        State = granted && action is PeerAction.Describe or PeerAction.FreezeConfiguration or PeerAction.Inspect or PeerAction.Prepare ? _state : new AcceptorState { Promised = _state.Promised },
     };
 
     private void ValidateSnapshot(MembershipSnapshot snapshot)

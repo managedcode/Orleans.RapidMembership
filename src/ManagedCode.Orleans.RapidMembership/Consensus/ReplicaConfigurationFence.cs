@@ -13,8 +13,7 @@ internal sealed class ReplicaConfigurationFence(Guid incarnation)
 
     public CoordinationConfiguration? FrozenFor { get; private set; }
 
-    public CoordinationConfiguration? Next => Current is { Version: < long.MaxValue } current
-        && _pending.TryGetValue(current.Version + 1, out var next) ? next : null;
+    public CoordinationConfiguration? Next => Current is { Version: < long.MaxValue } current && _pending.TryGetValue(current.Version + 1, out var next) ? next : null;
 
     public void Observe(CoordinationConfiguration configuration)
     {

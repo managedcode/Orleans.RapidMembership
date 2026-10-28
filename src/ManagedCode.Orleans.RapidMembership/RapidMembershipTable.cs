@@ -31,8 +31,7 @@ public sealed class RapidMembershipTable : IMembershipTable, IAsyncDisposable
     public bool IsVoter => _proposer.Directory.Host?.IsVoter == true;
 
     /// <summary>Gets the local RAPID voter view. Ordinary silos do not participate in voter consensus.</summary>
-    public ClusterMembershipView VoterView => _proposer.Directory.Host is { IsVoter: true } host
-        ? host.Cluster.CurrentView : ClusterMembershipView.Empty;
+    public ClusterMembershipView VoterView => _proposer.Directory.Host is { IsVoter: true } host ? host.Cluster.CurrentView : ClusterMembershipView.Empty;
 
     /// <inheritdoc />
     public Task InitializeMembershipTable(bool tryInitTableVersion) => InitializeMembershipTableAsync(tryInitTableVersion);

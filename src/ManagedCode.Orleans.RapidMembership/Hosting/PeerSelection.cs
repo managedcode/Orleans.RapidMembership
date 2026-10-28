@@ -41,8 +41,7 @@ internal sealed class PeerSelection
             }
 
             var candidate = visible.MinBy(member => member.Incarnation);
-            selected = scan || self is { } host && candidate.Incarnation == host.Incarnation
-                ? discovered : visible.OrderBy(member => member.Incarnation).Take(1);
+            selected = scan || self is { } host && candidate.Incarnation == host.Incarnation ? discovered : visible.OrderBy(member => member.Incarnation).Take(1);
         }
         else if (force || now - _fullScan >= TimeSpan.FromSeconds(30))
         {

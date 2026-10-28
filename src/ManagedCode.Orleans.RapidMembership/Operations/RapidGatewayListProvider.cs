@@ -17,6 +17,6 @@ internal sealed class RapidGatewayListProvider(MembershipProposer proposer) : IG
         var snapshot = await proposer.ExecuteAsync(null, CancellationToken.None);
         return [.. snapshot.Table.Members.Where(row => row.Item1.Status == SiloStatus.Active && row.Item1.ProxyPort > 0)
             .Select(row => SiloAddress.New(new IPEndPoint(row.Item1.SiloAddress.Endpoint.Address, row.Item1.ProxyPort),
-                row.Item1.SiloAddress.Generation).ToGatewayUri())];
+                row.Item1.SiloAddress.Generation).ToGatewayUri()),];
     }
 }

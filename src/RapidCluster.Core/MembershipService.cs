@@ -873,38 +873,38 @@ internal sealed class MembershipService : IMembershipServiceHandler, IAsyncDispo
     /// <summary>
     /// Entry point for all messages.
     /// </summary>
-    public async Task<RapidClusterResponse> HandleMessageAsync(RapidClusterRequest msg, CancellationToken cancellationToken)
+    public async Task<RapidClusterResponse> HandleMessageAsync(RapidClusterRequest request, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(msg);
+        ArgumentNullException.ThrowIfNull(request);
 
         // Record incoming message metrics
-        var messageType = GetMessageType(msg.ContentCase);
+        var messageType = GetMessageType(request.ContentCase);
         _metrics.RecordMessageReceived(messageType);
 
-        if (IsTraceMessage(msg.ContentCase))
+        if (IsTraceMessage(request.ContentCase))
         {
-            _log.HandleMessageReceivedTrace(msg.ContentCase);
+            _log.HandleMessageReceivedTrace(request.ContentCase);
         }
         else
         {
-            _log.HandleMessageReceivedDebug(msg.ContentCase);
+            _log.HandleMessageReceivedDebug(request.ContentCase);
         }
 
 #pragma warning disable IDE0072 // Protobuf enums can contain unnamed numeric values.
-        return msg.ContentCase switch
+        return request.ContentCase switch
         {
-            RapidClusterRequest.ContentOneofCase.PreJoinMessage => HandlePreJoinMessage(msg.PreJoinMessage),
-            RapidClusterRequest.ContentOneofCase.JoinMessage => await HandleJoinMessageAsync(msg.JoinMessage, cancellationToken),
-            RapidClusterRequest.ContentOneofCase.BatchedAlertMessage => HandleBatchedAlertMessage(msg.BatchedAlertMessage),
-            RapidClusterRequest.ContentOneofCase.ProbeMessage => HandleProbeMessage(msg.ProbeMessage),
+            RapidClusterRequest.ContentOneofCase.PreJoinMessage => HandlePreJoinMessage(request.PreJoinMessage),
+            RapidClusterRequest.ContentOneofCase.JoinMessage => await HandleJoinMessageAsync(request.JoinMessage, cancellationToken),
+            RapidClusterRequest.ContentOneofCase.BatchedAlertMessage => HandleBatchedAlertMessage(request.BatchedAlertMessage),
+            RapidClusterRequest.ContentOneofCase.ProbeMessage => HandleProbeMessage(request.ProbeMessage),
             RapidClusterRequest.ContentOneofCase.Phase1AMessage or
             RapidClusterRequest.ContentOneofCase.Phase1BMessage or
             RapidClusterRequest.ContentOneofCase.Phase2AMessage or
-            RapidClusterRequest.ContentOneofCase.Phase2BMessage => HandleConsensusMessages(msg, cancellationToken),
-            RapidClusterRequest.ContentOneofCase.LeaveMessage => HandleLeaveMessage(msg),
-            RapidClusterRequest.ContentOneofCase.MembershipViewRequest => HandleMembershipViewRequest(msg.MembershipViewRequest),
-            RapidClusterRequest.ContentOneofCase.None => throw new ArgumentException($"Unidentified RapidClusterRequest type {msg.ContentCase}", nameof(msg)),
-            _ => throw new ArgumentException($"Unidentified RapidClusterRequest type {msg.ContentCase}", nameof(msg)),
+            RapidClusterRequest.ContentOneofCase.Phase2BMessage => HandleConsensusMessages(request, cancellationToken),
+            RapidClusterRequest.ContentOneofCase.LeaveMessage => HandleLeaveMessage(request),
+            RapidClusterRequest.ContentOneofCase.MembershipViewRequest => HandleMembershipViewRequest(request.MembershipViewRequest),
+            RapidClusterRequest.ContentOneofCase.None => throw new ArgumentException($"Unidentified RapidClusterRequest type {request.ContentCase}", nameof(request)),
+            _ => throw new ArgumentException($"Unidentified RapidClusterRequest type {request.ContentCase}", nameof(request)),
         };
 #pragma warning restore IDE0072
 

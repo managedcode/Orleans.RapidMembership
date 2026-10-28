@@ -17,5 +17,5 @@ internal sealed class AutomaticSeeds : ISeedProvider
     {
         var uri = new Uri(member.Endpoint);
         return (EndPoint)new IPEndPoint(IPAddress.Parse(uri.Host.Trim('[', ']')), uri.Port);
-    })];
+    }),];
 }

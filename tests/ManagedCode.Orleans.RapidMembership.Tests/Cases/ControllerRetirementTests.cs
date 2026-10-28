@@ -48,5 +48,5 @@ public sealed class ControllerRetirementTests
             Incarnation = member.Incarnation,
             Configuration = configuration,
             Granted = true,
-        })];
+        }),];
 }
